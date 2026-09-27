@@ -1,7 +1,7 @@
 import { audio } from '../audio/audio.ts';
 import type { Chart } from '../chart/build.ts';
 import type { Instrument, Track } from '../chart/types.ts';
-import { HOPO, TAP } from '../chart/types.ts';
+import { GEM_COUNT, HOPO, TAP } from '../chart/types.ts';
 import { applyAction, botActions } from '../engine/bot.ts';
 import type { Action as BotAction } from '../engine/bot.ts';
 import { Engine, HIT, baseScore, starProgress } from '../engine/engine.ts';
@@ -170,7 +170,7 @@ export class Game {
       this.startTime = practice.start - 2 * practice.speed;
       this.endTime = practice.end + 1;
     } else {
-      const first = track.notes[0]?.time ?? 0;
+      const first = track.notes.length ? track.notes.time[0] : 0;
       this.startTime = Math.min(0, first - 2.5);
       const last = chart.lastNoteTime;
       this.endTime = Math.max(last + 2.5, Math.min(this.setup.duration, last + 6));
@@ -335,9 +335,9 @@ export class Game {
 
     const chart = this.setup.chart;
     const beats = chart.beats;
-    while (this.beatIdx + 1 < beats.length && beats[this.beatIdx + 1].time <= t) this.beatIdx++;
-    const beat = beats[this.beatIdx];
-    const beatPulse = beat && t >= beat.time ? Math.exp(-(t - beat.time) * 7) * (beat.kind === 0 ? 1 : 0.5) : 0;
+    while (this.beatIdx + 1 < beats.length && beats.time[this.beatIdx + 1] <= t) this.beatIdx++;
+    const bt = beats.time[this.beatIdx];
+    const beatPulse = beats.length && t >= bt ? Math.exp(-(t - bt) * 7) * (beats.kind[this.beatIdx] === 0 ? 1 : 0.5) : 0;
 
     const secs = chart.sections;
     let si = this.sectionIdx;
@@ -352,10 +352,10 @@ export class Game {
     this.sustainHeld.fill(0);
     const sus = engine.sustains;
     for (let i = 0; i < sus.length; i++) {
-      const n = sus[i].note;
-      this.sustainHeld[n.index] = 1;
-      sustainMask |= n.mask;
-      if (n.sp >= 0 && !engine.spBroken[n.sp]) sustainSp = true;
+      const s = sus[i];
+      this.sustainHeld[s.note] = 1;
+      sustainMask |= s.mask;
+      if (s.sp >= 0 && !engine.spBroken[s.sp]) sustainSp = true;
     }
     if (!this.paused) this.renderer.sustainSparks(sustainMask, sustainSp || engine.spActive, dt);
 
@@ -457,12 +457,13 @@ export class Game {
     const engine = this.engine;
     switch (ev.type) {
       case 'hit': {
-        const n = notes[ev.note];
+        const mask = notes.mask[ev.note];
+        const sp = notes.sp[ev.note];
         a.setPlayerAudible(true);
-        for (let i = 0; i < 5; i++) if (n.mask & (1 << i) || n.mask === 0) this.laneHit[i] = 1;
-        this.renderer.hitBurst(n.mask, engine.spActive || (n.sp >= 0 && !engine.spBroken[n.sp]));
+        for (let i = 0; i < 5; i++) if (mask & (1 << i) || mask === 0) this.laneHit[i] = 1;
+        this.renderer.hitBurst(mask, engine.spActive || (sp >= 0 && !engine.spBroken[sp]));
         if (!ev.auto) this.hud.timingTick(ev.delta);
-        if (engine.activeSolo >= 0 && n.solo === engine.activeSolo) {
+        if (engine.activeSolo >= 0 && notes.solo[ev.note] === engine.activeSolo) {
           this.soloHits++;
           this.soloSeen++;
           this.updateSolo();
@@ -470,7 +471,7 @@ export class Game {
         break;
       }
       case 'miss': {
-        const n = notes[ev.note];
+        const mask = notes.mask[ev.note];
         this.missAudio(ev.t);
         if (ev.reason === 'wrong') this.wrongFret++;
         else this.lateMiss++;
@@ -480,15 +481,15 @@ export class Game {
           // Show which frets were wrong (red) and which were wanted (bright hint).
           for (let i = 0; i < 5; i++) {
             const bit = 1 << i;
-            if (ev.frets & bit && !(n.mask & bit)) this.laneWrong[i] = 1;
-            if (n.mask & bit && !(ev.frets & bit)) this.laneHit[i] = Math.max(this.laneHit[i], 0.45);
+            if (ev.frets & bit && !(mask & bit)) this.laneWrong[i] = 1;
+            if (mask & bit && !(ev.frets & bit)) this.laneHit[i] = Math.max(this.laneHit[i], 0.45);
           }
-          if (ev.frets === 0 && n.mask !== 0) for (let i = 0; i < 5; i++) if (n.mask & (1 << i)) this.laneWrong[i] = 0.6;
+          if (ev.frets === 0 && mask !== 0) for (let i = 0; i < 5; i++) if (mask & (1 << i)) this.laneWrong[i] = 0.6;
         } else {
           this.missPulse = Math.max(this.missPulse, 0.4);
         }
         this.hud.missTick();
-        if (engine.activeSolo >= 0 && n.solo === engine.activeSolo) {
+        if (engine.activeSolo >= 0 && notes.solo[ev.note] === engine.activeSolo) {
           this.soloSeen++;
           this.updateSolo();
         }
@@ -588,16 +589,16 @@ export class Game {
     let missOpen = 0;
     const deltas: number[] = [];
     for (let i = 0; i < notes.length; i++) {
-      const n = notes[i];
       if (e.noteState[i] === HIT) {
         deltas.push(e.hitDelta[i]);
         continue;
       }
-      for (let l = 0; l < 5; l++) if (n.mask & (1 << l)) missByLane[l]++;
-      if (n.count > 1) missChords++;
-      if (n.mask === 0) missOpen++;
-      if (n.type === HOPO) missByType.hopo++;
-      else if (n.type === TAP) missByType.tap++;
+      const mask = notes.mask[i];
+      for (let l = 0; l < 5; l++) if (mask & (1 << l)) missByLane[l]++;
+      if (GEM_COUNT[mask] > 1) missChords++;
+      if (mask === 0) missOpen++;
+      if (notes.type[i] === HOPO) missByType.hopo++;
+      else if (notes.type[i] === TAP) missByType.tap++;
       else missByType.strum++;
     }
     const secs = chart.sections;
@@ -608,8 +609,8 @@ export class Game {
       const end = s + 1 < secs.length ? secs[s + 1].time : Infinity;
       let hits = 0;
       let total = 0;
-      while (ni < notes.length && notes[ni].time < start) ni++;
-      for (; ni < notes.length && notes[ni].time < end; ni++) {
+      while (ni < notes.length && notes.time[ni] < start) ni++;
+      for (; ni < notes.length && notes.time[ni] < end; ni++) {
         total++;
         if (e.noteState[ni] === HIT) hits++;
       }

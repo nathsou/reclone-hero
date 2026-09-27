@@ -1,5 +1,5 @@
 import type { Difficulty, Instrument, RawChart, RawTrack } from './types.ts';
-import { trackKey } from './types.ts';
+import { pushRaw, rawNotes, trackKey } from './types.ts';
 
 const DIFF_NAMES: Record<string, Difficulty> = { easy: 'easy', medium: 'medium', hard: 'hard', expert: 'expert' };
 const INST_NAMES: Record<string, Instrument> = {
@@ -11,7 +11,7 @@ const INST_NAMES: Record<string, Instrument> = {
 };
 
 export function emptyTrack(): RawTrack {
-  return { notes: [], forceFlip: new Set(), tap: [], forceHopo: [], forceStrum: [], starPower: [], solos: [] };
+  return { notes: rawNotes(), forceFlip: new Set(), tap: [], forceHopo: [], forceStrum: [], starPower: [], solos: [] };
 }
 
 /** Parse a Moonscraper/Feedback .chart file. */
@@ -77,7 +77,7 @@ export function parseDotChart(text: string): RawChart {
       if (kind === 'N') {
         const lane = Number(parts[1]);
         const length = Number(parts[2]) || 0;
-        if (lane <= 4 || lane === 7) track.notes.push({ tick, lane, length });
+        if (lane <= 4 || lane === 7) pushRaw(track.notes, tick, lane, length);
         else if (lane === 5) track.forceFlip.add(tick);
         else if (lane === 6) track.tap.push({ start: tick, end: tick + 1 });
       } else if (kind === 'S') {

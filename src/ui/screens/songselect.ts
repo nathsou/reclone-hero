@@ -490,14 +490,15 @@ export class SongSelect implements Screen {
         );
       }
       for (const d of DIFFICULTIES) {
-        const track = this.chart!.tracks.get(trackKey(this.instrument, d));
+        // Note counts come from the raw chart: browsing never builds a track.
+        const count = this.chart!.noteCount(trackKey(this.instrument, d));
         const best = getBest(scoreKey(song.id, trackKey(this.instrument, d)));
         diffs.append(
           h(
             'button',
             {
               class: `diff ${d === this.difficulty ? 'on' : ''}`,
-              disabled: !track,
+              disabled: !count,
               onclick: () => {
                 this.difficulty = d;
                 this.renderDetail(song);
@@ -505,7 +506,7 @@ export class SongSelect implements Screen {
               },
             },
             h('span', { class: 'n' }, DIFF_LABEL[d]),
-            h('span', { class: 'c' }, track ? `${track.notes.length} notes` : '—'),
+            h('span', { class: 'c' }, count ? `${count} notes` : '—'),
             best ? h('span', { class: 'b' }, starsEl(best.stars), ` ${best.score.toLocaleString('en-US')}${best.fc ? ' · FC' : ''}`) : null,
           ),
         );

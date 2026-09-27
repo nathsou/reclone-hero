@@ -1,5 +1,5 @@
-import type { Beat, Note } from '../chart/types.ts';
-import { HOPO, TAP } from '../chart/types.ts';
+import type { BeatList, NoteList } from '../chart/types.ts';
+import { HOPO, TAP, noteListOf } from '../chart/types.ts';
 import { HIT, MISSED } from '../engine/engine.ts';
 import type { Quality } from '../settings.ts';
 import {
@@ -84,7 +84,7 @@ export interface RenderState {
   dt: number;
   /** world units per second */
   speed: number;
-  notes: Note[];
+  notes: NoteList;
   noteState: Uint8Array;
   spBroken: Uint8Array;
   /** 1 while a sustain is being held */
@@ -93,7 +93,7 @@ export interface RenderState {
   sustainDrop: Float32Array;
   /** lanes with a sustain currently being held */
   sustainMask: number;
-  beats: Beat[];
+  beats: BeatList;
   frets: number;
   laneHit: Float32Array;
   laneWrong: Float32Array;
@@ -583,11 +583,14 @@ export class Renderer {
    * Draw a throwaway frame that exercises every program, blend mode and target, so drivers finish
    * compiling pipelines during loading instead of hitching on the first hit, open note or star power.
    */
-  warmUp(beats: Beat[]): void {
-    const mk = (i: number, time: number, mask: number, type: number, len: number, sp: number): Note => ({
-      index: i, tick: 0, time, mask, count: 1, type: type as Note['type'], endTick: 0, endTime: time + len, sp, solo: -1,
-    });
-    const notes = [mk(0, 0.1, 1, 0, 0.5, -1), mk(1, 0.3, 2, 1, 0, 0), mk(2, 0.5, 4, 2, 0, -1), mk(3, 0.7, 0, 0, 0.4, -1), mk(4, 0.9, 8, 0, 0.6, -1)];
+  warmUp(beats: BeatList): void {
+    const notes = noteListOf([
+      { time: 0.1, mask: 1, type: 0, endTime: 0.6 },
+      { time: 0.3, mask: 2, type: 1, sp: 0 },
+      { time: 0.5, mask: 4, type: 2 },
+      { time: 0.7, mask: 0, type: 0, endTime: 1.1 },
+      { time: 0.9, mask: 8, type: 0, endTime: 1.5 },
+    ]);
     const state: RenderState = {
       time: 0.2, dt: 0.016, speed: 11, notes,
       noteState: new Uint8Array([1, 0, 0, 2, 1]), spBroken: new Uint8Array(1),
@@ -719,14 +722,15 @@ export class Renderer {
     inst.count = 0;
     const tMin = s.time - BEHIND / s.speed;
     const tMax = s.time + LEN / s.speed;
-    for (let i = lowerBoundBeat(s.beats, tMin); i < s.beats.length && s.beats[i].time <= tMax; i++) {
-      const b = s.beats[i];
+    const B = s.beats;
+    for (let i = lowerBound(B.time, B.length, tMin); i < B.length && B.time[i] <= tMax; i++) {
       const o = inst.push();
       if (o < 0) break;
       const d = inst.data;
-      d[o] = -(b.time - s.time) * s.speed;
-      d[o + 1] = b.kind === 0 ? 0.045 : 0.022;
-      d[o + 2] = b.kind === 0 ? 0.55 : 0.2;
+      const measure = B.kind[i] === 0;
+      d[o] = -(B.time[i] - s.time) * s.speed;
+      d[o + 1] = measure ? 0.045 : 0.022;
+      d[o + 2] = measure ? 0.55 : 0.2;
       d[o + 3] = 0;
     }
     if (!inst.count) return;
@@ -755,14 +759,19 @@ export class Renderer {
     const tBehind = t - BEHIND / speed;
 
     // Sustains can start well before the visible window, so walk back a little.
-    let i = firstNoteAfter(notes, tBehind - 8);
-    for (; i < notes.length && notes[i].time <= tMax; i++) {
-      const n = notes[i];
+    const T = notes.time;
+    let i = lowerBound(T, notes.length, tBehind - 8);
+    for (; i < notes.length && T[i] <= tMax; i++) {
+      const time = T[i];
+      const endTime = notes.endTime[i];
+      const mask = notes.mask[i];
+      const type = notes.type[i];
+      const spIdx = notes.sp[i];
       const st = s.noteState[i];
-      const sp = n.sp >= 0 && !s.spBroken[n.sp];
+      const sp = spIdx >= 0 && !s.spBroken[spIdx];
 
-      if (n.endTime > n.time && n.endTime >= tBehind) {
-        let z0 = -(n.time - t) * speed;
+      if (endTime > time && endTime >= tBehind) {
+        let z0 = -(time - t) * speed;
         let state = 0;
         let draw = true;
         if (st === HIT) {
@@ -774,30 +783,30 @@ export class Renderer {
             state = 2;
           } else draw = false;
         } else if (st === MISSED) state = 2;
-        const z1 = Math.max(-(n.endTime - t) * speed, -LEN);
+        const z1 = Math.max(-(endTime - t) * speed, -LEN);
         if (draw && z0 > z1) {
           for (let lane = 0; lane < 5; lane++) {
-            if (n.mask !== 0 && !(n.mask & (1 << lane))) continue;
+            if (mask !== 0 && !(mask & (1 << lane))) continue;
             const o = sus.push();
             if (o < 0) break;
             const d = sus.data;
-            d[o] = n.mask === 0 ? 0 : this.laneX(lane);
+            d[o] = mask === 0 ? 0 : this.laneX(lane);
             d[o + 1] = z0;
             d[o + 2] = z1;
-            d[o + 3] = n.mask === 0 ? HALF - 0.4 : SUSTAIN_W;
-            d[o + 4] = n.mask === 0 ? 5 : lane;
+            d[o + 3] = mask === 0 ? HALF - 0.4 : SUSTAIN_W;
+            d[o + 4] = mask === 0 ? 5 : lane;
             d[o + 5] = state;
             d[o + 6] = s.whammy;
             d[o + 7] = sp ? 1 : 0;
-            if (n.mask === 0) break;
+            if (mask === 0) break;
           }
         }
       }
 
-      if (n.time < tBehind || st === HIT) continue;
-      const z = -(n.time - t) * speed;
+      if (time < tBehind || st === HIT) continue;
+      const z = -(time - t) * speed;
       const flags = (sp ? 1 : 0) + (st === MISSED ? 2 : 0);
-      if (n.mask === 0) {
+      if (mask === 0) {
         const o = opens.push();
         if (o < 0) continue;
         const d = opens.data;
@@ -806,12 +815,12 @@ export class Renderer {
         d[o + 2] = z;
         d[o + 3] = 1;
         d[o + 4] = 5;
-        d[o + 5] = n.type === HOPO ? 1 : 3;
+        d[o + 5] = type === HOPO ? 1 : 3;
         d[o + 6] = flags;
         d[o + 7] = 0;
       } else {
         for (let lane = 0; lane < 5; lane++) {
-          if (!(n.mask & (1 << lane))) continue;
+          if (!(mask & (1 << lane))) continue;
           const o = gems.push();
           if (o < 0) break;
           const d = gems.data;
@@ -820,7 +829,7 @@ export class Renderer {
           d[o + 2] = z;
           d[o + 3] = 1;
           d[o + 4] = lane;
-          d[o + 5] = n.type === TAP ? 2 : n.type === HOPO ? 1 : 0;
+          d[o + 5] = type === TAP ? 2 : type === HOPO ? 1 : 0;
           d[o + 6] = flags;
           d[o + 7] = 0;
         }
@@ -1000,23 +1009,13 @@ function setParticle(P: Particles, i: number, x: number, y: number, z: number, v
   P.gravity[i] = gravity;
 }
 
-function firstNoteAfter(notes: Note[], t: number): number {
+/** First index in a sorted array whose value is >= t. */
+function lowerBound(a: Float64Array, n: number, t: number): number {
   let lo = 0;
-  let hi = notes.length;
+  let hi = n;
   while (lo < hi) {
     const mid = (lo + hi) >>> 1;
-    if (notes[mid].time < t) lo = mid + 1;
-    else hi = mid;
-  }
-  return lo;
-}
-
-function lowerBoundBeat(beats: Beat[], t: number): number {
-  let lo = 0;
-  let hi = beats.length;
-  while (lo < hi) {
-    const mid = (lo + hi) >>> 1;
-    if (beats[mid].time < t) lo = mid + 1;
+    if (a[mid] < t) lo = mid + 1;
     else hi = mid;
   }
   return lo;

@@ -50,20 +50,20 @@ test('parses .chart tempo, sections and notes', () => {
   const notes = chart.tracks.get('guitar:expert')!.notes;
   assert.equal(notes.length, 11);
   assert.deepEqual(
-    notes.map((n) => n.type),
+    Array.from(notes.type),
     [STRUM, HOPO, STRUM, STRUM, STRUM, HOPO, TAP, STRUM, HOPO, STRUM, HOPO],
   );
   // chord at 192 then single red inside the chord = strum; forced note at 384 flips strum -> hopo
-  assert.equal(notes[3].mask, 0b11);
-  assert.equal(notes[7].mask, 0, 'open note');
+  assert.equal(notes.mask[3], 0b11);
+  assert.equal(notes.mask[7], 0, 'open note');
   // open sustain trimmed to next note
-  assert.equal(notes[7].endTick, 800);
+  assert.equal(notes.endTick[7], 800);
   // green sustain from 960 continues under red at 1000 (extended sustain)
-  assert.equal(notes[9].endTick, 1360);
+  assert.equal(notes.endTick[9], 1360);
   assert.equal(chart.tracks.get('guitar:expert')!.starPower.length, 1);
-  assert.equal(notes[7].sp, 0);
-  assert.equal(notes[9].sp, 0);
-  assert.equal(notes[10].sp, -1);
-  assert.equal(notes[9].solo, 0);
-  assert.equal(notes[10].solo, -1);
+  assert.equal(notes.sp[7], 0);
+  assert.equal(notes.sp[9], 0);
+  assert.equal(notes.sp[10], -1);
+  assert.equal(notes.solo[9], 0);
+  assert.equal(notes.solo[10], -1);
 });

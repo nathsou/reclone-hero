@@ -93,7 +93,7 @@ export class SettingsModal implements Screen {
       slider('Master', 'volMaster', 0, 1, 0.05, pct, '', apply),
       slider('Your part', 'volInstrument', 0, 1, 0.05, pct, '', apply),
       slider('Band', 'volSong', 0, 1, 0.05, pct, '', apply),
-      slider('Crowd', 'volCrowd', 0, 1, 0.05, pct, '', apply),
+      slider('Crowd', 'volCrowd', 0, 1, 0.05, pct, 'Mixed in when a song loads (saves memory), so changes apply to the next song.'),
       slider('Sound effects', 'volSfx', 0, 1, 0.05, pct, '', apply),
       slider('Song preview', 'volPreview', 0, 1, 0.05, pct),
       slider('Audio offset', 'audioOffsetMs', -200, 300, 1, (v) => `${v} ms`, 'Raise this if you consistently hit late (Bluetooth headphones need 150+).'),

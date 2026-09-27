@@ -2,7 +2,7 @@ import { EV_NOTE_OFF, EV_NOTE_ON, EV_SYSEX, EV_TEMPO, EV_TEXT, EV_TIMESIG, parse
 import type { MidiTrack } from './midi.ts';
 import { emptyTrack } from './dotchart.ts';
 import type { Instrument, RawChart, RawTrack, TickRange } from './types.ts';
-import { DIFFICULTIES, trackKey } from './types.ts';
+import { DIFFICULTIES, pushRaw, trackKey } from './types.ts';
 
 const TRACK_NAMES: Record<string, Instrument> = {
   'PART GUITAR': 'guitar',
@@ -106,14 +106,15 @@ function readInstrument(track: MidiTrack, inst: Instrument, chart: RawChart, mul
     const base = 60 + di * 12;
     const t: RawTrack = emptyTrack();
     for (let lane = 0; lane < 5; lane++) {
-      for (const r of get(base + lane)) t.notes.push({ tick: r.start, lane, length: r.end - r.start });
+      for (const r of get(base + lane)) pushRaw(t.notes, r.start, lane, r.end - r.start);
     }
-    if (enhancedOpens) for (const r of get(base - 1)) t.notes.push({ tick: r.start, lane: 7, length: r.end - r.start });
+    if (enhancedOpens) for (const r of get(base - 1)) pushRaw(t.notes, r.start, 7, r.end - r.start);
     if (sysOpen[di].length) {
       // Notes covered by an open-note sysex phrase become open notes.
-      t.notes = t.notes.map((n) => (inRanges(sysOpen[di], n.tick) ? { ...n, lane: 7 } : n));
+      const n = t.notes;
+      for (let i = 0; i < n.tick.length; i++) if (inRanges(sysOpen[di], n.tick[i])) n.lane[i] = 7;
     }
-    if (t.notes.length === 0) return;
+    if (t.notes.tick.length === 0) return;
     t.forceHopo = get(base + 5);
     t.forceStrum = get(base + 6);
     t.tap = [...get(TAP_NOTE), ...sysTap[di]];

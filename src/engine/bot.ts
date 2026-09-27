@@ -30,9 +30,11 @@ export function botActions(track: Track, opts: { jitter?: number; random?: () =>
   };
 
   for (let i = from; i <= to; i++) {
-    const n = notes[i];
-    const prev = notes[i - 1];
-    const next = notes[i + 1];
+    // The bot is built once per song, so plain per-note views are fine here.
+    const view = (k: number) => (k >= from && k <= to ? { index: k, time: notes.time[k], endTime: notes.endTime[k], mask: notes.mask[k], type: notes.type[k], sp: notes.sp[k] } : undefined);
+    const n = view(i)!;
+    const prev = view(i - 1);
+    const next = i + 1 < notes.length ? { time: notes.time[i + 1] } : undefined;
     // Humans stay in order: never jitter further than a third of the gap to a neighbour.
     const j = Math.min(jitter, prev ? (n.time - prev.time) / 3 : jitter, next ? (next.time - n.time) / 3 : jitter);
     const t = n.time + (j > 0 ? (rnd() * 2 - 1) * j : 0);

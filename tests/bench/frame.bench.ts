@@ -26,10 +26,10 @@ function densestStart(): number {
   let best = 0;
   let at = 0;
   for (let i = 0, j = 0; i < track.notes.length; i++) {
-    while (track.notes[i].time - track.notes[j].time > 20) j++;
+    while (track.notes.time[i] - track.notes.time[j] > 20) j++;
     if (i - j > best) {
       best = i - j;
-      at = track.notes[j].time;
+      at = track.notes.time[j];
     }
   }
   return at;
@@ -92,7 +92,7 @@ function play(sloppy: boolean, measure?: (i: number) => void) {
   const game = makeGame(sloppy);
   const a = audio();
   const fakeBuf = a.ctx.createBuffer(2, 48000 * 400, 48000);
-  a.setBuffers({ player: fakeBuf, backing: fakeBuf, crowd: null, origin: 0 });
+  a.setBuffers({ player: fakeBuf, backing: fakeBuf, origin: 0 });
   clock.now = 0;
   game.start();
   a.play(densestStart() - 6);

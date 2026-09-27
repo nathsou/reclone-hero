@@ -104,6 +104,13 @@ The frame loop is built to avoid garbage-collection stutter:
 - The HUD only touches the DOM when a displayed value changes, and restarts CSS animations without
   forcing layout.
 - The canvas size comes from a `ResizeObserver` rather than per-frame layout reads.
+- Charts are stored as flat typed arrays (about 30 bytes per note, no object per note). Tracks are
+  built only when played: until then a chart keeps packed raw gems (the densest chart in the test library
+  costs 84 KB while browsing; the largest, 46,748 notes over four instruments, 0.6 MB). The song list
+  caches the last 6 parsed charts.
+- Audio is the real memory cost (≈ 92 MB per 4-minute stereo track, as Web Audio stores decoded
+  float PCM), so stems are mixed into at most two buffers per song: your part and everything else,
+  crowd included.
 - Every shader pipeline is warmed up during loading, and video backgrounds update their texture in place.
 
 `npm run bench` runs the real game loop (engine, renderer, HUD, audio clock) against mock WebGL/DOM/audio in

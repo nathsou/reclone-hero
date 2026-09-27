@@ -109,7 +109,7 @@ export class GameScreen implements Screen {
       const from = Math.max(0, practice.start - 4);
       const to = practice.end + 3;
       const s = (x: AudioBuffer | null) => (x ? stretchExcerpt(a.ctx, x, from, to, practice.speed) : null);
-      a.setBuffers({ player: s(b.player), backing: s(b.backing), crowd: s(b.crowd), origin: from });
+      a.setBuffers({ player: s(b.player), backing: s(b.backing), origin: from });
     }
     this.progress(0.97, 'Warming up…');
     this.game = new Game({ song, chart, track, instrument, duration: loaded.duration, bot: this.req.bot, practice }, this.canvas, this.hud);

@@ -41,13 +41,13 @@ test('parses the whole chart library', { skip: !existsSync(ROOT) && 'no library'
       if (!t) continue;
       guitar++;
       for (let i = 0; i < t.notes.length; i++) {
-        const n = t.notes[i];
-        if (!Number.isFinite(n.time) || (i > 0 && n.time < t.notes[i - 1].time)) throw new Error(`bad time at note ${i}`);
+        const N = t.notes;
+        if (!Number.isFinite(N.time[i]) || (i > 0 && N.time[i] < N.time[i - 1])) throw new Error(`bad time at note ${i}`);
         stats.notes++;
-        if (n.type === HOPO) stats.hopo++;
-        if (n.type === TAP) stats.tap++;
-        if (n.mask === 0) stats.open++;
-        if (n.endTick > n.tick) stats.sustains++;
+        if (N.type[i] === HOPO) stats.hopo++;
+        if (N.type[i] === TAP) stats.tap++;
+        if (N.mask[i] === 0) stats.open++;
+        if (N.endTick[i] > N.tick[i]) stats.sustains++;
       }
       stats.sp += t.starPower.length;
       stats.solos += t.solos.length;

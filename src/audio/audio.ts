@@ -26,7 +26,7 @@ export interface LoadedSong {
  *
  * Graph: player stem -> playerVol -> missGain ┐
  *        backing ---------------> backingVol ─┼-> musicBus -> muffle (lowpass) -> master -> out
- *        crowd -----------------> crowdVol  ──┘
+   (crowd is pre-mixed into backing at load)
  *        sfx ---------------------------------------------------------------> sfxVol -> master
  */
 export class AudioEngine {
@@ -37,7 +37,6 @@ export class AudioEngine {
   private readonly playerVol: GainNode;
   private readonly missGain: GainNode;
   private readonly backingVol: GainNode;
-  private readonly crowdVol: GainNode;
   private readonly sfxVol: GainNode;
   private readonly sfx: Record<SfxName, AudioBuffer[]>;
   /** Reused per-sound gain nodes, so a sound effect only creates its (one-shot) source node. */
@@ -46,7 +45,6 @@ export class AudioEngine {
 
   private player: AudioBuffer | null = null;
   private backing: AudioBuffer | null = null;
-  private crowd: AudioBuffer | null = null;
   private sources: AudioBufferSourceNode[] = [];
   /** song time at which the buffers begin (non-zero for practice excerpts) */
   private origin = 0;
@@ -73,11 +71,9 @@ export class AudioEngine {
     this.playerVol = c.createGain();
     this.missGain = c.createGain();
     this.backingVol = c.createGain();
-    this.crowdVol = c.createGain();
     this.sfxVol = c.createGain();
     this.playerVol.connect(this.missGain).connect(this.musicBus);
     this.backingVol.connect(this.musicBus);
-    this.crowdVol.connect(this.musicBus);
     this.musicBus.connect(this.muffle).connect(this.master);
     this.sfxVol.connect(this.master);
     this.master.connect(c.destination);
@@ -103,7 +99,6 @@ export class AudioEngine {
     this.master.gain.value = settings.volMaster;
     this.playerVol.gain.value = settings.volInstrument;
     this.backingVol.gain.value = settings.volSong;
-    this.crowdVol.gain.value = settings.volCrowd;
     this.sfxVol.gain.value = settings.volSfx;
   }
 
@@ -135,8 +130,9 @@ export class AudioEngine {
         continue;
       }
       if (playerStems.includes(f.stem)) players.push(buf);
-      else if (f.stem === 'crowd') this.crowd = buf;
       else {
+        // The crowd is folded in too, at its volume setting: one less ~90 MB buffer per song.
+        const gain = f.stem === 'crowd' ? settings.volCrowd : 1;
         // Sum every other stem into one backing track so only 2-3 sources play.
         if (!backing || buf.length > backing.length) {
           const grown = this.ctx.createBuffer(2, buf.length, sr);
@@ -146,7 +142,8 @@ export class AudioEngine {
         for (let ch = 0; ch < 2; ch++) {
           const src = buf.getChannelData(Math.min(ch, buf.numberOfChannels - 1));
           const dst = backing.getChannelData(ch);
-          for (let i = 0; i < src.length; i++) dst[i] += src[i];
+          if (gain === 1) for (let i = 0; i < src.length; i++) dst[i] += src[i];
+          else for (let i = 0; i < src.length; i++) dst[i] += src[i] * gain;
         }
       }
       onProgress?.(++done, files.length);
@@ -154,7 +151,7 @@ export class AudioEngine {
     if (players.length === 1) this.player = players[0];
     else if (players.length > 1) this.player = this.mix(players);
     this.backing = backing;
-    const duration = Math.max(this.player?.duration ?? 0, this.backing?.duration ?? 0, this.crowd?.duration ?? 0);
+    const duration = Math.max(this.player?.duration ?? 0, this.backing?.duration ?? 0);
     return { duration, hasPlayerStem: this.player !== null };
   }
 
@@ -172,21 +169,20 @@ export class AudioEngine {
   }
 
   /** Replace playback buffers, e.g. with time-stretched practice audio. */
-  setBuffers(b: { player: AudioBuffer | null; backing: AudioBuffer | null; crowd: AudioBuffer | null; origin: number }): void {
+  setBuffers(b: { player: AudioBuffer | null; backing: AudioBuffer | null; origin: number }): void {
     this.stop();
     this.player = b.player;
     this.backing = b.backing;
-    this.crowd = b.crowd;
     this.origin = b.origin;
   }
 
   get buffers() {
-    return { player: this.player, backing: this.backing, crowd: this.crowd, origin: this.origin };
+    return { player: this.player, backing: this.backing, origin: this.origin };
   }
 
   unload(): void {
     this.stop();
-    this.player = this.backing = this.crowd = null;
+    this.player = this.backing = null;
     this.pausedAt = 0;
     this.origin = 0;
   }
@@ -208,7 +204,6 @@ export class AudioEngine {
     for (const [buf, dest] of [
       [this.player, this.playerVol],
       [this.backing, this.backingVol],
-      [this.crowd, this.crowdVol],
     ] as const) {
       if (!buf) continue;
       const src = this.ctx.createBufferSource();

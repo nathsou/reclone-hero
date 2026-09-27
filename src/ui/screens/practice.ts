@@ -15,7 +15,7 @@ export class PracticeModal implements Screen {
     const chart = req.chart;
     const track = chart.tracks.get(trackKey(req.instrument, req.difficulty))!;
     const notes = track.notes;
-    const secs = chart.sections.length ? chart.sections : [{ time: notes[0]?.time ?? 0, name: 'Whole song' }];
+    const secs = chart.sections.length ? chart.sections : [{ time: notes.length ? notes.time[0] : 0, name: 'Whole song' }];
     const option = (i: number) => h('option', { value: String(i) }, `${formatTime(secs[i].time)}  ${secs[i].name}`);
     const from = h('select', null, ...secs.map((_, i) => option(i)));
     const to = h('select', null, ...secs.map((_, i) => option(i)));
@@ -32,11 +32,11 @@ export class PracticeModal implements Screen {
       const a = Number(from.value);
       const b = Math.max(a, Number(to.value));
       const startT = secs[a].time;
-      const endT = b + 1 < secs.length ? secs[b + 1].time : notes[notes.length - 1].endTime + 0.5;
-      let first = notes.findIndex((n) => n.time >= startT - 0.001);
+      const endT = b + 1 < secs.length ? secs[b + 1].time : notes.endTime[notes.length - 1] + 0.5;
+      let first = notes.time.findIndex((time) => time >= startT - 0.001);
       let last = -1;
       for (let i = notes.length - 1; i >= 0; i--) {
-        if (notes[i].time < endT - 0.001) {
+        if (notes.time[i] < endT - 0.001) {
           last = i;
           break;
         }
@@ -47,14 +47,14 @@ export class PracticeModal implements Screen {
       }
       first = Math.max(0, first);
       const label = a === b ? secs[a].name : `${secs[a].name} → ${secs[b].name}`;
-      const practiceEnd = Math.max(notes[last].endTime, notes[last].time) + 0.4;
+      const practiceEnd = Math.max(notes.endTime[last], notes.time[last]) + 0.4;
       app.popModal(this);
       const { GameScreen } = await import('./gamescreen.ts');
       app.show(
         new GameScreen(app, {
           ...req,
           bot: false,
-          practice: { start: notes[first].time, end: practiceEnd, speed: Number(speed.value) / 100, first, last, label },
+          practice: { start: notes.time[first], end: practiceEnd, speed: Number(speed.value) / 100, first, last, label },
         }),
       );
     };

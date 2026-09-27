@@ -17,12 +17,25 @@ export const HOPO = 1;
 export const TAP = 2;
 export type NoteType = typeof STRUM | typeof HOPO | typeof TAP;
 
-/** Raw note as found in a chart file, before chords/HOPOs are resolved. */
-export interface RawNote {
-  tick: number;
+/**
+ * Raw gems as found in a chart file, before chords/HOPOs are resolved: parallel arrays of small
+ * integers (V8 stores these unboxed, 4 bytes each), not one object per gem.
+ */
+export interface RawNotes {
+  tick: number[];
   /** 0-4 = green..orange, 7 = open */
-  lane: number;
-  length: number;
+  lane: number[];
+  len: number[];
+}
+
+export function rawNotes(): RawNotes {
+  return { tick: [], lane: [], len: [] };
+}
+
+export function pushRaw(r: RawNotes, tick: number, lane: number, len: number): void {
+  r.tick.push(tick);
+  r.lane.push(lane);
+  r.len.push(len);
 }
 
 export interface TickRange {
@@ -33,7 +46,7 @@ export interface TickRange {
 
 /** Per instrument+difficulty data straight out of the parser. */
 export interface RawTrack {
-  notes: RawNote[];
+  notes: RawNotes;
   /** .chart N5: flips natural HOPO state at this tick */
   forceFlip: Set<number>;
   /** .chart N6 / MIDI 104 / sysex tap */
@@ -67,21 +80,63 @@ export interface RawChart {
   meta: Record<string, string>;
 }
 
-export interface Note {
-  index: number;
-  tick: number;
-  time: number;
+/**
+ * The notes of one track as parallel typed arrays ("struct of arrays"): note i is
+ * (tick[i], time[i], mask[i], type[i], …). About 30 bytes per note, contiguous in memory, and
+ * a handful of objects for the garbage collector to trace instead of one per note.
+ */
+export interface NoteList {
+  readonly length: number;
+  readonly tick: Int32Array;
+  readonly endTick: Int32Array;
+  /** seconds */
+  readonly time: Float64Array;
+  readonly endTime: Float64Array;
   /** bit n = fret n held; 0 = open note */
-  mask: number;
-  /** number of gems (1 for open notes) */
-  count: number;
-  type: NoteType;
-  endTick: number;
-  endTime: number;
+  readonly mask: Uint8Array;
+  /** STRUM, HOPO or TAP */
+  readonly type: Uint8Array;
   /** star power phrase index or -1 */
-  sp: number;
+  readonly sp: Int16Array;
   /** solo index or -1 */
-  solo: number;
+  readonly solo: Int16Array;
+}
+
+export function allocNotes(n: number): NoteList {
+  return {
+    length: n,
+    tick: new Int32Array(n),
+    endTick: new Int32Array(n),
+    time: new Float64Array(n),
+    endTime: new Float64Array(n),
+    mask: new Uint8Array(n),
+    type: new Uint8Array(n),
+    sp: new Int16Array(n).fill(-1),
+    solo: new Int16Array(n).fill(-1),
+  };
+}
+
+/** Gems in a note: frets pressed, or 1 for an open note. */
+export const GEM_COUNT = Uint8Array.from({ length: 32 }, (_, m) => {
+  let c = 0;
+  for (let b = m; b; b &= b - 1) c++;
+  return Math.max(1, c);
+});
+
+/** Convenience for tests and tools: build a NoteList from plain objects. */
+export function noteListOf(specs: { time: number; mask: number; type: NoteType; endTime?: number; tick?: number; endTick?: number; sp?: number; solo?: number }[]): NoteList {
+  const l = allocNotes(specs.length);
+  specs.forEach((n, i) => {
+    l.time[i] = n.time;
+    l.endTime[i] = n.endTime ?? n.time;
+    l.tick[i] = n.tick ?? 0;
+    l.endTick[i] = n.endTick ?? l.tick[i];
+    l.mask[i] = n.mask;
+    l.type[i] = n.type;
+    l.sp[i] = n.sp ?? -1;
+    l.solo[i] = n.solo ?? -1;
+  });
+  return l;
 }
 
 export interface Phrase {
@@ -95,15 +150,17 @@ export interface Phrase {
 export interface Track {
   instrument: Instrument;
   difficulty: Difficulty;
-  notes: Note[];
+  notes: NoteList;
   starPower: Phrase[];
   solos: Phrase[];
 }
 
-export interface Beat {
-  time: number;
-  /** 0 = measure line, 1 = beat, 2 = half beat */
-  kind: number;
+/** Beat lines as parallel arrays. */
+export interface BeatList {
+  readonly length: number;
+  readonly time: Float64Array;
+  /** 0 = measure line, 1 = beat */
+  readonly kind: Uint8Array;
 }
 
 export interface Section {

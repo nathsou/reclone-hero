@@ -1,5 +1,6 @@
 // Dev-only page (visual-test.html): a frozen scene with every gem and sustain state, for tuning the look.
-import type { Note, NoteType } from '../chart/types.ts';
+import type { NoteType } from '../chart/types.ts';
+import { noteListOf } from '../chart/types.ts';
 import { Renderer } from '../render/renderer.ts';
 import type { RenderState } from '../render/renderer.ts';
 import { THEMES } from '../ui/themes.ts';
@@ -13,14 +14,12 @@ const params = new URLSearchParams(location.search);
 if (params.get('q')) r.setQuality(params.get('q') as 'high' | 'medium' | 'low');
 if (params.has('close')) r.camera = { height: 2.0, back: 1.2, lookZ: -3.5, fov: 0.6 };
 
-let idx = 0;
-function mk(time: number, mask: number, type: NoteType, len = 0, sp = -1): Note {
-  let count = 0;
-  for (let b = 0; b < 5; b++) if (mask & (1 << b)) count++;
-  return { index: idx++, tick: 0, time, mask, count: Math.max(1, count), type, endTick: 0, endTime: time + len, sp, solo: -1 };
+type Spec = Parameters<typeof noteListOf>[0][number];
+function mk(time: number, mask: number, type: NoteType, len = 0, sp = -1): Spec {
+  return { time, mask, type, endTime: time + len, sp };
 }
 
-const notes = [
+const notes = noteListOf([
   mk(0.2, 8, 0), // missed blue strum (behind the strike line)
   mk(0.35, 1, 0, 1.2), // held green sustain
   mk(0.55, 8, 1), // blue HOPO
@@ -34,7 +33,7 @@ const notes = [
   mk(1.7, 0, 1), // open HOPO
   mk(2.0, 0b110, 0, 0.8), // chord sustain
   mk(2.3, 4, 0, 0.6), // yellow sustain, dropped
-];
+]);
 const n = notes.length;
 const noteState = new Uint8Array(n);
 noteState[0] = 2;
@@ -44,7 +43,7 @@ const sustainHeld = new Uint8Array(n);
 sustainHeld[1] = 1;
 const sustainDrop = new Float32Array(n).fill(NaN);
 sustainDrop[12] = 2.35;
-const beats = Array.from({ length: 30 }, (_, i) => ({ time: (i - 4) * 0.5, kind: i % 4 === 0 ? 0 : 1 }));
+const beats = { length: 30, time: Float64Array.from({ length: 30 }, (_, i) => (i - 4) * 0.5), kind: Uint8Array.from({ length: 30 }, (_, i) => (i % 4 === 0 ? 0 : 1)) };
 
 const state: RenderState = {
   time: 0.3,

@@ -1,6 +1,6 @@
 import type { TempoMap } from '../chart/tempo.ts';
-import type { Note, Track } from '../chart/types.ts';
-import { STRUM, TAP } from '../chart/types.ts';
+import type { NoteList, Track } from '../chart/types.ts';
+import { GEM_COUNT, STRUM, TAP } from '../chart/types.ts';
 
 export interface EngineConfig {
   /** seconds a note may be hit before its time */
@@ -86,8 +86,13 @@ function newEvent(): EngineEvent {
   return { type: 'hit', t: 0, note: -1, delta: 0, strum: false, auto: false, reason: 'late', frets: 0, streak: 0, value: 0, phrase: -1, complete: false, solo: -1, hits: 0, total: 0, bonus: 0 };
 }
 
+/** A sustain being held: the note index plus copies of the fields the judge needs. */
 export interface ActiveSustain {
-  note: Note;
+  note: number;
+  mask: number;
+  count: number;
+  sp: number;
+  endTime: number;
   lastBeat: number;
 }
 
@@ -101,7 +106,7 @@ function highestBit(m: number): number {
  */
 export class Engine {
   readonly track: Track;
-  readonly notes: Note[];
+  readonly notes: NoteList;
   readonly cfg: EngineConfig;
   private readonly tempo: TempoMap;
 
@@ -216,10 +221,10 @@ export class Engine {
 
     for (let i = this.sustains.length - 1; i >= 0; i--) {
       const s = this.sustains[i];
-      if ((s.note.mask & ~mask) !== 0) {
+      if ((s.mask & ~mask) !== 0) {
         this.accrueSustain(s, t);
         this.removeSustain(i);
-        this.emit(t < s.note.endTime - this.cfg.sustainGrace ? 'sustainDrop' : 'sustainEnd', t).note = s.note.index;
+        this.emit(t < s.endTime - this.cfg.sustainGrace ? 'sustainDrop' : 'sustainEnd', t).note = s.note;
       }
     }
 
@@ -227,18 +232,19 @@ export class Engine {
       // Strum came first; the fret press completes it within the leniency window.
       const pt = this.pendingT;
       const n = this.findStrumTarget(pt);
-      if (n) {
+      if (n >= 0) {
         this.pendingT = this.pendingDeadline = NaN;
         this.hit(n, pt, true, false);
         return;
       }
     }
 
-    const n = this.notes[this.next];
-    if (n && this.next < this.end && n.type !== STRUM && this.inWindow(n, t)) {
+    const n = this.next;
+    const N = this.notes;
+    if (n < this.end && N.type[n] !== STRUM && this.inWindow(n, t)) {
       if (this.canHammer(n) && this.matches(n)) this.hit(n, t, false, false);
       // Anti-ghosting: pressing a wrong, higher fret over a single HOPO/tap forfeits the hammer-on.
-      else if (gained && n.count === 1 && n.mask !== 0 && highestBit(gained) > n.mask) this.ghosted[n.index] = 1;
+      else if (gained && GEM_COUNT[N.mask[n]] === 1 && N.mask[n] !== 0 && highestBit(gained) > N.mask[n]) this.ghosted[n] = 1;
     }
   }
 
@@ -246,7 +252,7 @@ export class Engine {
     t = this.advance(t);
     if (this.hasPending) this.failPending(t);
     const n = this.findStrumTarget(t);
-    if (n) {
+    if (n >= 0) {
       this.hit(n, t, true, false);
       return;
     }
@@ -282,25 +288,26 @@ export class Engine {
     if (this.hasPending && this.pendingDeadline <= t) this.failPending(this.pendingDeadline);
 
     // HOPOs/taps whose fret state was set up before their window opened.
+    const N = this.notes;
     for (;;) {
-      const n = this.notes[this.next];
-      if (!n || this.next >= this.end || n.type === STRUM) break;
-      const open = n.time - early;
+      const n = this.next;
+      if (n >= this.end || N.type[n] === STRUM) break;
+      const open = N.time[n] - early;
       if (open > t || !this.canHammer(n) || !this.matches(n) || this.fretChangeTime <= this.lastHitTime) break;
       this.hit(n, Math.max(open, this.fretChangeTime, this.time), false, true);
     }
 
-    while (this.next < this.end && this.notes[this.next].time + late < t) {
-      const n = this.notes[this.next];
-      this.miss(n, n.time + late, 'late');
+    while (this.next < this.end && N.time[this.next] + late < t) {
+      const n = this.next;
+      this.miss(n, N.time[n] + late, 'late');
     }
 
     for (let i = this.sustains.length - 1; i >= 0; i--) {
       const s = this.sustains[i];
       this.accrueSustain(s, t);
-      if (t >= s.note.endTime) {
+      if (t >= s.endTime) {
         this.removeSustain(i);
-        this.emit('sustainEnd', s.note.endTime).note = s.note.index;
+        this.emit('sustainEnd', s.endTime).note = s.note;
       }
     }
 
@@ -325,8 +332,7 @@ export class Engine {
     }
     if (this.activeSolo >= 0) {
       const s = solos[this.activeSolo];
-      const lastNote = this.notes[s.last];
-      if (t > Math.max(s.endTime, lastNote.time + late)) {
+      if (t > Math.max(s.endTime, N.time[s.last] + late)) {
         let hits = 0;
         const last = Math.min(s.last, this.end - 1);
         for (let i = s.first; i <= last; i++) if (this.noteState[i] === HIT) hits++;
@@ -349,41 +355,43 @@ export class Engine {
 
   // ---------------------------------------------------------------- judgement
 
-  private inWindow(n: Note, t: number): boolean {
-    return t >= n.time - this.cfg.early && t <= n.time + this.cfg.late;
+  private inWindow(n: number, t: number): boolean {
+    const time = this.notes.time[n];
+    return t >= time - this.cfg.early && t <= time + this.cfg.late;
   }
 
-  private canHammer(n: Note): boolean {
-    return !this.ghosted[n.index] && (n.type === TAP || this.lastNoteHit);
+  private canHammer(n: number): boolean {
+    return !this.ghosted[n] && (this.notes.type[n] === TAP || this.lastNoteHit);
   }
 
-  /** Frets match the note, ignoring frets held for other still-ringing sustains. */
-  matches(n: Note, frets = this.frets): boolean {
+  /** Frets match note n, ignoring frets held for other still-ringing sustains. */
+  matches(n: number, frets = this.frets): boolean {
+    const mask = this.notes.mask[n];
     let f = frets;
     const sus = this.sustains;
-    for (let i = 0; i < sus.length; i++) if ((sus[i].note.mask & n.mask) === 0) f &= ~sus[i].note.mask;
-    if (n.mask === 0) return f === 0;
-    if (n.count === 1) return highestBit(f) === n.mask;
-    return f === n.mask;
+    for (let i = 0; i < sus.length; i++) if ((sus[i].mask & mask) === 0) f &= ~sus[i].mask;
+    if (mask === 0) return f === 0;
+    if (GEM_COUNT[mask] === 1) return highestBit(f) === mask;
+    return f === mask;
   }
 
-  /** The note a strum at time t would hit with the current frets, if any. */
-  private findStrumTarget(t: number): Note | null {
+  /** Index of the note a strum at time t would hit with the current frets, or -1. */
+  private findStrumTarget(t: number): number {
+    const time = this.notes.time;
     for (let i = this.next; i < this.end; i++) {
-      const n = this.notes[i];
-      if (n.time - this.cfg.early > t) break;
-      if (this.noteState[i] !== PENDING || n.time + this.cfg.late < t) continue;
-      if (this.matches(n)) return n;
+      if (time[i] - this.cfg.early > t) break;
+      if (this.noteState[i] !== PENDING || time[i] + this.cfg.late < t) continue;
+      if (this.matches(i)) return i;
     }
-    return null;
+    return -1;
   }
 
   private failPending(t: number): void {
     const pt = this.pendingT;
     this.pendingT = this.pendingDeadline = NaN;
     // A wrong-fret strum while a note is in reach costs that note; otherwise it is an overstrum.
-    const n = this.notes[this.next];
-    if (n && this.next < this.end && this.inWindow(n, pt)) {
+    const n = this.next;
+    if (n < this.end && this.inWindow(n, pt)) {
       this.miss(n, t, 'wrong');
     } else {
       this.overstrums++;
@@ -391,7 +399,7 @@ export class Engine {
       while (this.sustains.length) {
         const s = this.sustains[this.sustains.length - 1];
         this.accrueSustain(s, t);
-        this.emit('sustainDrop', t).note = s.note.index;
+        this.emit('sustainDrop', t).note = s.note;
         this.removeSustain(this.sustains.length - 1);
       }
       this.lastNoteHit = false;
@@ -399,30 +407,37 @@ export class Engine {
     }
   }
 
-  private hit(n: Note, t: number, strum: boolean, auto: boolean): void {
-    for (let i = this.next; i < n.index; i++) if (this.noteState[i] === PENDING) this.miss(this.notes[i], t, 'skipped');
-    this.noteState[n.index] = HIT;
-    this.hitDelta[n.index] = t - n.time;
-    this.next = n.index + 1;
+  private hit(n: number, t: number, strum: boolean, auto: boolean): void {
+    const N = this.notes;
+    for (let i = this.next; i < n; i++) if (this.noteState[i] === PENDING) this.miss(i, t, 'skipped');
+    const mask = N.mask[n];
+    const time = N.time[n];
+    this.noteState[n] = HIT;
+    this.hitDelta[n] = t - time;
+    this.next = n + 1;
     this.hits++;
 
     for (let i = this.sustains.length - 1; i >= 0; i--) {
       const s = this.sustains[i];
-      if ((s.note.mask & n.mask) !== 0 || s.note.mask === 0 || n.mask === 0) {
+      if ((s.mask & mask) !== 0 || s.mask === 0 || mask === 0) {
         this.accrueSustain(s, t);
         this.removeSustain(i);
-        this.emit('sustainEnd', t).note = s.note.index;
+        this.emit('sustainEnd', t).note = s.note;
       }
     }
 
     this.streak++;
     if (this.streak > this.maxStreak) this.maxStreak = this.streak;
     this.checkMultiplier(t);
-    this.score += POINTS_PER_NOTE * n.count * this.multiplier;
-    if (n.endTime > n.time) {
-      const sus = this.sustainPool.pop() ?? { note: n, lastBeat: 0 };
+    this.score += POINTS_PER_NOTE * GEM_COUNT[mask] * this.multiplier;
+    if (N.endTime[n] > time) {
+      const sus = this.sustainPool.pop() ?? { note: 0, mask: 0, count: 0, sp: -1, endTime: 0, lastBeat: 0 };
       sus.note = n;
-      sus.lastBeat = this.tempo.timeToBeat(n.time);
+      sus.mask = mask;
+      sus.count = GEM_COUNT[mask];
+      sus.sp = N.sp[n];
+      sus.endTime = N.endTime[n];
+      sus.lastBeat = this.tempo.timeToBeat(time);
       this.sustains.push(sus);
     }
 
@@ -430,33 +445,35 @@ export class Engine {
     this.lastHitTime = t;
     if (!strum) this.lastHammerTime = t;
     const e = this.emit('hit', t);
-    e.note = n.index;
-    e.delta = t - n.time;
+    e.note = n;
+    e.delta = t - time;
     e.strum = strum;
     e.auto = auto;
 
-    if (n.sp >= 0 && !this.spBroken[n.sp] && this.track.starPower[n.sp].last === n.index) {
+    const sp = N.sp[n];
+    if (sp >= 0 && !this.spBroken[sp] && this.track.starPower[sp].last === n) {
       this.spBar = Math.min(1, this.spBar + SP_PHRASE_GAIN);
       this.spPhrasesHit++;
       const p = this.emit('spPhrase', t);
-      p.phrase = n.sp;
+      p.phrase = sp;
       p.complete = true;
     }
   }
 
-  private miss(n: Note, t: number, reason: MissReason): void {
-    this.noteState[n.index] = MISSED;
-    if (n.index >= this.next) this.next = n.index + 1;
+  private miss(n: number, t: number, reason: MissReason): void {
+    this.noteState[n] = MISSED;
+    if (n >= this.next) this.next = n + 1;
     this.misses++;
     this.lastNoteHit = false;
     const e = this.emit('miss', t);
-    e.note = n.index;
+    e.note = n;
     e.reason = reason;
     e.frets = this.frets;
-    if (n.sp >= 0 && !this.spBroken[n.sp]) {
-      this.spBroken[n.sp] = 1;
+    const sp = this.notes.sp[n];
+    if (sp >= 0 && !this.spBroken[sp]) {
+      this.spBroken[sp] = 1;
       const p = this.emit('spPhrase', t);
-      p.phrase = n.sp;
+      p.phrase = sp;
       p.complete = false;
     }
     this.breakStreak(t);
@@ -477,12 +494,12 @@ export class Engine {
   }
 
   private accrueSustain(s: ActiveSustain, t: number): void {
-    const beat = this.tempo.timeToBeat(Math.min(t, s.note.endTime));
+    const beat = this.tempo.timeToBeat(Math.min(t, s.endTime));
     const beats = beat - s.lastBeat;
     if (beats <= 0) return;
     s.lastBeat = beat;
-    this.score += beats * SUSTAIN_POINTS_PER_BEAT * s.note.count * this.multiplier;
-    if (s.note.sp >= 0 && !this.spBroken[s.note.sp] && t - this.lastWhammyMove < 0.15) {
+    this.score += beats * SUSTAIN_POINTS_PER_BEAT * s.count * this.multiplier;
+    if (s.sp >= 0 && !this.spBroken[s.sp] && t - this.lastWhammyMove < 0.15) {
       this.spBar = Math.min(1, this.spBar + beats * SP_WHAMMY_GAIN_PER_BEAT);
     }
   }
@@ -511,9 +528,11 @@ export class Engine {
 /** Score for hitting every note at 1x, used for star ratings. */
 export function baseScore(track: Track, tempo: TempoMap): number {
   let total = 0;
-  for (const n of track.notes) {
-    total += POINTS_PER_NOTE * n.count;
-    if (n.endTime > n.time) total += (tempo.timeToBeat(n.endTime) - tempo.timeToBeat(n.time)) * SUSTAIN_POINTS_PER_BEAT * n.count;
+  const N = track.notes;
+  for (let i = 0; i < N.length; i++) {
+    const count = GEM_COUNT[N.mask[i]];
+    total += POINTS_PER_NOTE * count;
+    if (N.endTime[i] > N.time[i]) total += (tempo.timeToBeat(N.endTime[i]) - tempo.timeToBeat(N.time[i])) * SUSTAIN_POINTS_PER_BEAT * count;
   }
   return total;
 }
