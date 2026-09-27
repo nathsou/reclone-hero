@@ -9,6 +9,12 @@ import { lookAt, multiply, perspective, project } from './math.ts';
 import type { Mat4 } from './math.ts';
 import { Particles } from './particles.ts';
 import * as S from './shaders.ts';
+import type { RenderTheme } from '../ui/themes.ts';
+
+/** Fallback scene theme (Neon), for callers that do not care. */
+export const DEFAULT_RENDER_THEME: RenderTheme = {
+  light: false, bgBottom: [0.03, 0.012, 0.05], bgTop: [0.012, 0.01, 0.03], art: 1, highwayTint: [1, 1, 1], grid: 0, scanlines: 0, bloom: 0.55, vignette: 0.35,
+};
 
 /** Linear-light colours: green, red, yellow, blue, orange, open, star power, grey. */
 export const COLORS: number[][] = [
@@ -68,8 +74,8 @@ export interface RenderState {
   lefty: boolean;
   solo: boolean;
   beatPulse: number;
-  /** light theme: pale surroundings around the (still dark) highway */
-  light: boolean;
+  /** theme scene parameters (background, highway tint, glow, extras) */
+  theme: RenderTheme;
 }
 
 interface Mesh {
@@ -520,7 +526,7 @@ export class Renderer {
       noteState: new Uint8Array([1, 0, 0, 2, 1]), spBroken: new Uint8Array(1),
       sustainHeld: new Uint8Array([1, 0, 0, 0, 0]), sustainDrop: new Float32Array([NaN, NaN, NaN, NaN, 0.1]), sustainMask: 1,
       beats, frets: 1, laneHit: new Float32Array(5).fill(1), laneWrong: new Float32Array(5).fill(1),
-      spActive: false, multiplier: 4, missPulse: 1, whammy: 0.5, lefty: false, solo: true, beatPulse: 1, light: false,
+      spActive: false, multiplier: 4, missPulse: 1, whammy: 0.5, lefty: false, solo: true, beatPulse: 1, theme: DEFAULT_RENDER_THEME,
     };
     this.hitBurst(1, false);
     this.render(state);
@@ -587,7 +593,12 @@ export class Renderer {
     gl.uniform1f(p.u.u_hasTex, this.bgTex ? 1 : 0);
     gl.uniform1f(p.u.u_lod, this.bgLod);
     gl.uniform1f(p.u.u_bright, this.bgBright);
-    gl.uniform1f(p.u.u_light, s.light ? 1 : 0);
+    const th = s.theme;
+    gl.uniform1f(p.u.u_light, th.light ? 1 : 0);
+    gl.uniform3f(p.u.u_top, th.bgTop[0], th.bgTop[1], th.bgTop[2]);
+    gl.uniform3f(p.u.u_bottom, th.bgBottom[0], th.bgBottom[1], th.bgBottom[2]);
+    gl.uniform1f(p.u.u_art, th.art);
+    gl.uniform1f(p.u.u_grid, th.grid);
     const screenAspect = this.cssW / Math.max(1, this.cssH);
     const r = screenAspect / this.bgAspect;
     gl.uniform2f(p.u.u_cover, r > 1 ? 1 : r, r > 1 ? 1 / r : 1);
@@ -609,6 +620,8 @@ export class Renderer {
     gl.uniform1f(p.u.u_sp, s.spActive ? 1 : 0);
     gl.uniform1f(p.u.u_miss, s.missPulse);
     gl.uniform1f(p.u.u_solo, s.solo ? 1 : 0);
+    const tint = s.theme.highwayTint;
+    gl.uniform3f(p.u.u_tint, tint[0], tint[1], tint[2]);
     const lanes = this.lanes;
     const laneCol = this.laneCol;
     for (let i = 0; i < 5; i++) {
@@ -853,7 +866,7 @@ export class Renderer {
       this.fullscreen(this.pBright, scene.tex, B[0]);
       gl.uniform2f(this.pBright.u.u_texel, 1 / scene.w, 1 / scene.h);
       // A light background sits near 1.0 and must not bloom; the neon on the highway still does.
-      gl.uniform1f(this.pBright.u.u_threshold, s.light ? (this.hdr ? 1.35 : 0.95) : this.hdr ? 1.0 : 0.75);
+      gl.uniform1f(this.pBright.u.u_threshold, s.theme.light ? (this.hdr ? 1.35 : 0.95) : this.hdr ? 1.0 : 0.75);
       gl.drawArrays(gl.TRIANGLES, 0, 3);
       for (let i = 1; i < B.length; i++) {
         this.fullscreen(this.pDown, B[i - 1].tex, B[i]);
@@ -875,10 +888,11 @@ export class Renderer {
     gl.activeTexture(gl.TEXTURE1);
     gl.bindTexture(gl.TEXTURE_2D, B.length ? B[0].tex : scene.tex);
     gl.uniform1i(p.u.u_bloom, 1);
-    gl.uniform1f(p.u.u_bloomAmt, B.length ? 0.55 : 0);
+    gl.uniform1f(p.u.u_bloomAmt, B.length ? s.theme.bloom : 0);
     gl.uniform1f(p.u.u_miss, s.missPulse);
     gl.uniform1f(p.u.u_sp, s.spActive ? 1 : 0);
-    gl.uniform1f(p.u.u_light, s.light ? 1 : 0);
+    gl.uniform1f(p.u.u_vignette, s.theme.vignette);
+    gl.uniform1f(p.u.u_scan, s.theme.scanlines);
     gl.drawArrays(gl.TRIANGLES, 0, 3);
   }
 

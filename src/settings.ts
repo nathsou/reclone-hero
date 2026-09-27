@@ -2,7 +2,7 @@ import type { Difficulty, Instrument } from './chart/types.ts';
 
 export type MissFeedback = 'auto' | 'mute' | 'muffle' | 'off';
 export type Quality = 'high' | 'medium' | 'low';
-export type Theme = 'system' | 'dark' | 'light';
+export type Theme = 'system' | 'neon' | 'light' | 'synthwave' | 'terminal' | 'paper' | 'midnight';
 
 export interface Settings {
   noteSpeed: number;
@@ -27,7 +27,7 @@ export interface Settings {
   showFps: boolean;
   instrument: Instrument;
   difficulty: Difficulty;
-  sort: 'artist' | 'name' | 'charter' | 'length' | 'pack';
+  sort: 'artist' | 'name' | 'difficulty' | 'length' | 'year' | 'genre' | 'charter' | 'pack';
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -71,6 +71,7 @@ function load(): Settings {
     if (raw) {
       const stored = JSON.parse(raw) as Record<string, unknown>;
       if (stored.v !== VERSION) for (const [k, v] of Object.entries(V1_DEFAULTS)) if (stored[k] === v) delete stored[k];
+      if (stored.theme === 'dark') stored.theme = 'neon';
       delete stored.v;
       return { ...DEFAULT_SETTINGS, ...(stored as Partial<Settings>) };
     }

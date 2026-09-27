@@ -20,28 +20,50 @@ uniform vec3 u_tint;
 uniform float u_lod;
 uniform float u_bright;
 uniform float u_light;
+uniform vec3 u_top;
+uniform vec3 u_bottom;
+uniform float u_art;
+uniform float u_grid;
 void main() {
   vec2 uv = (v_uv - 0.5) * u_cover * (0.92 - 0.015 * u_beat) + 0.5;
   uv += vec2(sin(u_time * 0.05), cos(u_time * 0.037)) * 0.015;
-  vec3 c;
+  float drift = 0.5 + 0.5 * sin(v_uv.x * 3.0 + u_time * 0.1) * cos(v_uv.y * 2.0 - u_time * 0.07);
+  vec3 base = mix(u_bottom, u_top, smoothstep(0.0, 1.0, v_uv.y)) * (0.9 + 0.2 * drift);
+  vec3 art = vec3(0.0);
   if (u_hasTex > 0.5) {
-    c = textureLod(u_tex, uv, u_lod).rgb;
-    c = pow(c, vec3(2.2));
-    float l = dot(c, vec3(0.3, 0.59, 0.11));
-    c = mix(vec3(l), c, 0.8) * u_bright;
-  } else {
-    float g = 0.5 + 0.5 * sin(v_uv.x * 3.0 + u_time * 0.1) * cos(v_uv.y * 2.0 - u_time * 0.07);
-    c = mix(vec3(0.012, 0.01, 0.03), vec3(0.03, 0.012, 0.05), g);
+    art = pow(textureLod(u_tex, uv, u_lod).rgb, vec3(2.2));
+    float l = dot(art, vec3(0.3, 0.59, 0.11));
+    art = mix(vec3(l), art, 0.8);
   }
-  c += u_tint * 0.04;
   float vig = smoothstep(1.25, 0.3, length(v_uv - vec2(0.5, 0.45)) * 1.6);
+  vec3 c;
   if (u_light > 0.5) {
-    // Pale, lightly tinted by the album art; the dark highway stands on it like a fretboard.
-    vec3 paper = mix(vec3(0.9, 0.88, 0.96), vec3(0.8, 0.82, 0.92), v_uv.y);
-    vec3 art = c / max(u_bright, 1e-3);
-    c = mix(paper, paper * (0.75 + 0.5 * art), u_hasTex * 0.35) + u_tint * 0.08;
+    // Pale backdrop lightly tinted by the album art; the dark highway stands on it like a fretboard.
+    c = mix(base, base * (0.75 + 0.5 * art), u_hasTex * u_art) + u_tint * 0.08;
     o = vec4(c * mix(0.9, 1.0, vig) * (1.0 + 0.03 * u_beat), 1.0);
     return;
+  }
+  c = base + art * u_bright * u_art + u_tint * 0.04;
+  if (u_grid > 0.0) {
+    // Synthwave: a striped sun sinking into a scrolling perspective grid.
+    float horizon = 0.62;
+    vec2 p = v_uv - vec2(0.5, horizon);
+    float sunR = length(p * vec2(1.0, 1.35) - vec2(0.0, 0.1));
+    float band = v_uv.y - horizon;
+    float stripes = step(0.35, fract(band * 38.0)) + step(0.2, band);
+    float sun = (1.0 - smoothstep(0.155, 0.16, sunR)) * step(0.0, band) * min(1.0, stripes);
+    vec3 sunCol = mix(vec3(1.0, 0.12, 0.45), vec3(1.0, 0.75, 0.15), smoothstep(0.0, 0.25, band));
+    c += sunCol * sun * 0.55 * u_grid;
+    c += vec3(0.9, 0.1, 0.5) * exp(-abs(band) * 14.0) * 0.22 * u_grid;
+    if (band < 0.0) {
+      float depth = 0.12 / max(-band, 0.002);
+      float gx = (v_uv.x - 0.5) * depth * 6.0;
+      float gz = depth * 3.0 + u_time * 0.8;
+      // distance from the nearest grid line (0.5 = on the line)
+      float lx = smoothstep(0.47, 0.5, abs(fract(gx) - 0.5));
+      float lz = smoothstep(0.44, 0.5, abs(fract(gz) - 0.5));
+      c += vec3(1.0, 0.15, 0.75) * max(lx, lz) * 0.9 * u_grid * smoothstep(12.0, 1.5, depth) * smoothstep(0.15, 0.5, depth);
+    }
   }
   o = vec4(c * vig * (1.0 + 0.12 * u_beat), 1.0);
 }`;
@@ -66,6 +88,7 @@ uniform vec3 u_rail;
 uniform float u_sp;
 uniform float u_miss;
 uniform float u_solo;
+uniform vec3 u_tint;
 uniform float u_lanes[5];
 uniform vec3 u_laneCol[5];
 
@@ -77,6 +100,7 @@ void main() {
   float track = z - u_time * u_speed;     // world position locked to the chart, scrolls with notes
 
   vec3 base = mix(vec3(0.008, 0.008, 0.016), vec3(0.03, 0.028, 0.05), smoothstep(-u_len, 0.0, z));
+  base *= u_tint;
   // solo sections tint the lane surface
   base = mix(base, vec3(0.045, 0.02, 0.065), u_solo * 0.85);
   // alternate lane shading helps read which lane a gem is in
@@ -429,7 +453,8 @@ uniform sampler2D u_bloom;
 uniform float u_bloomAmt;
 uniform float u_miss;
 uniform float u_sp;
-uniform float u_light;
+uniform float u_vignette;
+uniform float u_scan;
 vec3 aces(vec3 x) {
   return clamp((x * (2.51 * x + 0.03)) / (x * (2.43 * x + 0.59) + 0.14), 0.0, 1.0);
 }
@@ -444,6 +469,8 @@ void main() {
   c += vec3(0.5, 0.02, 0.02) * edge * u_miss * 0.6;
   c += vec3(0.02, 0.12, 0.25) * edge * u_sp * 0.5;
   c = aces(c * 1.05);
-  c *= 1.0 - edge * mix(0.35, 0.08, u_light);
+  c *= 1.0 - edge * u_vignette;
+  // CRT scanlines (Terminal theme)
+  c *= 1.0 - u_scan * 0.16 * step(0.5, fract(gl_FragCoord.y * 0.5));
   o = vec4(pow(c, vec3(1.0 / 2.2)), 1.0);
 }`;

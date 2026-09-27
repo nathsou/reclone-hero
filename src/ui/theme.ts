@@ -1,11 +1,20 @@
 import { onSettingsChange, settings } from '../settings.ts';
+import { THEMES } from './themes.ts';
+import type { RenderTheme, ThemeId } from './themes.ts';
 
 const media = typeof matchMedia === 'function' ? matchMedia('(prefers-color-scheme: light)') : null;
-let light = false;
+let current: ThemeId = 'neon';
+
+/** The theme in effect: "system" follows the OS between Neon and Light. */
+export function resolveTheme(): ThemeId {
+  const t = settings.theme;
+  if (t === 'system') return media?.matches ? 'light' : 'neon';
+  return t in THEMES ? (t as ThemeId) : 'neon';
+}
 
 function apply() {
-  document.documentElement.dataset.theme = settings.theme;
-  light = settings.theme === 'light' || (settings.theme === 'system' && !!media?.matches);
+  current = resolveTheme();
+  document.documentElement.dataset.theme = current;
 }
 
 /** Follow the theme setting (and the OS setting when it is "system"). */
@@ -15,7 +24,7 @@ export function initTheme(): void {
   media?.addEventListener('change', apply);
 }
 
-/** Whether the effective theme is light (cheap; safe to call every frame). */
-export function isLightTheme(): boolean {
-  return light;
+/** Scene parameters for the current theme (cheap; safe to call every frame). */
+export function renderTheme(): RenderTheme {
+  return THEMES[current].render;
 }

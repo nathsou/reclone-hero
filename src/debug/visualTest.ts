@@ -2,6 +2,8 @@
 import type { Note, NoteType } from '../chart/types.ts';
 import { Renderer } from '../render/renderer.ts';
 import type { RenderState } from '../render/renderer.ts';
+import { THEMES } from '../ui/themes.ts';
+import type { ThemeId } from '../ui/themes.ts';
 
 const canvas = document.querySelector('canvas')!;
 const r = new Renderer(canvas);
@@ -63,7 +65,7 @@ const state: RenderState = {
   lefty: params.has('lefty'),
   solo: params.has('solo'),
   beatPulse: 0.2,
-  light: params.has('light'),
+  theme: THEMES[(params.get('theme') ?? 'neon') as ThemeId]?.render ?? THEMES.neon.render,
 };
 document.getElementById('legend')!.textContent =
   'near → far: missed blue · held green sustain · blue HOPO · green HOPO · yellow strum · orange tap · red strum\n' +

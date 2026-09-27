@@ -14,7 +14,7 @@ import type { RenderState } from '../render/renderer.ts';
 import { settings } from '../settings.ts';
 import { Hud } from '../ui/hud.ts';
 import type { HudState } from '../ui/hud.ts';
-import { isLightTheme } from '../ui/theme.ts';
+import { renderTheme } from '../ui/theme.ts';
 
 /** Misses are judged slightly behind real time so late-arriving input events are never pre-empted. */
 const JUDGE_LAG = 0.02;
@@ -137,7 +137,7 @@ export class Game {
       lefty: false,
       solo: false,
       beatPulse: 0,
-      light: false,
+      theme: renderTheme(),
     };
     hud.setTimingWindow(settings.hitWindowMs);
     hud.showTimingBar(settings.timingBar);
@@ -376,7 +376,7 @@ export class Game {
     rs.lefty = settings.lefty;
     rs.solo = engine.activeSolo >= 0;
     rs.beatPulse = beatPulse;
-    rs.light = isLightTheme();
+    rs.theme = renderTheme();
     const r = this.renderer;
     r.render(rs);
     if (r.cameraKey !== this.hudCameraKey) {

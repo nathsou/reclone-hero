@@ -55,8 +55,16 @@ In menus, strum moves, green confirms, red goes back, yellow opens practice, blu
 - **Practice:** loop any range of sections at 40–100% speed. Audio is time-stretched without changing pitch
   (WSOLA), and each loop reports its accuracy.
 - **Calibration:** tap along to clicks (audio offset) and flashes (video offset).
-- **Video backgrounds**, album-art backgrounds, light / dark / system theme, fullscreen (`F`), lefty flip,
-  quality levels.
+- **Song list** grouped the way Clone Hero does it (by artist, title letter, difficulty, length, year,
+  genre, charter or folder) with a sticky group header, `PgUp`/`PgDn` to jump between groups, `R` for a
+  random song and `/` to search.
+- **Themes:** Neon, Light, Synthwave, Terminal, Paper and Midnight, each with its own palette, type and
+  scene (Synthwave has a sunset horizon grid, Terminal has scanlines). "Match system" switches between Neon
+  and Light.
+- **Backups:** Settings › Data exports settings, key and controller mappings and best scores to a file,
+  to import on another computer (scores merge, keeping the best).
+- **Controls:** remap any single guitar input (Settings › Controls › Change) without redoing the rest.
+- **Video backgrounds**, album-art backgrounds, fullscreen (`F`), lefty flip, quality levels.
 
 ## Feedback when you make a mistake
 

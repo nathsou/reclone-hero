@@ -159,3 +159,20 @@ export function detectAnalog(base: PadSnapshot, pad: Gamepad, best: AnalogBindin
   }
   return out;
 }
+
+const HAT_DIRS = ['↑', '↗', '→', '↘', '↓', '↙', '←', '↖'];
+
+/** Human-readable description of a binding, e.g. "Button 4", "D-pad ↓", "Axis 2 +". */
+export function describeBinding(b: DigitalBinding): string {
+  if (b.type === 'button') return `Button ${b.index}`;
+  if (Math.abs(b.rest) > 1.05) {
+    // Chrome maps the 8 hat positions onto [-1, 1] in steps of 2/7, starting at "up".
+    const i = Math.round(((b.value + 1) * 7) / 2);
+    return `D-pad ${HAT_DIRS[Math.max(0, Math.min(7, i))]}`;
+  }
+  return `Axis ${b.index} ${b.value > b.rest ? '+' : '−'}`;
+}
+
+export function describeAnalog(b: AnalogBinding): string {
+  return `Axis ${b.index}`;
+}

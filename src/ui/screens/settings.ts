@@ -1,6 +1,6 @@
 import { audio } from '../../audio/audio.ts';
 import type { Action } from '../../input/bindings.ts';
-import { ACTIONS, ACTION_LABEL, DEFAULT_KEYS, saveKeyBindings } from '../../input/bindings.ts';
+import { ACTIONS, ACTION_LABEL, DEFAULT_KEYS, describeAnalog, describeBinding, savePadProfile, saveKeyBindings } from '../../input/bindings.ts';
 import { input } from '../../input/input.ts';
 import type { NavAction } from '../../input/input.ts';
 import { settings, updateSettings } from '../../settings.ts';
@@ -8,8 +8,10 @@ import type { Settings } from '../../settings.ts';
 import { shortPadName } from '../app.ts';
 import type { App, Screen } from '../app.ts';
 import { h, replace } from '../dom.ts';
+import { THEMES, THEME_IDS } from '../themes.ts';
+import { applyBackup, downloadBackup, makeBackup, parseBackup, summarize } from '../../game/backup.ts';
 
-type Tab = 'gameplay' | 'audio' | 'video' | 'controls';
+type Tab = 'gameplay' | 'audio' | 'video' | 'controls' | 'data';
 
 export class SettingsModal implements Screen {
   readonly el: HTMLElement;
@@ -47,12 +49,14 @@ export class SettingsModal implements Screen {
       ['audio', 'Audio'],
       ['video', 'Display'],
       ['controls', 'Controls'],
+      ['data', 'Data'],
     ];
     replace(this.tabs, ...tabs.map(([t, label]) => h('button', { class: `tab ${t === this.tab ? 'on' : ''}`, onclick: () => ((this.tab = t), this.render()) }, label)));
     clearInterval(this.padTimer);
     if (this.tab === 'gameplay') this.gameplay();
     else if (this.tab === 'audio') this.audioTab();
     else if (this.tab === 'video') this.video();
+    else if (this.tab === 'data') this.data();
     else this.controls();
   }
 
@@ -96,11 +100,9 @@ export class SettingsModal implements Screen {
   private video() {
     replace(
       this.body,
-      select('Theme', 'theme', [
-        ['system', 'Match system'],
-        ['dark', 'Dark'],
-        ['light', 'Light'],
-      ]),
+      h('h3', null, 'Theme'),
+      themePicker(),
+      h('h3', null, 'Graphics'),
       select('Quality', 'quality', [
         ['high', 'High'],
         ['medium', 'Medium'],
@@ -109,6 +111,57 @@ export class SettingsModal implements Screen {
       slider('Video offset', 'videoOffsetMs', -150, 150, 1, (v) => `${v} ms`, 'Raise this if notes look late compared to what you hear.'),
       this.inGame ? null : h('button', { class: 'btn', onclick: () => this.calibrate('video') }, 'Calibrate video offset…'),
       toggle('Show FPS', 'showFps'),
+    );
+  }
+
+  private data() {
+    const status = h('div', { class: 'data-status' });
+    const fileInput = h('input', { type: 'file', accept: 'application/json,.json', class: 'hidden-input' });
+    fileInput.addEventListener('change', async () => {
+      const file = fileInput.files?.[0];
+      fileInput.value = '';
+      if (!file) return;
+      try {
+        const backup = parseBackup(await file.text());
+        const sum = summarize(backup);
+        const parts = [sum.settings && 'settings', sum.keys && 'keyboard keys', sum.controllers && `${sum.controllers} controller${sum.controllers > 1 ? 's' : ''}`, sum.scores && `${sum.scores} best score${sum.scores > 1 ? 's' : ''}`].filter(Boolean);
+        replace(
+          status,
+          h('p', null, `Backup from ${new Date(sum.exportedAt).toLocaleString()} with ${parts.join(', ') || 'nothing'}.`),
+          h('p', { class: 'hint' }, 'Settings and keys will be replaced. Controllers and best scores are merged (the higher score wins).'),
+          h(
+            'div',
+            { class: 'actions' },
+            h(
+              'button',
+              {
+                class: 'btn primary',
+                onclick: () => {
+                  applyBackup(backup);
+                  location.reload();
+                },
+              },
+              'Import and reload',
+            ),
+            h('button', { class: 'btn ghost', onclick: () => status.replaceChildren() }, 'Cancel'),
+          ),
+        );
+      } catch (err) {
+        replace(status, h('p', { class: 'error' }, (err as Error).message));
+      }
+    });
+    const scores = Object.keys(makeBackup().data.scores ?? {}).length;
+    replace(
+      this.body,
+      h('h3', null, 'Move to another computer'),
+      h(
+        'p',
+        { class: 'hint' },
+        `Export saves your settings, keyboard keys, controller mappings and ${scores} best score${scores === 1 ? '' : 's'} to a file. Import it on the other computer. Your songs are not included: point the game at your charts folder there.`,
+      ),
+      h('div', { class: 'actions' }, h('button', { class: 'btn primary', onclick: () => downloadBackup() }, 'Export…'), h('button', { class: 'btn', onclick: () => fileInput.click() }, 'Import…')),
+      fileInput,
+      status,
     );
   }
 
@@ -124,23 +177,65 @@ export class SettingsModal implements Screen {
         replace(pads, h('p', { class: 'hint' }, 'No controller detected yet. Plug in your guitar and press any fret: browsers only reveal controllers after a button press.'));
         return;
       }
-      const sig = list.map((p) => p.id + (input().profiles[p.id] ? '1' : '0')).join('|');
+      const sig = list.map((p) => p.id + JSON.stringify(input().profiles[p.id] ?? null)).join('|');
       if (pads.dataset.sig === sig) return;
       pads.dataset.sig = sig;
+      const wizard = (p: Gamepad, only?: Action | 'whammy') =>
+        void import('./wizard.ts').then(({ PadWizard }) => this.app.pushModal(new PadWizard(this.app, p.index, () => ((pads.dataset.sig = ''), refreshPads()), only)));
       replace(
         pads,
         ...list.map((p) => {
-          const configured = !!input().profiles[p.id];
-          return h(
+          const profile = input().profiles[p.id];
+          const configured = !!profile;
+          const card = h(
             'div',
             { class: 'pad' },
-            h('div', null, h('b', null, shortPadName(p.id)), h('div', { class: 'hint' }, `${p.buttons.length} buttons, ${p.axes.length} axes · ${configured ? 'configured' : p.mapping === 'standard' ? 'standard mapping' : 'not configured'}`)),
             h(
-              'button',
-              { class: configured ? 'btn' : 'btn primary', onclick: () => void import('./wizard.ts').then(({ PadWizard }) => this.app.pushModal(new PadWizard(this.app, p.index, () => ((pads.dataset.sig = ''), refreshPads())))) },
-              configured ? 'Reconfigure' : 'Set up',
+              'div',
+              { class: 'pad-head' },
+              h('div', null, h('b', null, shortPadName(p.id)), h('div', { class: 'hint' }, `${p.buttons.length} buttons, ${p.axes.length} axes · ${configured ? 'configured' : p.mapping === 'standard' ? 'standard mapping' : 'not configured'}`)),
+              h('button', { class: configured ? 'btn' : 'btn primary', onclick: () => wizard(p) }, configured ? 'Set up everything again' : 'Set up'),
             ),
           );
+          if (profile) {
+            // One row per input: change just that one without redoing the rest.
+            const rows = h('div', { class: 'bind-list' });
+            for (const a of [...ACTIONS, 'whammy' as const]) {
+              const binds = a === 'whammy' ? null : (profile.digital[a] ?? []);
+              const text = a === 'whammy' ? (profile.whammy ? describeAnalog(profile.whammy) : '—') : binds!.length ? binds!.map(describeBinding).join(' / ') : '—';
+              const optional = a === 'whammy' || a === 'tilt' || a === 'starPower';
+              rows.append(
+                h(
+                  'div',
+                  { class: 'key-row' },
+                  h('span', null, a === 'whammy' ? 'Whammy bar' : ACTION_LABEL[a]),
+                  h('span', { class: 'bind-val' }, text),
+                  h('button', { class: 'btn small', onclick: () => wizard(p, a) }, 'Change'),
+                  optional && text !== '—'
+                    ? h(
+                        'button',
+                        {
+                          class: 'btn small ghost',
+                          title: 'Unbind',
+                          onclick: () => {
+                            const next = structuredClone(profile);
+                            if (a === 'whammy') next.whammy = null;
+                            else delete next.digital[a];
+                            savePadProfile(p.id, next);
+                            input().reloadBindings();
+                            pads.dataset.sig = '';
+                            refreshPads();
+                          },
+                        },
+                        '✕',
+                      )
+                    : h('span', { class: 'bind-spacer' }),
+                ),
+              );
+            }
+            card.append(rows);
+          }
+          return card;
         }),
       );
     };
@@ -211,6 +306,48 @@ export class SettingsModal implements Screen {
     }
     return false;
   }
+}
+
+/** Theme cards with a miniature preview of each look. */
+function themePicker(): HTMLElement {
+  const grid = h('div', { class: 'theme-grid', role: 'radiogroup', 'aria-label': 'Theme' });
+  const render = () => {
+    const cards = [
+      { id: 'system' as const, name: 'Match system', description: 'Neon or Light, following your OS.', swatch: THEMES.neon.swatch, alt: THEMES.light.swatch },
+      ...THEME_IDS.map((id) => ({ ...THEMES[id], alt: null })),
+    ];
+    replace(
+      grid,
+      ...cards.map((c) => {
+        const [bg, panel, accent, text] = c.swatch;
+        const preview = h(
+          'div',
+          { class: 'theme-preview', style: `background:${bg}` },
+          h('div', { class: 'tp-panel', style: `background:${panel}` }, h('span', { class: 'tp-line', style: `background:${text}` }), h('span', { class: 'tp-line short', style: `background:${text}` })),
+          h('span', { class: 'tp-dot', style: `background:${accent}` }),
+        );
+        if (c.alt) preview.append(h('div', { class: 'tp-half', style: `background:${c.alt[0]}` }, h('span', { class: 'tp-dot', style: `background:${c.alt[2]}` })));
+        const on = settings.theme === c.id;
+        return h(
+          'button',
+          {
+            class: `theme-card ${on ? 'on' : ''}`,
+            role: 'radio',
+            'aria-checked': String(on),
+            onclick: () => {
+              updateSettings({ theme: c.id });
+              render();
+            },
+          },
+          preview,
+          h('span', { class: 'tc-name' }, c.name),
+          h('span', { class: 'tc-desc' }, c.description),
+        );
+      }),
+    );
+  };
+  render();
+  return grid;
 }
 
 function pct(v: number) {

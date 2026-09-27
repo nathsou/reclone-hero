@@ -13,8 +13,11 @@ import type { App, Screen } from '../app.ts';
 import { h, replace, setText } from '../dom.ts';
 import { canFullscreen, toggleFullscreen } from '../fullscreen.ts';
 import { logo } from '../logo.ts';
+import { SORTS, SORT_LABEL, sortAndGroup } from '../songlist.ts';
+import type { Group } from '../songlist.ts';
 
 const ROW_H = 60;
+const HEADER_H = 38;
 /** Short enough to feel instant, long enough not to start a preview for every song while scrolling. */
 const PREVIEW_DELAY_MS = 160;
 const DIFF_LABEL: Record<Difficulty, string> = { easy: 'Easy', medium: 'Medium', hard: 'Hard', expert: 'Expert' };
@@ -30,6 +33,13 @@ export class SongSelect implements Screen {
   private readonly detail: HTMLDivElement;
   private readonly preview: PreviewPlayer;
   private filtered: SongEntry[] = [];
+  private groups: Group[] = [];
+  /** virtual list items: song index, or -(group index + 1) for a group header */
+  private items: Int32Array = new Int32Array(0);
+  private itemTop: Float64Array = new Float64Array(1);
+  /** item index of each song */
+  private songItem: Int32Array = new Int32Array(0);
+  private readonly sticky: HTMLDivElement;
   private sel = 0;
   private chart: Chart | null = null;
   private chartFor: SongEntry | null = null;
@@ -46,8 +56,8 @@ export class SongSelect implements Screen {
     this.search.addEventListener('input', () => this.refilter());
     const sort = h(
       'select',
-      { class: 'sort', title: 'Sort by' },
-      ...(['artist', 'name', 'charter', 'length', 'pack'] as const).map((s) => h('option', { value: s, selected: settings.sort === s }, `Sort: ${s}`)),
+      { class: 'sort', title: 'Sort and group by' },
+      ...SORTS.map((s) => h('option', { value: s, selected: settings.sort === s }, `By ${SORT_LABEL[s].toLowerCase()}`)),
     );
     sort.addEventListener('change', () => {
       updateSettings({ sort: sort.value as Settings['sort'] });
@@ -57,6 +67,8 @@ export class SongSelect implements Screen {
     this.spacer = h('div', { class: 'spacer' });
     this.list = h('div', { class: 'song-list', tabindex: '-1' }, this.spacer);
     this.list.addEventListener('scroll', () => this.renderRows());
+    this.sticky = h('div', { class: 'group-sticky' });
+    this.sticky.addEventListener('click', () => this.jumpGroup(0));
     this.detail = h('div', { class: 'song-detail' });
     const lib = app.library;
     this.el = h(
@@ -69,29 +81,33 @@ export class SongSelect implements Screen {
         this.search,
         sort,
         this.count,
+        h('button', { class: 'btn ghost icon', title: 'Random song (R)', 'aria-label': 'Random song', onclick: () => this.random() }, '🎲'),
         h('div', { class: 'grow' }),
-        h('button', { class: 'btn ghost', title: 'Rescan library', onclick: () => lib.source && app.openLibrary(lib.source, true) }, '↻ Rescan'),
+        h('button', { class: 'btn ghost icon', title: 'Rescan library', 'aria-label': 'Rescan library', onclick: () => lib.source && app.openLibrary(lib.source, true) }, '↻'),
         h(
           'button',
           {
-            class: 'btn ghost',
+            class: 'btn ghost icon',
             title: 'Choose a different charts folder',
+            'aria-label': 'Choose charts folder',
             onclick: async () => {
               const { Library } = await import('../../library/library.ts');
               const src = await Library.pickAny();
               if (src) await app.openLibrary(src, true);
             },
           },
-          '📁 Library',
+          '📁',
         ),
         canFullscreen() ? h('button', { class: 'btn ghost icon', title: 'Fullscreen (F)', 'aria-label': 'Fullscreen', onclick: () => void toggleFullscreen() }, '⛶') : null,
         h('button', { class: 'btn ghost', onclick: () => this.openSettings() }, '⚙ Settings'),
       ),
-      h('main', null, this.list, this.detail),
+      h('main', null, h('div', { class: 'list-wrap' }, this.list, this.sticky), this.detail),
       h(
         'footer',
         null,
         hint('↑↓ / strum', 'browse'),
+        hint('PgUp/PgDn', 'jump group'),
+        hint('R', 'random'),
         hint('Enter / green', 'play'),
         hint('P / yellow', 'practice'),
         hint('←→ / blue·orange', 'difficulty'),
@@ -137,81 +153,166 @@ export class SongSelect implements Screen {
     const q = this.search.value.trim().toLowerCase();
     const current = this.filtered[this.sel];
     const terms = q.split(/\s+/).filter(Boolean);
-    let songs = this.app.library.songs.filter((s) => {
+    const matching = this.app.library.songs.filter((s) => {
       if (!terms.length) return true;
-      const hay = `${s.name} ${s.artist} ${s.album} ${s.charter} ${s.genre} ${s.pack}`.toLowerCase();
+      const hay = `${s.name} ${s.artist} ${s.album} ${s.charter} ${s.genre} ${s.pack} ${s.year}`.toLowerCase();
       return terms.every((t) => hay.includes(t));
     });
-    const by = settings.sort;
-    // Ignore leading punctuation and "The " so '"Weird Al"' sorts under W and The Who under W.
-    const key = (x: string) => x.replace(/^[^\p{L}\p{N}]+/u, '').replace(/^the\s+/i, '');
-    const cmp = (a: string, b: string) => key(a).localeCompare(key(b), undefined, { sensitivity: 'base' });
-    songs = songs.sort((a, b) => {
-      switch (by) {
-        case 'name':
-          return cmp(a.name, b.name);
-        case 'charter':
-          return cmp(a.charter, b.charter) || cmp(a.name, b.name);
-        case 'length':
-          return a.lengthMs - b.lengthMs;
-        case 'pack':
-          return cmp(a.path, b.path);
-        default:
-          return cmp(a.artist, b.artist) || cmp(a.name, b.name);
+    const { songs, groups } = sortAndGroup(matching, settings.sort, settings.instrument);
+    this.filtered = songs;
+    this.groups = groups;
+    // Lay out the virtual list: a header before each group, then its songs.
+    const n = songs.length + groups.length;
+    this.items = new Int32Array(n);
+    this.itemTop = new Float64Array(n + 1);
+    this.songItem = new Int32Array(songs.length);
+    let k = 0;
+    let y = 0;
+    groups.forEach((g, gi) => {
+      this.items[k] = -(gi + 1);
+      this.itemTop[k++] = y;
+      y += HEADER_H;
+      for (let i = g.start; i < g.start + g.count; i++) {
+        this.songItem[i] = k;
+        this.items[k] = i;
+        this.itemTop[k++] = y;
+        y += ROW_H;
       }
     });
-    this.filtered = songs;
+    this.itemTop[n] = y;
+    const label = SORT_LABEL[settings.sort].toLowerCase();
     setText(this.count, `${songs.length} song${songs.length === 1 ? '' : 's'}`);
-    this.spacer.style.height = `${songs.length * ROW_H}px`;
+    this.count.title = `${groups.length} groups by ${label}`;
+    this.spacer.style.height = `${y}px`;
+    for (const r of this.rows) delete r.dataset.key;
     const idx = current ? songs.indexOf(current) : -1;
     this.select(idx >= 0 ? idx : 0, true);
+  }
+
+  /** Index of the first item whose bottom edge is below y. */
+  private itemAt(y: number): number {
+    let lo = 0;
+    let hi = this.items.length;
+    while (lo < hi) {
+      const mid = (lo + hi) >>> 1;
+      if (this.itemTop[mid + 1] <= y) lo = mid + 1;
+      else hi = mid;
+    }
+    return lo;
+  }
+
+  private groupOfSong(i: number): number {
+    let lo = 0;
+    let hi = this.groups.length - 1;
+    while (lo < hi) {
+      const mid = (lo + hi + 1) >>> 1;
+      if (this.groups[mid].start <= i) lo = mid;
+      else hi = mid - 1;
+    }
+    return lo;
   }
 
   private renderRows() {
     const top = this.list.scrollTop;
     const h0 = this.list.clientHeight || 800;
-    const first = Math.max(0, Math.floor(top / ROW_H) - 4);
-    const last = Math.min(this.filtered.length, Math.ceil((top + h0) / ROW_H) + 4);
+    const first = Math.max(0, this.itemAt(top) - 3);
+    const last = Math.min(this.items.length, this.itemAt(top + h0) + 4);
     const needed = last - first;
     while (this.rows.length < needed) {
       const row = h('div', { class: 'song-row' });
-      row.addEventListener('click', () => this.select(Number(row.dataset.i)));
-      row.addEventListener('dblclick', () => this.play(false));
+      row.addEventListener('click', () => {
+        const v = Number(row.dataset.item);
+        const it = this.items[v];
+        if (it >= 0) this.select(it);
+      });
+      row.addEventListener('dblclick', () => {
+        if (this.items[Number(row.dataset.item)] >= 0) void this.play(false);
+      });
       this.rows.push(row);
       this.list.append(row);
     }
     for (let k = 0; k < this.rows.length; k++) {
       const row = this.rows[k];
-      const i = first + k;
-      if (i >= last) {
+      const v = first + k;
+      if (v >= last) {
         row.style.display = 'none';
         continue;
       }
       row.style.display = '';
-      row.style.transform = `translateY(${i * ROW_H}px)`;
-      row.classList.toggle('sel', i === this.sel);
-      if (row.dataset.i === String(i) && row.dataset.id === this.filtered[i].id) continue;
-      row.dataset.i = String(i);
-      const s = this.filtered[i];
-      row.dataset.id = s.id;
+      row.style.transform = `translateY(${this.itemTop[v]}px)`;
+      row.dataset.item = String(v);
+      const it = this.items[v];
+      row.classList.toggle('sel', it === this.sel);
+      const key = it >= 0 ? `s:${this.filtered[it].id}` : `g:${it}:${this.groups[-it - 1].label}`;
+      if (row.dataset.key === key) continue;
+      row.dataset.key = key;
+      if (it < 0) {
+        const g = this.groups[-it - 1];
+        row.className = 'song-row group-row';
+        replace(
+          row,
+          h('span', { class: 'group-label' }, g.label),
+          g.rating !== undefined ? pips(g.rating) : null,
+          h('span', { class: 'group-count' }, String(g.count)),
+        );
+        continue;
+      }
+      row.className = `song-row${it === this.sel ? ' sel' : ''}`;
+      const s = this.filtered[it];
       const art = h('div', { class: 'thumb' });
       if (s.albumArt) {
         void this.art(s).then((u) => {
-          if (row.dataset.id === s.id) art.style.backgroundImage = `url("${u}")`;
+          if (row.dataset.key === key) art.style.backgroundImage = `url("${u}")`;
         });
       }
       const best = getBest(scoreKey(s.id, trackKey(this.instrument, this.difficulty)));
-      row.replaceChildren(
+      // Under an artist header the artist is redundant: show the album instead, as Clone Hero does.
+      const sub = settings.sort === 'artist' ? [s.album, s.year].filter(Boolean).join(' · ') || s.charter : s.artist;
+      const rating = s.diffs[settings.instrument];
+      replace(
+        row,
         art,
-        h('div', { class: 'meta' }, h('div', { class: 'title' }, s.name), h('div', { class: 'artist' }, s.artist)),
+        h('div', { class: 'meta' }, h('div', { class: 'title' }, s.name), h('div', { class: 'artist' }, sub)),
         h(
           'div',
           { class: 'side' },
           best ? h('div', { class: 'best' }, starsEl(best.stars), best.fc ? h('span', { class: 'fc' }, 'FC') : null) : null,
-          h('div', { class: 'len' }, s.lengthMs ? formatTime(s.lengthMs / 1000) : ''),
+          h('div', { class: 'len' }, rating !== undefined && rating >= 0 && settings.sort !== 'difficulty' ? pips(rating) : null, s.lengthMs ? formatTime(s.lengthMs / 1000) : ''),
         ),
       );
     }
+    // Sticky label for the group at the top of the viewport.
+    const topItem = this.itemAt(top + 1);
+    const it = this.items[topItem];
+    const gi = it === undefined ? -1 : it < 0 ? -it - 1 : this.groupOfSong(it);
+    const g = this.groups[gi];
+    const stickyKey = g ? `${gi}` : '';
+    if (this.sticky.dataset.key !== stickyKey) {
+      this.sticky.dataset.key = stickyKey;
+      replace(this.sticky, g ? h('span', { class: 'group-label' }, g.label) : null, g && g.rating !== undefined ? pips(g.rating) : null, g ? h('span', { class: 'group-count' }, String(g.count)) : null);
+    }
+    this.sticky.classList.toggle('on', !!g && top > 1);
+  }
+
+  /** Jump to the first song of the next (dir 1) or previous (dir -1) group; 0 = start of the current group. */
+  private jumpGroup(dir: number) {
+    if (!this.groups.length) return;
+    const gi = this.groupOfSong(this.sel);
+    const g = this.groups[gi];
+    let target = gi + dir;
+    // "Previous" from inside a group goes to that group's start first.
+    if (dir < 0 && this.sel > g.start) target = gi;
+    target = Math.max(0, Math.min(this.groups.length - 1, target));
+    this.select(this.groups[target].start);
+    // Put the group's header at the top of the list.
+    this.list.scrollTop = this.itemTop[this.songItem[this.sel] - 1] ?? 0;
+  }
+
+  private random() {
+    if (!this.filtered.length) return;
+    this.select(Math.floor(Math.random() * this.filtered.length));
+    const y = this.itemTop[this.songItem[this.sel]];
+    this.list.scrollTop = y - this.list.clientHeight / 2 + ROW_H / 2;
   }
 
   private art(s: SongEntry): Promise<string> {
@@ -260,10 +361,16 @@ export class SongSelect implements Screen {
   }
 
   private scrollToSel() {
-    const y = this.sel * ROW_H;
+    const item = this.songItem[this.sel];
+    if (item === undefined) return;
+    // Keep the group header visible above the first song of a group.
+    const isFirst = this.groups.length && this.groups[this.groupOfSong(this.sel)].start === this.sel;
+    const y = this.itemTop[item] - (isFirst ? HEADER_H : 0);
+    const bottom = this.itemTop[item] + ROW_H;
     const l = this.list;
-    if (y < l.scrollTop) l.scrollTop = y;
-    else if (y + ROW_H > l.scrollTop + l.clientHeight) l.scrollTop = y + ROW_H - l.clientHeight;
+    // The sticky header covers the top of the list.
+    if (y < l.scrollTop + HEADER_H) l.scrollTop = Math.max(0, y - (isFirst ? 0 : HEADER_H));
+    else if (bottom > l.scrollTop + l.clientHeight) l.scrollTop = bottom - l.clientHeight;
   }
 
   // ---------------------------------------------------------------- detail
@@ -325,7 +432,7 @@ export class SongSelect implements Screen {
                 this.instrument = inst;
                 if (!ds.includes(this.difficulty)) this.difficulty = ds[ds.length - 1];
                 this.renderDetail(song);
-                this.renderRowsForce();
+                this.instrumentChanged();
               },
             },
             INSTRUMENT_LABEL[inst],
@@ -384,8 +491,15 @@ export class SongSelect implements Screen {
     );
   }
 
+  /** The player picked another instrument: difficulty pips and difficulty grouping follow it. */
+  private instrumentChanged() {
+    if (settings.instrument !== this.instrument) updateSettings({ instrument: this.instrument });
+    if (settings.sort === 'difficulty') this.refilter();
+    else this.renderRowsForce();
+  }
+
   private renderRowsForce() {
-    for (const r of this.rows) delete r.dataset.i;
+    for (const r of this.rows) delete r.dataset.key;
     this.renderRows();
   }
 
@@ -428,7 +542,7 @@ export class SongSelect implements Screen {
     this.instrument = next.inst;
     if (!next.diffs.includes(this.difficulty)) this.difficulty = next.diffs[next.diffs.length - 1];
     this.renderDetail(this.filtered[this.sel]);
-    this.renderRowsForce();
+    this.instrumentChanged();
   }
 
   nav(a: NavAction): void {
@@ -451,10 +565,10 @@ export class SongSelect implements Screen {
         this.select(this.sel + 1);
         return true;
       case 'PageUp':
-        this.select(this.sel - 10);
+        this.jumpGroup(-1);
         return true;
       case 'PageDown':
-        this.select(this.sel + 10);
+        this.jumpGroup(1);
         return true;
       case 'Enter':
         void this.play(false);
@@ -478,12 +592,23 @@ export class SongSelect implements Screen {
     else if (e.key === 'ArrowRight') this.cycleDifficulty(1);
     else if (e.key === 'p' || e.key === 'P') void this.practice();
     else if (e.key === 'b' || e.key === 'B') void this.play(true);
+    else if (e.key === 'r' || e.key === 'R') this.random();
+    else if (e.key === '/') {
+      this.search.focus();
+      this.search.select();
+    }
     else if (e.key.length === 1 && !e.metaKey && !e.ctrlKey && !e.altKey) {
       this.search.focus();
       return false;
     } else return false;
     return true;
   }
+}
+
+/** Difficulty rating as six pips (Clone Hero's 0-6 scale; higher values fill all six). */
+function pips(r: number): HTMLSpanElement {
+  const n = Math.max(0, Math.min(6, Math.round(r)));
+  return h('span', { class: 'pips', title: `Difficulty ${r}` }, '●'.repeat(n) + '○'.repeat(6 - n));
 }
 
 function hint(k: string, label: string) {

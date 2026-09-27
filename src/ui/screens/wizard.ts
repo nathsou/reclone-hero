@@ -38,13 +38,22 @@ export class PadWizard implements Screen {
   private base: PadSnapshot | null = null;
   private analog: AnalogBinding | null = null;
   private profile: PadProfile = { digital: {}, whammy: null };
+  private readonly steps: Step[];
+  private readonly single: boolean;
   private raf = 0;
 
-  constructor(app: App, padIndex: number, onDone: () => void) {
+  /** With `only`, rebind just that input and keep every other binding. */
+  constructor(app: App, padIndex: number, onDone: () => void, only?: Action | 'whammy') {
     this.app = app;
     this.padIndex = padIndex;
     this.onDone = onDone;
     const pad = navigator.getGamepads()[padIndex];
+    this.single = only !== undefined;
+    this.steps = only ? STEPS.filter((st) => st.action === only) : STEPS;
+    if (only && pad) {
+      const existing = input().profiles[pad.id];
+      if (existing) this.profile = structuredClone(existing);
+    }
     this.prompt = h('div', { class: 'wiz-prompt' });
     this.progress = h('div', { class: 'wiz-steps' });
     this.raw = h('div', { class: 'wiz-raw' });
@@ -55,12 +64,12 @@ export class PadWizard implements Screen {
       h(
         'div',
         { class: 'modal wizard' },
-        h('h2', null, 'Set up controller'),
+        h('h2', null, only ? `Change ${only === 'whammy' ? 'whammy' : ACTION_LABEL[only].toLowerCase()}` : 'Set up controller'),
         h('div', { class: 'hint' }, pad ? shortPadName(pad.id) : 'Controller'),
         this.progress,
         this.prompt,
         this.note,
-        h('div', { class: 'actions' }, h('button', { class: 'btn', onclick: () => this.skip() }, 'Skip'), h('button', { class: 'btn ghost', onclick: () => this.cancel() }, 'Cancel')),
+        h('div', { class: 'actions' }, this.single ? null : h('button', { class: 'btn', onclick: () => this.skip() }, 'Skip'), h('button', { class: 'btn ghost', onclick: () => this.cancel() }, 'Cancel')),
         this.raw,
       ),
     );
@@ -73,10 +82,12 @@ export class PadWizard implements Screen {
   }
 
   private renderStep() {
-    const s = STEPS[this.step];
+    const s = this.steps[this.step];
     setText(this.prompt, s ? s.prompt : 'All set!');
     setText(this.note, '');
-    replace(this.progress, ...STEPS.map((st, i) => h('span', { class: i < this.step ? 'done' : i === this.step ? 'cur' : '' }, st.action === 'whammy' ? 'Whammy' : ACTION_LABEL[st.action].replace(' fret', ''))));
+    if (this.single) {
+      this.progress.replaceChildren();
+    } else replace(this.progress, ...this.steps.map((st, i) => h('span', { class: i < this.step ? 'done' : i === this.step ? 'cur' : '' }, st.action === 'whammy' ? 'Whammy' : ACTION_LABEL[st.action].replace(' fret', ''))));
     this.phase = 'settle';
     this.phaseAt = performance.now();
     this.analog = null;
@@ -91,7 +102,7 @@ export class PadWizard implements Screen {
     }
     const pressed = pad.buttons.map((b, i) => (b.pressed ? i : -1)).filter((i) => i >= 0);
     setText(this.raw, `buttons: ${pressed.join(', ') || '—'}   axes: ${pad.axes.map((a) => a.toFixed(2)).join('  ')}`);
-    const s = STEPS[this.step];
+    const s = this.steps[this.step];
     if (!s) return;
     const now = performance.now();
 
@@ -117,12 +128,18 @@ export class PadWizard implements Screen {
       }
       const b = detectDigital(this.base!, pad);
       if (!b) return;
-      const clash = (Object.entries(this.profile.digital) as [Action, DigitalBinding[]][]).find(([, list]) => list.some((x) => sameBinding(x, b)));
-      if (clash) {
+      const clash = (Object.entries(this.profile.digital) as [Action, DigitalBinding[]][]).find(([a, list]) => a !== s.action && list.some((x) => sameBinding(x, b)));
+      if (clash && !this.single) {
         setText(this.note, `That input is already ${ACTION_LABEL[clash[0]]}.`);
         return;
       }
-      (this.profile.digital[s.action] ??= []).push(b);
+      if (clash) {
+        // Rebinding one input: take it over from whatever used it before.
+        this.profile.digital[clash[0]] = clash[1].filter((x) => !sameBinding(x, b));
+        this.app.toast(`Moved from ${ACTION_LABEL[clash[0]]}; ${ACTION_LABEL[clash[0]]} is now unbound.`);
+      }
+      if (this.single) this.profile.digital[s.action] = [b];
+      else (this.profile.digital[s.action] ??= []).push(b);
       this.phase = 'release';
       this.phaseAt = now;
       return;
@@ -136,12 +153,12 @@ export class PadWizard implements Screen {
 
   private next() {
     this.step++;
-    if (this.step >= STEPS.length) this.finish();
+    if (this.step >= this.steps.length) this.finish();
     else this.renderStep();
   }
 
   private skip() {
-    const s = STEPS[this.step];
+    const s = this.steps[this.step];
     if (!s) return;
     if (!s.optional) {
       setText(this.note, 'This one is needed to play. Press it, or Cancel.');
@@ -156,7 +173,7 @@ export class PadWizard implements Screen {
       savePadProfile(pad.id, this.profile);
       input().reloadBindings();
     }
-    this.app.toast('Controller saved.');
+    this.app.toast(this.single ? 'Binding saved.' : 'Controller saved.');
     this.onDone();
     this.app.popModal(this);
   }
