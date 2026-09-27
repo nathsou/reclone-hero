@@ -2,7 +2,21 @@ import type { Beat, Note } from '../chart/types.ts';
 import { HOPO, TAP } from '../chart/types.ts';
 import { HIT, MISSED } from '../engine/engine.ts';
 import type { Quality } from '../settings.ts';
-import { QUAD, fretButtonMesh, gemMesh, openBarMesh, stripMesh } from './geometry.ts';
+import {
+  QUAD,
+  blockMesh,
+  discMesh,
+  flatButtonMesh,
+  fretButtonMesh,
+  gemMesh,
+  goldButtonMesh,
+  jewelMesh,
+  openBarMesh,
+  pillMesh,
+  softButtonMesh,
+  squareButtonMesh,
+  stripMesh,
+} from './geometry.ts';
 import { InstanceBuffer, deleteTarget, program, staticBuffer, target } from './gl.ts';
 import type { GL, Program, Target } from './gl.ts';
 import { lookAt, multiply, perspective, project } from './math.ts';
@@ -10,25 +24,42 @@ import type { Mat4 } from './math.ts';
 import { Particles } from './particles.ts';
 import * as S from './shaders.ts';
 import type { RenderTheme } from '../ui/themes.ts';
+import { SKINS } from './skins.ts';
+import type { NoteSkin } from './skins.ts';
 
 /** Fallback scene theme (Neon), for callers that do not care. */
 export const DEFAULT_RENDER_THEME: RenderTheme = {
-  light: false, bgBottom: [0.03, 0.012, 0.05], bgTop: [0.012, 0.01, 0.03], art: 1, highwayTint: [1, 1, 1], grid: 0, scanlines: 0, bloom: 0.55, vignette: 0.35,
+  light: false, bgBottom: [0.03, 0.012, 0.05], bgTop: [0.012, 0.01, 0.03], art: 1, highwayTint: [1, 1, 1], grid: 0, scanlines: 0, pattern: 0, bloom: 0.55, vignette: 0.35,
+  hwFar: [0.008, 0.008, 0.016], hwNear: [0.03, 0.028, 0.05], laneLine: [0.06, 0.06, 0.09], strike: [0.25, 0.25, 0.3], beat: [0.7, 0.7, 0.85], beatOver: 0,
 };
 
-/** Linear-light colours: green, red, yellow, blue, orange, open, star power, grey. */
-export const COLORS: number[][] = [
-  [0.12, 1.0, 0.22],
-  [1.0, 0.1, 0.12],
-  [1.0, 0.82, 0.08],
-  [0.12, 0.42, 1.0],
-  [1.0, 0.26, 0.02],
-  [0.62, 0.2, 1.0],
-  [0.62, 0.92, 1.05],
-  [0.3, 0.3, 0.33],
-];
+/** How hit sparks behave per skin (all allocation-free at runtime). */
+interface ParticleFx {
+  flare: boolean;
+  count: number;
+  openCount: number;
+  speed: number;
+  size: number;
+  sizeVar: number;
+  life: number;
+  lifeVar: number;
+  shape: number;
+  gravity: number;
+  gain: number;
+  add: number;
+  /** tint towards gold (Baroque glitter) */
+  gold: number;
+  sustainRate: number;
+}
 
-const COLORS_FLAT = new Float32Array(COLORS.flat());
+const FX: Record<NoteSkin['particles'], ParticleFx> = {
+  sparks: { flare: true, count: 12, openCount: 26, speed: 1, size: 0.05, sizeVar: 0.05, life: 0.3, lifeVar: 0.35, shape: 0, gravity: -9, gain: 1.8, add: 0.3, gold: 0, sustainRate: 60 },
+  dots: { flare: false, count: 5, openCount: 10, speed: 0.55, size: 0.06, sizeVar: 0.03, life: 0.22, lifeVar: 0.12, shape: 3, gravity: -7, gain: 0.85, add: 0, gold: 0, sustainRate: 10 },
+  glitter: { flare: true, count: 16, openCount: 30, speed: 0.8, size: 0.035, sizeVar: 0.04, life: 0.4, lifeVar: 0.4, shape: 0, gravity: -5, gain: 1.7, add: 0.15, gold: 0.65, sustainRate: 45 },
+  squares: { flare: false, count: 8, openCount: 16, speed: 0.9, size: 0.07, sizeVar: 0.03, life: 0.3, lifeVar: 0.2, shape: 2, gravity: -12, gain: 1.15, add: 0.05, gold: 0, sustainRate: 22 },
+  puffs: { flare: false, count: 6, openCount: 12, speed: 0.35, size: 0.14, sizeVar: 0.08, life: 0.5, lifeVar: 0.3, shape: 0, gravity: 1.5, gain: 0.55, add: 0.06, gold: 0, sustainRate: 10 },
+};
+const GOLD = [1.0, 0.66, 0.22];
 /** Rail colour by multiplier (index 1-4). */
 const RAIL_COLORS = [
   new Float32Array([0.5, 0.52, 0.62]),
@@ -41,7 +72,6 @@ const RAIL_SP = new Float32Array([0.4, 1.3, 2.2]);
 const TINT_SP = new Float32Array([0.2, 0.6, 1]);
 const TINT_NONE = new Float32Array([0, 0, 0]);
 const BEAT_SP = new Float32Array([0.4, 0.8, 1.2]);
-const BEAT_NORMAL = new Float32Array([0.7, 0.7, 0.85]);
 
 const HALF = 2.65;
 const LEN = 26;
@@ -76,6 +106,8 @@ export interface RenderState {
   beatPulse: number;
   /** theme scene parameters (background, highway tint, glow, extras) */
   theme: RenderTheme;
+  /** note skin: gem shapes, colours, sustains, particles */
+  skin: NoteSkin;
 }
 
 interface Mesh {
@@ -105,6 +137,10 @@ export class Renderer {
   private emptyVao!: WebGLVertexArrayObject;
   private highwayVao!: WebGLVertexArrayObject;
   private gems!: Mesh;
+  private gemMeshes!: Record<NoteSkin['gem'], Mesh>;
+  private buttonMeshes!: Record<NoteSkin['button'], Mesh>;
+  private skin: NoteSkin = SKINS.neon;
+  private colorsFlat = new Float32Array(SKINS.neon.colors.flat());
   private opens!: Mesh;
   private buttons!: Mesh;
   private sustains!: Mesh;
@@ -197,9 +233,24 @@ export class Renderer {
       const inst = new InstanceBuffer(gl, instLayout, 3, cap);
       return { vao, count: mesh.length / 7, inst };
     };
-    this.gems = lit(gemMesh(), 1024, [4, 4]);
+    // Every skin's meshes are small; build them all now so switching skins costs nothing.
+    this.gemMeshes = {
+      puck: lit(gemMesh(), 1024, [4, 4]),
+      disc: lit(discMesh(), 1024, [4, 4]),
+      jewel: lit(jewelMesh(), 1024, [4, 4]),
+      block: lit(blockMesh(), 1024, [4, 4]),
+      pill: lit(pillMesh(), 1024, [4, 4]),
+    };
+    this.buttonMeshes = {
+      ring: lit(fretButtonMesh(), 5, [4, 4]),
+      flat: lit(flatButtonMesh(), 5, [4, 4]),
+      gold: lit(goldButtonMesh(), 5, [4, 4]),
+      square: lit(squareButtonMesh(), 5, [4, 4]),
+      soft: lit(softButtonMesh(), 5, [4, 4]),
+    };
+    this.gems = this.gemMeshes.puck;
+    this.buttons = this.buttonMeshes.ring;
     this.opens = lit(openBarMesh(HALF - 0.28), 128, [4, 4]);
-    this.buttons = lit(fretButtonMesh(), 5, [4, 4]);
 
     const strip = stripMesh(64);
     this.stripVerts = strip.length / 2;
@@ -426,48 +477,64 @@ export class Renderer {
 
   // ---------------------------------------------------------------- effects
 
+  private setSkin(skin: NoteSkin) {
+    if (skin === this.skin) return;
+    this.skin = skin;
+    this.colorsFlat = new Float32Array(skin.colors.flat());
+    this.gems = this.gemMeshes[skin.gem];
+    this.buttons = this.buttonMeshes[skin.button];
+  }
+
   hitBurst(mask: number, sp: boolean): void {
     const P = this.particles;
+    const fx = FX[this.skin.particles];
+    const colors = this.skin.colors;
     for (let lane = 0; lane < 5; lane++) {
       if (mask !== 0 && !(mask & (1 << lane))) continue;
       const x = mask === 0 ? 0 : this.laneX(lane);
-      const c = sp ? COLORS[6] : COLORS[mask === 0 ? 5 : lane];
+      const c = sp ? colors[6] : colors[mask === 0 ? 5 : lane];
+      const r = c[0] + (GOLD[0] - c[0]) * fx.gold;
+      const g = c[1] + (GOLD[1] - c[1]) * fx.gold;
+      const b = c[2] + (GOLD[2] - c[2]) * fx.gold;
       const spread = mask === 0 ? HALF - 0.3 : 0.2;
-      // flare
-      let i = P.alloc();
-      setParticle(P, i, x, 0.25, 0.05, 0, 0.1, 0, 0.16, 0.55, 1, 0);
-      P.col[i * 3] = c[0] * 2.2;
-      P.col[i * 3 + 1] = c[1] * 2.2;
-      P.col[i * 3 + 2] = c[2] * 2.2;
-      // sparks
-      for (let k = 0, n = mask === 0 ? 26 : 12; k < n; k++) {
+      let i: number;
+      if (fx.flare) {
+        i = P.alloc();
+        setParticle(P, i, x, 0.25, 0.05, 0, 0.1, 0, 0.16, 0.55, 1, 0);
+        P.col[i * 3] = r * 2.2;
+        P.col[i * 3 + 1] = g * 2.2;
+        P.col[i * 3 + 2] = b * 2.2;
+      }
+      for (let k = 0, n = mask === 0 ? fx.openCount : fx.count; k < n; k++) {
         const a = Math.random() * Math.PI * 2;
-        const v = 1.5 + Math.random() * 3.5;
+        const v = (1.5 + Math.random() * 3.5) * fx.speed;
         i = P.alloc();
         const i3 = i * 3;
         P.pos[i3] = x + (Math.random() - 0.5) * spread * 2;
         P.pos[i3 + 1] = 0.2;
         P.pos[i3 + 2] = 0.05;
         P.vel[i3] = Math.cos(a) * v * 0.6;
-        P.vel[i3 + 1] = 2.5 + Math.random() * 4;
+        P.vel[i3 + 1] = (2.5 + Math.random() * 4) * fx.speed;
         P.vel[i3 + 2] = -Math.abs(Math.sin(a)) * v * 0.5;
-        P.col[i3] = c[0] * 1.8 + 0.3;
-        P.col[i3 + 1] = c[1] * 1.8 + 0.3;
-        P.col[i3 + 2] = c[2] * 1.8 + 0.3;
-        P.maxLife[i] = P.life[i] = 0.3 + Math.random() * 0.35;
-        P.size[i] = 0.05 + Math.random() * 0.05;
-        P.shape[i] = 0;
-        P.gravity[i] = -9;
+        P.col[i3] = r * fx.gain + fx.add;
+        P.col[i3 + 1] = g * fx.gain + fx.add;
+        P.col[i3 + 2] = b * fx.gain + fx.add;
+        P.maxLife[i] = P.life[i] = fx.life + Math.random() * fx.lifeVar;
+        P.size[i] = fx.size + Math.random() * fx.sizeVar;
+        P.shape[i] = fx.shape;
+        P.gravity[i] = fx.gravity;
       }
     }
   }
 
   sustainSparks(mask: number, sp: boolean, dt: number): void {
     const P = this.particles;
-    const rate = 60 * dt;
+    const fx = FX[this.skin.particles];
+    const colors = this.skin.colors;
+    const rate = fx.sustainRate * dt;
     for (let lane = 0; lane < 5; lane++) {
       if (!(mask & (1 << lane))) continue;
-      const c = sp ? COLORS[6] : COLORS[lane];
+      const c = sp ? colors[6] : colors[lane];
       const x = this.laneX(lane);
       for (let k = 0; k < rate; k++) {
         if (Math.random() > rate - k) break;
@@ -476,16 +543,16 @@ export class Renderer {
         P.pos[i3] = x + (Math.random() - 0.5) * 0.3;
         P.pos[i3 + 1] = 0.12;
         P.pos[i3 + 2] = 0.02;
-        P.vel[i3] = (Math.random() - 0.5) * 1.5;
-        P.vel[i3 + 1] = 1.8 + Math.random() * 2.5;
-        P.vel[i3 + 2] = -Math.random() * 1.2;
-        P.col[i3] = c[0] * 2 + 0.2;
-        P.col[i3 + 1] = c[1] * 2 + 0.2;
-        P.col[i3 + 2] = c[2] * 2 + 0.2;
-        P.maxLife[i] = P.life[i] = 0.25 + Math.random() * 0.2;
-        P.size[i] = 0.04 + Math.random() * 0.04;
-        P.shape[i] = 0;
-        P.gravity[i] = -9;
+        P.vel[i3] = (Math.random() - 0.5) * 1.5 * fx.speed;
+        P.vel[i3 + 1] = (1.8 + Math.random() * 2.5) * fx.speed;
+        P.vel[i3 + 2] = -Math.random() * 1.2 * fx.speed;
+        P.col[i3] = (c[0] + (GOLD[0] - c[0]) * fx.gold) * fx.gain + fx.add * 0.7;
+        P.col[i3 + 1] = (c[1] + (GOLD[1] - c[1]) * fx.gold) * fx.gain + fx.add * 0.7;
+        P.col[i3 + 2] = (c[2] + (GOLD[2] - c[2]) * fx.gold) * fx.gain + fx.add * 0.7;
+        P.maxLife[i] = P.life[i] = (fx.life + Math.random() * fx.lifeVar) * 0.8;
+        P.size[i] = (fx.size + Math.random() * fx.sizeVar) * 0.8;
+        P.shape[i] = fx.shape;
+        P.gravity[i] = fx.gravity;
       }
     }
   }
@@ -526,7 +593,7 @@ export class Renderer {
       noteState: new Uint8Array([1, 0, 0, 2, 1]), spBroken: new Uint8Array(1),
       sustainHeld: new Uint8Array([1, 0, 0, 0, 0]), sustainDrop: new Float32Array([NaN, NaN, NaN, NaN, 0.1]), sustainMask: 1,
       beats, frets: 1, laneHit: new Float32Array(5).fill(1), laneWrong: new Float32Array(5).fill(1),
-      spActive: false, multiplier: 4, missPulse: 1, whammy: 0.5, lefty: false, solo: true, beatPulse: 1, theme: DEFAULT_RENDER_THEME,
+      spActive: false, multiplier: 4, missPulse: 1, whammy: 0.5, lefty: false, solo: true, beatPulse: 1, theme: DEFAULT_RENDER_THEME, skin: this.skin,
     };
     this.hitBurst(1, false);
     this.render(state);
@@ -542,6 +609,7 @@ export class Renderer {
     const gl = this.gl;
     this.lefty = s.lefty;
     this.time = s.time;
+    this.setSkin(s.skin);
     this.resize();
     this.particles.update(s.dt);
 
@@ -576,7 +644,8 @@ export class Renderer {
     if (p.u.u_len) gl.uniform1f(p.u.u_len, LEN);
     if (p.u.u_time) gl.uniform1f(p.u.u_time, this.time);
     if (p.u.u_cam) gl.uniform3fv(p.u.u_cam, this.cam);
-    if (p.u.u_colors) gl.uniform3fv(p.u.u_colors, COLORS_FLAT);
+    if (p.u.u_colors) gl.uniform3fv(p.u.u_colors, this.colorsFlat);
+    if (p.u.u_style) gl.uniform1f(p.u.u_style, this.skin.style);
     if (p.u.u_half) gl.uniform1f(p.u.u_half, HALF);
   }
 
@@ -599,6 +668,7 @@ export class Renderer {
     gl.uniform3f(p.u.u_bottom, th.bgBottom[0], th.bgBottom[1], th.bgBottom[2]);
     gl.uniform1f(p.u.u_art, th.art);
     gl.uniform1f(p.u.u_grid, th.grid);
+    gl.uniform1f(p.u.u_pattern, th.pattern);
     const screenAspect = this.cssW / Math.max(1, this.cssH);
     const r = screenAspect / this.bgAspect;
     gl.uniform2f(p.u.u_cover, r > 1 ? 1 : r, r > 1 ? 1 / r : 1);
@@ -620,16 +690,22 @@ export class Renderer {
     gl.uniform1f(p.u.u_sp, s.spActive ? 1 : 0);
     gl.uniform1f(p.u.u_miss, s.missPulse);
     gl.uniform1f(p.u.u_solo, s.solo ? 1 : 0);
-    const tint = s.theme.highwayTint;
+    const th = s.theme;
+    const tint = th.highwayTint;
     gl.uniform3f(p.u.u_tint, tint[0], tint[1], tint[2]);
+    gl.uniform3f(p.u.u_hwFar, th.hwFar[0], th.hwFar[1], th.hwFar[2]);
+    gl.uniform3f(p.u.u_hwNear, th.hwNear[0], th.hwNear[1], th.hwNear[2]);
+    gl.uniform3f(p.u.u_laneLine, th.laneLine[0], th.laneLine[1], th.laneLine[2]);
+    gl.uniform3f(p.u.u_strike, th.strike[0], th.strike[1], th.strike[2]);
     const lanes = this.lanes;
     const laneCol = this.laneCol;
     for (let i = 0; i < 5; i++) {
       const slot = this.lefty ? 4 - i : i;
       lanes[slot] = this.buttonPress[i];
-      laneCol[slot * 3] = COLORS[i][0];
-      laneCol[slot * 3 + 1] = COLORS[i][1];
-      laneCol[slot * 3 + 2] = COLORS[i][2];
+      const col = this.skin.colors[i];
+      laneCol[slot * 3] = col[0];
+      laneCol[slot * 3 + 1] = col[1];
+      laneCol[slot * 3 + 2] = col[2];
     }
     gl.uniform1fv(p.u.u_lanes, lanes);
     gl.uniform3fv(p.u.u_laneCol, laneCol);
@@ -655,10 +731,14 @@ export class Renderer {
     }
     if (!inst.count) return;
     inst.upload();
-    gl.blendFunc(gl.ONE, gl.ONE);
+    // Premultiplied: with alpha 0 this is additive glow, with alpha > 0 lines paint over (light highways).
+    gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
     const p = this.pBeat;
     this.uniforms(p);
-    gl.uniform3fv(p.u.u_col, s.spActive ? BEAT_SP : BEAT_NORMAL);
+    const th = s.theme;
+    if (s.spActive) gl.uniform3fv(p.u.u_col, BEAT_SP);
+    else gl.uniform3f(p.u.u_col, th.beat[0], th.beat[1], th.beat[2]);
+    gl.uniform1f(p.u.u_over, s.spActive ? 0 : th.beatOver);
     gl.bindVertexArray(this.beatLines.vao);
     gl.drawArraysInstanced(gl.TRIANGLE_STRIP, 0, 4, inst.count);
   }
@@ -793,10 +873,12 @@ export class Renderer {
   private drawGems() {
     const gl = this.gl;
     gl.enable(gl.DEPTH_TEST);
-    gl.disable(gl.BLEND);
     const p = this.pGem;
     this.uniforms(p);
-    gl.uniform1f(p.u.u_hopoScale, 0.86);
+    gl.uniform1f(p.u.u_hopoScale, this.skin.hopoScale);
+    // Blended so distant gems fade into whatever is behind them (light themes included).
+    gl.enable(gl.BLEND);
+    gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
     this.drawMesh(this.gems);
     this.drawMesh(this.opens);
   }

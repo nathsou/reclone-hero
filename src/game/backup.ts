@@ -1,11 +1,12 @@
 // Export/import of everything the player builds up: settings, key and controller bindings, best scores.
 // The charts folder itself cannot travel (browsers tie folder access to this machine).
 
+import type { PlayStat } from './plays.ts';
 import type { BestScore } from './scores.ts';
 
 const APP = 'reclone-hero';
 const FORMAT = 1;
-const KEYS = { settings: 'chsq.settings', keys: 'chsq.keys', pads: 'chsq.pads', scores: 'chsq.scores' } as const;
+const KEYS = { settings: 'chsq.settings', keys: 'chsq.keys', pads: 'chsq.pads', scores: 'chsq.scores', plays: 'chsq.plays' } as const;
 type Section = keyof typeof KEYS;
 
 export interface Backup {
@@ -48,6 +49,7 @@ export interface BackupSummary {
   keys: boolean;
   controllers: number;
   scores: number;
+  plays: number;
   exportedAt: string;
 }
 
@@ -69,6 +71,7 @@ export function summarize(b: Backup): BackupSummary {
     keys: !!b.data.keys,
     controllers: b.data.pads ? Object.keys(b.data.pads as object).length : 0,
     scores: b.data.scores ? Object.keys(b.data.scores as object).length : 0,
+    plays: b.data.plays ? Object.keys(b.data.plays as object).length : 0,
     exportedAt: b.exportedAt,
   };
 }
@@ -88,5 +91,14 @@ export function applyBackup(b: Backup): void {
       if (!mine[k] || s.score > mine[k].score) mine[k] = s;
     }
     write(KEYS.scores, mine);
+  }
+  if (b.data.plays) {
+    // Play history: keep the larger count and the latest date per song.
+    const mine = (read(KEYS.plays) as Record<string, PlayStat>) ?? {};
+    for (const [k, p] of Object.entries(b.data.plays as Record<string, PlayStat>)) {
+      const m = mine[k];
+      mine[k] = m ? { count: Math.max(m.count, p.count), last: Math.max(m.last, p.last) } : p;
+    }
+    write(KEYS.plays, mine);
   }
 }

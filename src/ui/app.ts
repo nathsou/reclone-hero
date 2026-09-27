@@ -28,14 +28,23 @@ export class App {
     this.root = root;
     this.toastBox = h('div', { class: 'app-toasts' });
     document.body.append(this.toastBox);
+    // Shift+F toggles fullscreen everywhere, mid-song included (F alone is the blue fret).
+    // Capture phase so it runs before game input and never reaches it.
+    window.addEventListener(
+      'keydown',
+      (e) => {
+        if (e.code !== 'KeyF' || !e.shiftKey || e.metaKey || e.ctrlKey || e.altKey || e.repeat) return;
+        const t = e.target;
+        if (t instanceof HTMLInputElement && t.type !== 'checkbox' && t.type !== 'range') return;
+        if (t instanceof HTMLTextAreaElement) return;
+        e.preventDefault();
+        e.stopImmediatePropagation();
+        void toggleFullscreen();
+      },
+      { capture: true },
+    );
     window.addEventListener('keydown', (e) => {
       if (input().gameMode) return;
-      const typing = e.target instanceof HTMLInputElement || e.target instanceof HTMLSelectElement || e.target instanceof HTMLTextAreaElement;
-      if (!typing && !e.metaKey && !e.ctrlKey && !e.altKey && (e.key === 'f' || e.key === 'F') && !this.modals.length) {
-        e.preventDefault();
-        void toggleFullscreen();
-        return;
-      }
       const target = this.modals[this.modals.length - 1] ?? this.screen;
       if (target?.key?.(e)) e.preventDefault();
     });

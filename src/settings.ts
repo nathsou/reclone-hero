@@ -1,8 +1,10 @@
 import type { Difficulty, Instrument } from './chart/types.ts';
+import type { GenreFilter } from './library/genres.ts';
 
 export type MissFeedback = 'auto' | 'mute' | 'muffle' | 'off';
 export type Quality = 'high' | 'medium' | 'low';
-export type Theme = 'system' | 'neon' | 'light' | 'synthwave' | 'terminal' | 'paper' | 'midnight';
+export type Theme = 'system' | 'neon' | 'light' | 'swiss' | 'baroque' | 'synthwave' | 'terminal' | 'paper' | 'midnight';
+export type NoteStyle = 'theme' | 'neon' | 'swiss' | 'baroque' | 'pixel' | 'clay';
 
 export interface Settings {
   noteSpeed: number;
@@ -24,10 +26,14 @@ export interface Settings {
   volPreview: number;
   quality: Quality;
   theme: Theme;
+  noteStyle: NoteStyle;
   showFps: boolean;
   instrument: Instrument;
   difficulty: Difficulty;
-  sort: 'artist' | 'name' | 'difficulty' | 'length' | 'year' | 'genre' | 'charter' | 'pack';
+  sort: 'artist' | 'name' | 'difficulty' | 'length' | 'year' | 'genre' | 'charter' | 'pack' | 'plays' | 'recent';
+  /** flip the sort's natural direction */
+  sortReverse: boolean;
+  genreFilter: GenreFilter;
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -48,10 +54,13 @@ export const DEFAULT_SETTINGS: Settings = {
   volPreview: 0.6,
   quality: 'high',
   theme: 'system',
+  noteStyle: 'theme',
   showFps: false,
   instrument: 'guitar',
   difficulty: 'expert',
   sort: 'artist',
+  sortReverse: false,
+  genreFilter: { mode: 'hide', items: [] },
 };
 
 const KEY = 'chsq.settings';
@@ -85,7 +94,9 @@ export const settings: Settings = load();
 
 function save() {
   const diff: Record<string, unknown> = { v: VERSION };
-  for (const k of Object.keys(settings) as (keyof Settings)[]) if (settings[k] !== DEFAULT_SETTINGS[k]) diff[k] = settings[k];
+  for (const k of Object.keys(settings) as (keyof Settings)[]) {
+    if (JSON.stringify(settings[k]) !== JSON.stringify(DEFAULT_SETTINGS[k])) diff[k] = settings[k];
+  }
   try {
     localStorage.setItem(KEY, JSON.stringify(diff));
   } catch {

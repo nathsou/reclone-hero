@@ -13,7 +13,11 @@ import type { App, Screen } from '../app.ts';
 import { h, replace, setText } from '../dom.ts';
 import { canFullscreen, toggleFullscreen } from '../fullscreen.ts';
 import { logo } from '../logo.ts';
-import { SORTS, SORT_LABEL, sortAndGroup } from '../songlist.ts';
+import { SORTS, SORT_DIRECTION, SORT_LABEL, sortAndGroup } from '../songlist.ts';
+import { GenrePanel, describeGenreFilter } from '../genrePanel.ts';
+import { icon } from '../icons.ts';
+import { passesGenreFilter } from '../../library/genres.ts';
+import { getPlays } from '../../game/plays.ts';
 import type { Group } from '../songlist.ts';
 
 const ROW_H = 60;
@@ -41,6 +45,9 @@ export class SongSelect implements Screen {
   private songItem: Int32Array = new Int32Array(0);
   private readonly sticky: HTMLDivElement;
   private sel = 0;
+  private readonly sortDir: HTMLButtonElement;
+  private readonly genreBtn: HTMLButtonElement;
+  private readonly genrePanel: GenrePanel;
   private chart: Chart | null = null;
   private chartFor: SongEntry | null = null;
   private instrument: Instrument = settings.instrument;
@@ -60,9 +67,26 @@ export class SongSelect implements Screen {
       ...SORTS.map((s) => h('option', { value: s, selected: settings.sort === s }, `By ${SORT_LABEL[s].toLowerCase()}`)),
     );
     sort.addEventListener('change', () => {
-      updateSettings({ sort: sort.value as Settings['sort'] });
+      updateSettings({ sort: sort.value as Settings['sort'], sortReverse: false });
+      this.updateSortButton();
       this.refilter();
     });
+    this.sortDir = h('button', {
+      class: 'btn ghost icon',
+      onclick: () => {
+        updateSettings({ sortReverse: !settings.sortReverse });
+        this.updateSortButton();
+        this.refilter();
+      },
+    });
+    this.updateSortButton();
+    this.genreBtn = h('button', { class: 'btn genre-btn', onclick: () => this.toggleGenres() });
+    this.genrePanel = new GenrePanel(settings.genreFilter, (f) => {
+      updateSettings({ genreFilter: f });
+      this.updateGenreButton();
+      this.refilter();
+    });
+    this.updateGenreButton();
     this.count = h('span', { class: 'count' });
     this.spacer = h('div', { class: 'spacer' });
     this.list = h('div', { class: 'song-list', tabindex: '-1' }, this.spacer);
@@ -79,11 +103,12 @@ export class SongSelect implements Screen {
         null,
         logo('small'),
         this.search,
-        sort,
+        h('div', { class: 'sort-group' }, sort, this.sortDir),
+        h('div', { class: 'genre-anchor' }, this.genreBtn),
         this.count,
-        h('button', { class: 'btn ghost icon', title: 'Random song (R)', 'aria-label': 'Random song', onclick: () => this.random() }, '🎲'),
+        h('button', { class: 'btn ghost icon', title: 'Random song (R)', 'aria-label': 'Random song', onclick: () => this.random() }, icon('shuffle')),
         h('div', { class: 'grow' }),
-        h('button', { class: 'btn ghost icon', title: 'Rescan library', 'aria-label': 'Rescan library', onclick: () => lib.source && app.openLibrary(lib.source, true) }, '↻'),
+        h('button', { class: 'btn ghost icon', title: 'Rescan library', 'aria-label': 'Rescan library', onclick: () => lib.source && app.openLibrary(lib.source, true) }, icon('refresh')),
         h(
           'button',
           {
@@ -96,10 +121,10 @@ export class SongSelect implements Screen {
               if (src) await app.openLibrary(src, true);
             },
           },
-          '📁',
+          icon('folder'),
         ),
-        canFullscreen() ? h('button', { class: 'btn ghost icon', title: 'Fullscreen (F)', 'aria-label': 'Fullscreen', onclick: () => void toggleFullscreen() }, '⛶') : null,
-        h('button', { class: 'btn ghost', onclick: () => this.openSettings() }, '⚙ Settings'),
+        canFullscreen() ? h('button', { class: 'btn ghost icon', title: 'Fullscreen (Shift+F)', 'aria-label': 'Fullscreen', onclick: () => void toggleFullscreen() }, icon('maximize')) : null,
+        h('button', { class: 'btn', onclick: () => this.openSettings() }, icon('settings'), 'Settings'),
       ),
       h('main', null, h('div', { class: 'list-wrap' }, this.list, this.sticky), this.detail),
       h(
@@ -113,7 +138,7 @@ export class SongSelect implements Screen {
         hint('←→ / blue·orange', 'difficulty'),
         hint('Tab', 'instrument'),
         hint('B', 'watch bot'),
-        hint('F', 'fullscreen'),
+        hint('Shift+F', 'fullscreen'),
       ),
     );
     this.refilter();
@@ -136,6 +161,7 @@ export class SongSelect implements Screen {
   }
 
   destroy(): void {
+    this.genrePanel.close();
     document.removeEventListener('visibilitychange', this.onVisibility);
     this.preview.cancel();
     clearTimeout(this.detailTimer);
@@ -153,12 +179,14 @@ export class SongSelect implements Screen {
     const q = this.search.value.trim().toLowerCase();
     const current = this.filtered[this.sel];
     const terms = q.split(/\s+/).filter(Boolean);
+    const gf = settings.genreFilter;
     const matching = this.app.library.songs.filter((s) => {
+      if (!passesGenreFilter(s.genre, gf)) return false;
       if (!terms.length) return true;
       const hay = `${s.name} ${s.artist} ${s.album} ${s.charter} ${s.genre} ${s.pack} ${s.year}`.toLowerCase();
       return terms.every((t) => hay.includes(t));
     });
-    const { songs, groups } = sortAndGroup(matching, settings.sort, settings.instrument);
+    const { songs, groups } = sortAndGroup(matching, settings.sort, { instrument: settings.instrument, reverse: settings.sortReverse, plays: getPlays });
     this.filtered = songs;
     this.groups = groups;
     // Lay out the virtual list: a header before each group, then its songs.
@@ -181,12 +209,33 @@ export class SongSelect implements Screen {
     });
     this.itemTop[n] = y;
     const label = SORT_LABEL[settings.sort].toLowerCase();
-    setText(this.count, `${songs.length} song${songs.length === 1 ? '' : 's'}`);
+    const total = this.app.library.songs.length;
+    setText(this.count, songs.length === total ? `${total} songs` : `${songs.length} of ${total}`);
     this.count.title = `${groups.length} groups by ${label}`;
     this.spacer.style.height = `${y}px`;
     for (const r of this.rows) delete r.dataset.key;
     const idx = current ? songs.indexOf(current) : -1;
     this.select(idx >= 0 ? idx : 0, true);
+  }
+
+  private updateSortButton() {
+    const [natural, reversed] = SORT_DIRECTION[settings.sort];
+    const label = settings.sortReverse ? reversed : natural;
+    this.sortDir.replaceChildren(icon(settings.sortReverse ? 'sortDesc' : 'sortAsc'));
+    this.sortDir.title = `${label} (click to reverse)`;
+    this.sortDir.setAttribute('aria-label', `Sort direction: ${label}`);
+  }
+
+  private updateGenreButton() {
+    const f = settings.genreFilter;
+    this.genreBtn.replaceChildren(icon('filter'), describeGenreFilter(f));
+    this.genreBtn.classList.toggle('on', f.items.length > 0);
+    this.genreBtn.title = 'Filter by genre';
+  }
+
+  private toggleGenres() {
+    if (this.genrePanel.isOpen) this.genrePanel.close();
+    else this.genrePanel.open(this.genreBtn, this.app.library.songs);
   }
 
   /** Index of the first item whose bottom edge is below y. */
@@ -484,9 +533,9 @@ export class SongSelect implements Screen {
       h(
         'div',
         { class: 'actions' },
-        h('button', { class: 'btn primary big', disabled: !canPlay, onclick: () => this.play(false) }, '▶ Play'),
-        h('button', { class: 'btn', disabled: !canPlay, onclick: () => this.practice() }, 'Practice'),
-        h('button', { class: 'btn ghost', disabled: !canPlay, onclick: () => this.play(true) }, 'Watch bot'),
+        h('button', { class: 'btn primary big', disabled: !canPlay, onclick: () => this.play(false) }, icon('play'), 'Play'),
+        h('button', { class: 'btn', disabled: !canPlay, onclick: () => this.practice() }, icon('practice'), 'Practice'),
+        h('button', { class: 'btn ghost', disabled: !canPlay, onclick: () => this.play(true) }, icon('bot'), 'Watch bot'),
       ),
     );
   }
@@ -577,6 +626,10 @@ export class SongSelect implements Screen {
         this.cycleInstrument();
         return true;
       case 'Escape':
+        if (this.genrePanel.isOpen) {
+          this.genrePanel.close();
+          return true;
+        }
         if (this.search.value) {
           this.search.value = '';
           this.refilter();

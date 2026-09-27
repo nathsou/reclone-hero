@@ -3,6 +3,8 @@ import type { Note, NoteType } from '../chart/types.ts';
 import { Renderer } from '../render/renderer.ts';
 import type { RenderState } from '../render/renderer.ts';
 import { THEMES } from '../ui/themes.ts';
+import { SKINS } from '../render/skins.ts';
+import type { SkinId } from '../render/skins.ts';
 import type { ThemeId } from '../ui/themes.ts';
 
 const canvas = document.querySelector('canvas')!;
@@ -66,6 +68,7 @@ const state: RenderState = {
   solo: params.has('solo'),
   beatPulse: 0.2,
   theme: THEMES[(params.get('theme') ?? 'neon') as ThemeId]?.render ?? THEMES.neon.render,
+  skin: SKINS[(params.get('skin') ?? THEMES[(params.get('theme') ?? 'neon') as ThemeId]?.skin ?? 'neon') as SkinId] ?? SKINS.neon,
 };
 document.getElementById('legend')!.textContent =
   'near → far: missed blue · held green sustain · blue HOPO · green HOPO · yellow strum · orange tap · red strum\n' +

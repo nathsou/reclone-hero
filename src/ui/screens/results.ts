@@ -3,7 +3,8 @@ import { INSTRUMENT_LABEL, trackKey } from '../../chart/types.ts';
 import type { GameResult, SectionResult } from '../../game/game.ts';
 import { getBest, recordScore, scoreKey } from '../../game/scores.ts';
 import type { NavAction } from '../../input/input.ts';
-import { COLORS } from '../../render/renderer.ts';
+import { skinHex } from '../../render/skins.ts';
+import { noteSkin } from '../theme.ts';
 import { settings } from '../../settings.ts';
 import type { App, Screen } from '../app.ts';
 import { h } from '../dom.ts';
@@ -114,11 +115,11 @@ export class ResultsScreen implements Screen {
       'div',
       { class: 'lane-bars' },
       ...r.missByLane.map((n, i) => {
-        const c = COLORS[i].map((v) => Math.round(Math.min(1, Math.pow(v, 1 / 2.2)) * 255));
+        const c = skinHex(noteSkin().colors[i]);
         return h(
           'div',
           { class: 'lane-bar', title: `${LANE_NAMES[i]}: ${n} missed` },
-          h('div', { class: 'fill', style: `height:${(n / max) * 100}%;background:rgb(${c.join(',')})` }),
+          h('div', { class: 'fill', style: `height:${(n / max) * 100}%;background:${c}` }),
           h('span', null, String(n)),
         );
       }),

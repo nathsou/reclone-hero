@@ -22,7 +22,7 @@ test('backup round-trips and merges scores keeping the best', () => {
   store.set('chsq.scores', JSON.stringify({ 'song|guitar:expert': { score: 500, stars: 2, accuracy: 0.8, fc: false, date: 2 }, 'other|bass:hard': { score: 9, stars: 1, accuracy: 0.1, fc: false, date: 3 } }));
 
   const b = parseBackup(text);
-  assert.deepEqual({ ...summarize(b), exportedAt: '' }, { settings: true, keys: false, controllers: 1, scores: 1, exportedAt: '' });
+  assert.deepEqual({ ...summarize(b), exportedAt: '' }, { settings: true, keys: false, controllers: 1, scores: 1, plays: 0, exportedAt: '' });
   applyBackup(b);
   assert.equal(JSON.parse(store.get('chsq.settings')!).theme, 'paper');
   assert.deepEqual(Object.keys(JSON.parse(store.get('chsq.pads')!)).sort(), ['padA', 'padB']);

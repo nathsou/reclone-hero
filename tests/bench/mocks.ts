@@ -22,7 +22,7 @@ const GL_NOOPS = [
   'deleteFramebuffer', 'deleteRenderbuffer', 'deleteTexture', 'depthMask', 'disable', 'drawArrays', 'drawArraysInstanced',
   'enable', 'enableVertexAttribArray', 'framebufferRenderbuffer', 'framebufferTexture2D', 'generateMipmap', 'linkProgram',
   'pixelStorei', 'renderbufferStorage', 'renderbufferStorageMultisample', 'texImage2D', 'texSubImage2D', 'texParameteri',
-  'uniform1f', 'uniform1fv', 'uniform1i', 'uniform2f', 'uniform3fv', 'uniformMatrix4fv', 'useProgram', 'vertexAttribDivisor',
+  'uniform1f', 'uniform1fv', 'uniform1i', 'uniform2f', 'uniform3f', 'uniform3fv', 'uniformMatrix4fv', 'useProgram', 'vertexAttribDivisor',
   'vertexAttribPointer', 'viewport', 'deleteBuffer', 'deleteProgram', 'deleteShader', 'finish',
 ];
 
@@ -124,6 +124,7 @@ export function install(): void {
   g.localStorage = { getItem: (k: string) => store.get(k) ?? null, setItem: (k: string, v: string) => store.set(k, v), removeItem: (k: string) => store.delete(k) };
   g.Node = FakeNode;
   g.document = {
+    documentElement: new FakeNode(),
     createElement: () => new FakeNode(),
     createTextNode: (data: string) => Object.assign(new FakeNode(), { data }),
     body: new FakeNode(),

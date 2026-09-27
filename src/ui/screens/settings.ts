@@ -3,12 +3,16 @@ import type { Action } from '../../input/bindings.ts';
 import { ACTIONS, ACTION_LABEL, DEFAULT_KEYS, describeAnalog, describeBinding, savePadProfile, saveKeyBindings } from '../../input/bindings.ts';
 import { input } from '../../input/input.ts';
 import type { NavAction } from '../../input/input.ts';
-import { settings, updateSettings } from '../../settings.ts';
+import { onSettingsChange, settings, updateSettings } from '../../settings.ts';
 import type { Settings } from '../../settings.ts';
 import { shortPadName } from '../app.ts';
 import type { App, Screen } from '../app.ts';
 import { h, replace } from '../dom.ts';
 import { THEMES, THEME_IDS } from '../themes.ts';
+import { icon } from '../icons.ts';
+import { SKINS, SKIN_IDS } from '../../render/skins.ts';
+import { skinPreviewSvg } from '../skinPreview.ts';
+import { resolveTheme } from '../theme.ts';
 import { applyBackup, downloadBackup, makeBackup, parseBackup, summarize } from '../../game/backup.ts';
 
 type Tab = 'gameplay' | 'audio' | 'video' | 'controls' | 'data';
@@ -30,7 +34,7 @@ export class SettingsModal implements Screen {
     this.el = h(
       'div',
       { class: 'modal-backdrop', onclick: (e: Event) => e.target === this.el && this.close() },
-      h('div', { class: 'modal settings-modal' }, h('div', { class: 'modal-head' }, h('h2', null, 'Settings'), this.tabs, h('button', { class: 'btn ghost close', onclick: () => this.close() }, '✕')), this.body),
+      h('div', { class: 'modal settings-modal' }, h('div', { class: 'modal-head' }, h('h2', null, 'Settings'), this.tabs, h('button', { class: 'btn ghost icon close', 'aria-label': 'Close settings', onclick: () => this.close() }, icon('close'))), this.body),
     );
     this.render();
   }
@@ -102,6 +106,8 @@ export class SettingsModal implements Screen {
       this.body,
       h('h3', null, 'Theme'),
       themePicker(),
+      h('h3', null, 'Note style'),
+      skinPicker(),
       h('h3', null, 'Graphics'),
       select('Quality', 'quality', [
         ['high', 'High'],
@@ -124,7 +130,7 @@ export class SettingsModal implements Screen {
       try {
         const backup = parseBackup(await file.text());
         const sum = summarize(backup);
-        const parts = [sum.settings && 'settings', sum.keys && 'keyboard keys', sum.controllers && `${sum.controllers} controller${sum.controllers > 1 ? 's' : ''}`, sum.scores && `${sum.scores} best score${sum.scores > 1 ? 's' : ''}`].filter(Boolean);
+        const parts = [sum.settings && 'settings', sum.keys && 'keyboard keys', sum.controllers && `${sum.controllers} controller${sum.controllers > 1 ? 's' : ''}`, sum.scores && `${sum.scores} best score${sum.scores > 1 ? 's' : ''}`, sum.plays && `play history for ${sum.plays} song${sum.plays > 1 ? 's' : ''}`].filter(Boolean);
         replace(
           status,
           h('p', null, `Backup from ${new Date(sum.exportedAt).toLocaleString()} with ${parts.join(', ') || 'nothing'}.`),
@@ -157,7 +163,7 @@ export class SettingsModal implements Screen {
       h(
         'p',
         { class: 'hint' },
-        `Export saves your settings, keyboard keys, controller mappings and ${scores} best score${scores === 1 ? '' : 's'} to a file. Import it on the other computer. Your songs are not included: point the game at your charts folder there.`,
+        `Export saves your settings, keyboard keys, controller mappings, play history and ${scores} best score${scores === 1 ? '' : 's'} to a file. Import it on the other computer. Your songs are not included: point the game at your charts folder there.`,
       ),
       h('div', { class: 'actions' }, h('button', { class: 'btn primary', onclick: () => downloadBackup() }, 'Export…'), h('button', { class: 'btn', onclick: () => fileInput.click() }, 'Import…')),
       fileInput,
@@ -347,6 +353,47 @@ function themePicker(): HTMLElement {
     );
   };
   render();
+  return grid;
+}
+
+/** Note style cards: strum, HOPO and tap drawn in each style. */
+function skinPicker(): HTMLElement {
+  const grid = h('div', { class: 'theme-grid skin-grid', role: 'radiogroup', 'aria-label': 'Note style' });
+  const render = () => {
+    const themeSkin = THEMES[resolveTheme()].skin;
+    const cards = [
+      { id: 'theme' as const, name: 'Match theme', description: `Uses ${SKINS[themeSkin].name} with the current theme.`, preview: themeSkin },
+      ...SKIN_IDS.map((id) => ({ id, name: SKINS[id].name, description: SKINS[id].description, preview: id })),
+    ];
+    replace(
+      grid,
+      ...cards.map((c) => {
+        const on = settings.noteStyle === c.id;
+        const preview = h('div', { class: 'skin-preview' });
+        preview.innerHTML = skinPreviewSvg(c.preview);
+        return h(
+          'button',
+          {
+            class: `theme-card ${on ? 'on' : ''}`,
+            role: 'radio',
+            'aria-checked': String(on),
+            onclick: () => {
+              updateSettings({ noteStyle: c.id });
+              render();
+            },
+          },
+          preview,
+          h('span', { class: 'tc-name' }, c.name),
+          h('span', { class: 'tc-desc' }, c.description),
+        );
+      }),
+    );
+  };
+  render();
+  const off = onSettingsChange(() => {
+    if (grid.isConnected) render();
+    else off();
+  });
   return grid;
 }
 

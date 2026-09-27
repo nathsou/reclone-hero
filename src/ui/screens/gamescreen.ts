@@ -9,6 +9,7 @@ import type { PracticeRange } from '../../game/game.ts';
 import type { NavAction } from '../../input/input.ts';
 import type { SongEntry } from '../../library/song.ts';
 import { settings } from '../../settings.ts';
+import { recordPlay } from '../../game/plays.ts';
 import type { App, Screen } from '../app.ts';
 import { h, setText } from '../dom.ts';
 import { Hud } from '../hud.ts';
@@ -149,6 +150,7 @@ export class GameScreen implements Screen {
       if (this.destroyed) return;
     }
     this.loading.classList.add('gone');
+    if (!this.req.bot && !this.req.practice) recordPlay(song.id);
     // Handy for debugging from the console.
     (globalThis as Record<string, unknown>).__game = this.game;
     this.game.start();

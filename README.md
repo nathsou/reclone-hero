@@ -56,15 +56,20 @@ In menus, strum moves, green confirms, red goes back, yellow opens practice, blu
   (WSOLA), and each loop reports its accuracy.
 - **Calibration:** tap along to clicks (audio offset) and flashes (video offset).
 - **Song list** grouped the way Clone Hero does it (by artist, title letter, difficulty, length, year,
-  genre, charter or folder) with a sticky group header, `PgUp`/`PgDn` to jump between groups, `R` for a
-  random song and `/` to search.
-- **Themes:** Neon, Light, Synthwave, Terminal, Paper and Midnight, each with its own palette, type and
-  scene (Synthwave has a sunset horizon grid, Terminal has scanlines). "Match system" switches between Neon
-  and Light.
+  genre, charter, folder, most played or recently played), ascending or descending, with a sticky group
+  header, `PgUp`/`PgDn` to jump between groups, `R` for a random song and `/` to search.
+- **Genre filter:** show only, or hide, whole genre families (hiding *Metal* also hides metalcore, djent,
+  deathcore…) or exact genres.
+- **Themes:** Neon, Light, Swiss, Baroque, Synthwave, Terminal, Paper and Midnight, each with its own
+  palette, type, buttons and scene (Swiss has a pale highway, Baroque a damask backdrop, Synthwave a sunset
+  horizon grid, Terminal scanlines). "Match system" switches between Neon and Light.
+- **Note styles**, independent of the theme: Neon (glowing pucks), Swiss (flat geometric dots), Baroque
+  (faceted jewels in gold, pearls for HOPOs), Pixel (8-bit blocks) and Clay (soft pastel pebbles). Each
+  keeps the same strum / HOPO / tap language and has its own sustains, fret buttons and hit particles.
 - **Backups:** Settings › Data exports settings, key and controller mappings and best scores to a file,
   to import on another computer (scores merge, keeping the best).
 - **Controls:** remap any single guitar input (Settings › Controls › Change) without redoing the rest.
-- **Video backgrounds**, album-art backgrounds, fullscreen (`F`), lefty flip, quality levels.
+- **Video backgrounds**, album-art backgrounds, fullscreen (`Shift+F`, `Esc` to leave), lefty flip, quality levels.
 
 ## Feedback when you make a mistake
 

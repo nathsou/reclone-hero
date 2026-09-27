@@ -14,7 +14,7 @@ import type { RenderState } from '../render/renderer.ts';
 import { settings } from '../settings.ts';
 import { Hud } from '../ui/hud.ts';
 import type { HudState } from '../ui/hud.ts';
-import { renderTheme } from '../ui/theme.ts';
+import { noteSkin, renderTheme } from '../ui/theme.ts';
 
 /** Misses are judged slightly behind real time so late-arriving input events are never pre-empted. */
 const JUDGE_LAG = 0.02;
@@ -138,6 +138,7 @@ export class Game {
       solo: false,
       beatPulse: 0,
       theme: renderTheme(),
+      skin: noteSkin(),
     };
     hud.setTimingWindow(settings.hitWindowMs);
     hud.showTimingBar(settings.timingBar);
@@ -377,6 +378,7 @@ export class Game {
     rs.solo = engine.activeSolo >= 0;
     rs.beatPulse = beatPulse;
     rs.theme = renderTheme();
+    rs.skin = noteSkin();
     const r = this.renderer;
     r.render(rs);
     if (r.cameraKey !== this.hudCameraKey) {
