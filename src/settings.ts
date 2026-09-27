@@ -1,0 +1,105 @@
+import type { Difficulty, Instrument } from './chart/types.ts';
+
+export type MissFeedback = 'auto' | 'mute' | 'muffle' | 'off';
+export type Quality = 'high' | 'medium' | 'low';
+export type Theme = 'system' | 'dark' | 'light';
+
+export interface Settings {
+  noteSpeed: number;
+  /** ms; positive when audio reaches your ears late (Bluetooth etc.) */
+  audioOffsetMs: number;
+  /** ms; positive when the display lags */
+  videoOffsetMs: number;
+  hitWindowMs: number;
+  strumLeniencyMs: number;
+  lefty: boolean;
+  timingBar: boolean;
+  missFeedback: MissFeedback;
+  missSounds: boolean;
+  volMaster: number;
+  volSong: number;
+  volInstrument: number;
+  volSfx: number;
+  volCrowd: number;
+  volPreview: number;
+  quality: Quality;
+  theme: Theme;
+  showFps: boolean;
+  instrument: Instrument;
+  difficulty: Difficulty;
+  sort: 'artist' | 'name' | 'charter' | 'length' | 'pack';
+}
+
+export const DEFAULT_SETTINGS: Settings = {
+  noteSpeed: 1,
+  audioOffsetMs: 0,
+  videoOffsetMs: 0,
+  hitWindowMs: 90,
+  strumLeniencyMs: 70,
+  lefty: false,
+  timingBar: true,
+  missFeedback: 'auto',
+  missSounds: true,
+  volMaster: 0.9,
+  volSong: 0.9,
+  volInstrument: 1,
+  volSfx: 0.7,
+  volCrowd: 0.5,
+  volPreview: 0.6,
+  quality: 'high',
+  theme: 'system',
+  showFps: false,
+  instrument: 'guitar',
+  difficulty: 'expert',
+  sort: 'artist',
+};
+
+const KEY = 'chsq.settings';
+const VERSION = 2;
+type Listener = (s: Settings) => void;
+const listeners = new Set<Listener>();
+
+/**
+ * Version 1 saved every setting, so stored defaults could never change. Drop values that still equal
+ * the old defaults; from version 2 on only values that differ from the defaults are stored.
+ */
+const V1_DEFAULTS: Partial<Record<string, unknown>> = { hitWindowMs: 70, strumLeniencyMs: 50 };
+
+function load(): Settings {
+  try {
+    const raw = localStorage.getItem(KEY);
+    if (raw) {
+      const stored = JSON.parse(raw) as Record<string, unknown>;
+      if (stored.v !== VERSION) for (const [k, v] of Object.entries(V1_DEFAULTS)) if (stored[k] === v) delete stored[k];
+      delete stored.v;
+      return { ...DEFAULT_SETTINGS, ...(stored as Partial<Settings>) };
+    }
+  } catch {
+    // ignore corrupt or unavailable storage
+  }
+  return { ...DEFAULT_SETTINGS };
+}
+
+export const settings: Settings = load();
+
+function save() {
+  const diff: Record<string, unknown> = { v: VERSION };
+  for (const k of Object.keys(settings) as (keyof Settings)[]) if (settings[k] !== DEFAULT_SETTINGS[k]) diff[k] = settings[k];
+  try {
+    localStorage.setItem(KEY, JSON.stringify(diff));
+  } catch {
+    // storage unavailable
+  }
+}
+save();
+
+export function updateSettings(patch: Partial<Settings>): void {
+  Object.assign(settings, patch);
+  save();
+  for (const l of listeners) l(settings);
+}
+
+export function onSettingsChange(l: Listener): () => void {
+  listeners.add(l);
+  return () => listeners.delete(l);
+}

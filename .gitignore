@@ -1,0 +1,5 @@
+node_modules
+dist
+.DS_Store
+# machine-specific preview config
+.claude/
