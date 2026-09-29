@@ -1,6 +1,7 @@
 import type { SongDef } from '../score.ts';
 import { blueDanube } from './blueDanube.ts';
 import { canCan } from './canCan.ts';
+import { caprice24 } from './caprice24.ts';
 import { canon } from './canon.ts';
 import { carolOfTheBells } from './carolOfTheBells.ts';
 import { drunkenSailor } from './drunkenSailor.ts';
@@ -35,4 +36,4 @@ import { washerwoman } from './washerwoman.ts';
 import { williamTell } from './williamTell.ts';
 
 /** The built-in songs, in the order they are listed. */
-export const STARTER_SONGS: SongDef[] = [odeToJoy, ignition, midnightDrive, neonSkyline, furElise, canon, mountainKing, redline, fifth, nachtmusik, forty, toccata, preludeInC, minuet, williamTell, swanLake, valkyries, blueDanube, morningMood, moonlight, funeralMarch, entertainer, carolOfTheBells, korobeiniki, drunkenSailor, spring, littleFugue, pompAndCircumstance, canCan, greensleeves, washerwoman, havaNagila, saints, gymnopedie];
+export const STARTER_SONGS: SongDef[] = [odeToJoy, ignition, midnightDrive, neonSkyline, furElise, canon, mountainKing, redline, fifth, nachtmusik, forty, toccata, preludeInC, minuet, williamTell, swanLake, valkyries, blueDanube, morningMood, moonlight, funeralMarch, entertainer, carolOfTheBells, korobeiniki, drunkenSailor, spring, littleFugue, pompAndCircumstance, canCan, greensleeves, washerwoman, havaNagila, saints, gymnopedie, caprice24];
