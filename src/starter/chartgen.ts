@@ -39,7 +39,7 @@ export interface Placed {
 const SETTINGS: Record<Diff, { lanes: number; chord: number; minGap: number; grid: number; cap: number; budget: number }> = {
   easy: { lanes: 3, chord: 1, minGap: 0.42, grid: 0.5, cap: 2, budget: 0.4 },
   medium: { lanes: 4, chord: 2, minGap: 0.2, grid: 0.5, cap: 3, budget: 0.6 },
-  hard: { lanes: 5, chord: 2, minGap: 0.125, grid: 0.25, cap: 5, budget: 0.8 },
+  hard: { lanes: 5, chord: 2, minGap: 0.105, grid: 0.25, cap: 5, budget: 0.8 },
   expert: { lanes: 5, chord: 3, minGap: 0, grid: 0, cap: Infinity, budget: 1 },
 };
 
