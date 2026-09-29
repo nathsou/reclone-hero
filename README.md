@@ -77,7 +77,7 @@ On the results screen `Enter` returns to the song list, `R` retries and `P` prac
   Daylight ink (a paper highway with inked outlines). "Match system" switches between the two. The earlier
   colour schemes (Swiss, Baroque, Synthwave, Terminal, Paper, Midnight) are still there under Settings › Display.
 - **Note styles**, independent of the theme: Classic dome (the default), Studio (glass lenses in chrome
-  bezels on a lacquered board, with ray-traced reflections), Liquid Glass (glass beads, tubes and a flowing glass
+  bezels on a lacquered board, with ray-traced reflections), Crystal (glass beads, tubes and a flowing glass
   highway that refract what is behind them; see [Graphics](#graphics)), Neon (glowing pucks), Swiss (flat
   geometric dots), Baroque (faceted jewels in gold, pearls for HOPOs), Pixel (8-bit blocks) and Clay (soft
   pastel pebbles). Each keeps the same strum / HOPO / tap language and has its own sustains, fret buttons and
@@ -166,7 +166,7 @@ the fragment shaders: each frame the 32 nearest gems are uploaded as spheres, re
 buttons are traced against them and against the highway plane, and the highway itself becomes lacquer that
 traces the mirror images of the approaching gems and darkens under them with soft contact shadows.
 
-**Liquid Glass** refracts for real, in screen space: the frame is copied just before the highway is drawn and
+**Crystal** refracts for real, in screen space: the frame is copied just before the highway is drawn and
 again just before the gems, and each glass surface samples the copy of what is behind it, offset by its
 surface normal. The three colour channels are offset by slightly different amounts, so edges split into
 rainbow fringes (dispersion). The highway is a glass slab with slow swells that travel with the chart, lens-like

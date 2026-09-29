@@ -164,18 +164,6 @@ export const QUAD = new Float32Array([-1, -1, 1, -1, -1, 1, 1, 1]);
 
 // ---------------------------------------------------------------- skin variants
 
-/** Swiss: a flat disc. Regions: outer band (0), inner ring (1), centre (2). */
-export function discMesh(): Float32Array {
-  return lathe(
-    [
-      ...chain([[0, 0.1], [0.17, 0.1]], 2),
-      ...chain([[0.17, 0.1], [0.31, 0.1]], 1),
-      ...chain([[0.31, 0.1], [0.43, 0.1], [0.43, 0], [0, 0]], 0),
-    ],
-    48,
-    0.72,
-  );
-}
 
 /** Baroque: a faceted cabochon (0) with a table (2) in a gold bezel (1). */
 export function jewelMesh(): Float32Array {
@@ -191,24 +179,6 @@ export function jewelMesh(): Float32Array {
   );
 }
 
-/** Clay: a soft rounded pebble. Body (0), shoulder (1), slightly dished top (2). */
-export function pillMesh(): Float32Array {
-  const edge: [number, number][] = [];
-  for (let i = 0; i <= 8; i++) {
-    const a = (i / 8) * (Math.PI / 2);
-    edge.push([0.34 + Math.cos(a) * 0.1, 0.12 + Math.sin(a) * 0.1]);
-  }
-  edge.reverse(); // from the top of the shoulder down to the widest point
-  return lathe(
-    [
-      ...chain([[0, 0.205], [0.15, 0.215]], 2),
-      ...chain([[0.15, 0.215], [0.26, 0.222], [0.34, 0.22]], 1),
-      ...chain([...edge, [0.43, 0.06], [0.4, 0.015], [0.33, 0], [0, 0]], 0),
-    ],
-    40,
-    0.72,
-  );
-}
 
 type V3 = [number, number, number];
 function quad(out: number[], a: V3, b: V3, c: V3, d: V3, n: V3, region: number) {
@@ -331,9 +301,6 @@ export function wheelMesh(): Float32Array {
 
 // ---------------------------------------------------------------- fret buttons per skin (ring 0, well 1)
 
-export function flatButtonMesh(): Float32Array {
-  return lathe([...chain([[0, 0.006], [0.31, 0.006]], 1), ...chain([[0.31, 0.02], [0.45, 0.02], [0.45, 0]], 0)], 48, 0.72);
-}
 
 export function goldButtonMesh(): Float32Array {
   return lathe(
@@ -361,14 +328,6 @@ export function squareButtonMesh(): Float32Array {
   return new Float32Array(out);
 }
 
-export function softButtonMesh(): Float32Array {
-  const ring: [number, number][] = [];
-  for (let k = 0; k <= 10; k++) {
-    const a = Math.PI - (k / 10) * Math.PI; // left inner edge over the top to the outer edge
-    ring.push([0.385 + Math.cos(a) * 0.075, Math.sin(a) * 0.07]);
-  }
-  return lathe([...chain([[0, 0.01], [0.31, 0.01]], 1), ...chain(ring, 0)], 40, 0.72);
-}
 
 /**
  * Studio: a glass lens (2) in a polished bezel (1) on a lacquered body (0). Smooth normals, so
@@ -411,7 +370,7 @@ export function bezelButtonMesh(): Float32Array {
   );
 }
 
-/** Liquid Glass: a smooth glass bead, one region; the shader draws the HOPO / tap markings. */
+/** Crystal: a smooth glass bead, one region; the shader draws the HOPO / tap markings. */
 export function beadMesh(): Float32Array {
   const pts: [number, number][] = [];
   // a squashed superellipse: flat-ish top, rounded shoulder, flat bottom

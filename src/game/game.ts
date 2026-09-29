@@ -272,6 +272,13 @@ export class Game {
     this.lastFrame = performance.now();
   }
 
+  /** Switch to another difficulty's track and start the song over. */
+  changeTrack(track: Track): void {
+    this.setup.track = track;
+    this.rs.notes = track.notes;
+    this.restart();
+  }
+
   restart(): void {
     this.paused = false;
     this.ended = false;

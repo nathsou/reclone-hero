@@ -3,19 +3,22 @@ import type { StemFile } from '../../audio/audio.ts';
 import { stretchExcerpt } from '../../audio/stretch.ts';
 import type { Chart } from '../../chart/build.ts';
 import type { Difficulty, Instrument } from '../../chart/types.ts';
-import { INSTRUMENT_LABEL, trackKey } from '../../chart/types.ts';
+import { DIFFICULTIES, INSTRUMENT_LABEL, trackKey } from '../../chart/types.ts';
 import { Game } from '../../game/game.ts';
 import type { PracticeRange } from '../../game/game.ts';
 import type { NavAction } from '../../input/input.ts';
 import type { SongEntry } from '../../library/song.ts';
-import { settings } from '../../settings.ts';
+import { settings, updateSettings } from '../../settings.ts';
 import { recordPlay } from '../../game/plays.ts';
 import type { App, Screen } from '../app.ts';
 import { fmtScore, h, setText } from '../dom.ts';
 import { formatTime } from '../../util/text.ts';
 import { Hud } from '../hud.ts';
 import { Menu } from '../menu.ts';
+import type { MenuItem } from '../menu.ts';
 import { canFullscreen, isFullscreen, toggleFullscreen } from '../fullscreen.ts';
+
+const DIFF_LABEL: Record<Difficulty, string> = { easy: 'Easy', medium: 'Medium', hard: 'Hard', expert: 'Expert' };
 
 export interface GameRequest {
   song: SongEntry;
@@ -166,18 +169,26 @@ export class GameScreen implements Screen {
     setText(this.loadStatus, text);
   }
 
-  private showPause() {
+  private showPause(view: 'main' | 'difficulty' = 'main') {
     const g = this.game!;
     const st = g.pauseStats;
     const t = g.setup.track;
-    const menu = new Menu(`Paused · ${formatTime(st.time)} of ${formatTime(st.total)}`, [
+    const { chart, instrument, difficulty } = this.req;
+    const available = DIFFICULTIES.filter((d) => chart.tracks.has(trackKey(instrument, d)));
+    const difficulties: MenuItem[] = [
+      ...available.map((d) => ({ label: `${DIFF_LABEL[d]}${d === difficulty ? ' ✓' : ''}`, action: () => this.changeDifficulty(d) })),
+      { label: 'Back', action: () => this.refreshPause() },
+    ];
+    const main: MenuItem[] = [
       { label: 'Resume', action: () => this.resume() },
       { label: 'Restart', action: () => this.restart() },
+      ...(this.req.practice || available.length < 2 ? [] : [{ label: `Difficulty: ${DIFF_LABEL[difficulty]}`, action: () => this.showDifficulties() }]),
       ...(this.req.practice || this.req.bot ? [] : [{ label: 'Practice this section', action: () => void this.practiceHere() }]),
       ...(canFullscreen() ? [{ label: isFullscreen() ? 'Exit fullscreen' : 'Fullscreen', action: () => void toggleFullscreen().then(() => this.refreshPause()) }] : []),
       { label: 'Settings', action: () => void import('./settings.ts').then(({ SettingsModal }) => this.app.pushModal(new SettingsModal(this.app, true))) },
       { label: 'Quit to song list', action: () => void this.back() },
-    ]);
+    ];
+    const menu = view === 'difficulty' ? new Menu('Difficulty · the song starts over', difficulties) : new Menu(`Paused · ${formatTime(st.time)} of ${formatTime(st.total)}`, main);
     const art = h('div', { class: 'art none' });
     const song = this.req.song;
     if (song.albumArt) {
@@ -204,6 +215,24 @@ export class GameScreen implements Screen {
     this.pauseEl = h('div', { class: 'pause' }, menu.el, card, hints);
     this.el.append(this.pauseEl);
     this.el.classList.add('paused');
+  }
+
+  private showDifficulties() {
+    this.hidePause();
+    this.showPause('difficulty');
+  }
+
+  private changeDifficulty(d: Difficulty) {
+    const track = this.req.chart.tracks.get(trackKey(this.req.instrument, d));
+    if (!track || !this.game) return;
+    if (d === this.req.difficulty) {
+      this.refreshPause();
+      return;
+    }
+    this.req.difficulty = d;
+    updateSettings({ difficulty: d });
+    this.hidePause();
+    this.game.changeTrack(track);
   }
 
   private refreshPause() {

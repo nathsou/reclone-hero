@@ -26,6 +26,9 @@ const HEADER_H = 44;
 const COVER_SPAN = 8;
 /** Short enough to feel instant, long enough not to start a preview for every song while scrolling. */
 const PREVIEW_DELAY_MS = 160;
+
+/** The search and the selected song outlive the screen, so coming back from a song keeps both. */
+const kept = { query: '', songId: '' };
 const DIFF_LABEL: Record<Difficulty, string> = { easy: 'Easy', medium: 'Medium', hard: 'Hard', expert: 'Expert' };
 
 export class SongSelect implements Screen {
@@ -74,7 +77,11 @@ export class SongSelect implements Screen {
     this.app = app;
     this.preview = new PreviewPlayer(app.library);
     this.search = h('input', { class: 'search', type: 'search', placeholder: 'Search songs, artists, charters…', spellcheck: false });
-    this.search.addEventListener('input', () => this.refilter());
+    this.search.value = kept.query;
+    this.search.addEventListener('input', () => {
+      kept.query = this.search.value;
+      this.refilter();
+    });
     const sort = h(
       'select',
       { title: 'Sort and group by', 'aria-label': 'Sort by' },
@@ -209,7 +216,7 @@ export class SongSelect implements Screen {
 
   private refilter() {
     const q = this.search.value.trim().toLowerCase();
-    const current = this.filtered[this.sel];
+    const current = this.filtered[this.sel] ?? this.app.library.songs.find((x) => x.id === kept.songId);
     const terms = q.split(/\s+/).filter(Boolean);
     const gf = settings.genreFilter;
     const matching = this.app.library.songs.filter((s) => {
@@ -424,6 +431,7 @@ export class SongSelect implements Screen {
     i = Math.max(0, Math.min(this.filtered.length - 1, i));
     if (i === this.sel && !force) return;
     this.sel = i;
+    kept.songId = this.filtered[i].id;
     this.renderRows();
     this.scrollToSel();
     this.renderCovers();
@@ -887,7 +895,7 @@ export class SongSelect implements Screen {
           return true;
         }
         if (this.search.value) {
-          this.search.value = '';
+          this.search.value = kept.query = '';
           this.refilter();
         }
         this.search.blur();

@@ -69,12 +69,6 @@ export function skinPreviewSvg(id: SkinId): string {
         body += `<path d="M${x - 10} ${cy - 4} Q${x} ${cy - 11} ${x + 10} ${cy - 4}" fill="none" stroke="#ffffff" stroke-width="2" stroke-linecap="round" opacity=".85"/>`;
         break;
       }
-      case 'swiss': {
-        body += `<ellipse cx="${x}" cy="${cy}" rx="16" ry="11" fill="${col}"/>`;
-        if (kind === 1) body += `<ellipse cx="${x}" cy="${cy}" rx="10" ry="7" fill="none" stroke="#e8e8e8" stroke-width="3.2"/>`;
-        if (kind === 2) body += `<ellipse cx="${x}" cy="${cy}" rx="11.5" ry="7.8" fill="#e8e8e8"/>`;
-        break;
-      }
       case 'baroque': {
         const oct = (rx: number, ry: number, fill: string, extra = '') => {
           const pts = Array.from({ length: 8 }, (_, i) => {
@@ -91,12 +85,6 @@ export function skinPreviewSvg(id: SkinId): string {
       case 'pixel': {
         body += `<rect x="${x - 15}" y="${cy - 10}" width="30" height="20" fill="${kind === 2 ? '#1a1a1a' : col}" stroke="${col}" stroke-width="3"/>`;
         body += `<rect x="${x - 5}" y="${cy - 3.5}" width="10" height="7" fill="${kind === 1 ? '#fafafa' : 'rgba(0,0,0,.55)'}"/>`;
-        break;
-      }
-      case 'clay': {
-        body += `<ellipse cx="${x}" cy="${cy + 3}" rx="16" ry="10" fill="rgba(0,0,0,.18)"/>`;
-        body += `<ellipse cx="${x}" cy="${cy}" rx="16" ry="11" fill="${kind === 2 ? '#ece7df' : col}" stroke="${col}" stroke-width="${kind === 2 ? 3 : 0}"/>`;
-        body += `<ellipse cx="${x}" cy="${cy - 1}" rx="7" ry="4.5" fill="${kind === 1 ? '#f4f1ec' : 'rgba(0,0,0,.08)'}"/>`;
         break;
       }
       default: {

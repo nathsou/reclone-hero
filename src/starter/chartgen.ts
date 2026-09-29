@@ -1,5 +1,5 @@
 import { Tempo } from './score.ts';
-import type { Note, SongDef } from './score.ts';
+import type { InstrumentKind, Note, SongDef } from './score.ts';
 
 /**
  * Chart the player's part for all four difficulties.
@@ -21,7 +21,28 @@ interface ChartNote {
   p: number[];
   v: number;
   mute: boolean;
+  /** the instrument keeps sounding while held, so a long note can be a sustain */
+  holds: boolean;
 }
+
+/** Instruments whose notes ring for as long as they are held. Plucks, bells and pianos die away. */
+const HOLDS: Record<InstrumentKind, boolean> = {
+  drive: true,
+  lead: true,
+  clean: true,
+  supersaw: true,
+  pad: true,
+  strings: true,
+  organ: true,
+  choir: true,
+  pluck: false,
+  bell: false,
+  piano: false,
+  harpsichord: false,
+  pickbass: false,
+  synthbass: false,
+  subbass: false,
+};
 
 export interface Placed {
   b: number;
@@ -80,7 +101,7 @@ function strength(def: SongDef, n: ChartNote, prevGap: number): number {
   return s;
 }
 
-function mergeChords(notes: Note[]): ChartNote[] {
+function mergeChords(notes: (Note & { holds: boolean })[]): ChartNote[] {
   const sorted = [...notes].sort((a, b) => a.b - b.b || a.p[0] - b.p[0]);
   const out: ChartNote[] = [];
   for (const n of sorted) {
@@ -89,9 +110,10 @@ function mergeChords(notes: Note[]): ChartNote[] {
       last.p = [...new Set([...last.p, ...n.p])].sort((a, b) => a - b);
       last.d = Math.max(last.d, n.d);
       last.v = Math.max(last.v, n.v);
+      last.holds ||= n.holds;
       continue;
     }
-    out.push({ b: n.b, d: n.d, p: [...n.p], v: n.v, mute: !!n.mute });
+    out.push({ b: n.b, d: n.d, p: [...n.p], v: n.v, mute: !!n.mute, holds: n.holds });
   }
   return out;
 }
@@ -126,7 +148,7 @@ function thin(def: SongDef, notes: ChartNote[], diff: Diff, tempo: Tempo): Chart
     const after = lo < keptSecs.length ? keptSecs[lo] - t : Infinity;
     // A held note blocks the notes under it on lower difficulties.
     const prevIdx = lo > 0 ? kept[lo - 1] : -1;
-    const heldOver = prevIdx >= 0 && notes[prevIdx].d >= 1 && tempo.toSec(notes[prevIdx].b + notes[prevIdx].d * 0.8) > t;
+    const heldOver = prevIdx >= 0 && notes[prevIdx].holds && notes[prevIdx].d >= 1 && tempo.toSec(notes[prevIdx].b + notes[prevIdx].d * 0.8) > t;
     if (before < cfg.minGap || after < cfg.minGap || heldOver) continue;
     // density: notes already kept within a beat either side
     let dense = 0;
@@ -246,7 +268,7 @@ function assignLanes(notes: ChartNote[], diff: Diff, tempo: Tempo, range: [numbe
     const next = notes[i + 1];
     let sus = 0;
     // Sustain notes that ring for at least ~0.45 s (a dotted eighth is not a sustain at dance tempos).
-    if (!n.mute && n.d >= 0.75 && tempo.toSec(n.b + n.d) - secs[i] >= 0.45) {
+    if (n.holds && !n.mute && n.d >= 0.75 && tempo.toSec(n.b + n.d) - secs[i] >= 0.45) {
       sus = n.d - 0.25;
       if (next) sus = Math.min(sus, next.b - n.b - 0.25);
       if (sus < 0.5) sus = 0;
@@ -270,7 +292,7 @@ export interface GeneratedChart {
 
 export function generateChart(def: SongDef): GeneratedChart {
   const tempo = new Tempo(def.tempo);
-  const base = mergeChords(def.player.flatMap((p) => p.notes));
+  const base = mergeChords(def.player.flatMap((p) => p.notes.map((n) => ({ ...n, holds: HOLDS[p.inst] }))));
   let pmin = Infinity;
   let pmax = -Infinity;
   for (const n of base) {

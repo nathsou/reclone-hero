@@ -1,7 +1,7 @@
 // Note skins: how gems, sustains, fret buttons and hit particles look. Independent of the page theme.
 // Colour order: green, red, yellow, blue, orange, open, star power, missed (linear light).
 
-export const SKIN_IDS = ['dome', 'studio', 'glass', 'neon', 'swiss', 'baroque', 'pixel', 'clay'] as const;
+export const SKIN_IDS = ['dome', 'studio', 'glass', 'neon', 'baroque', 'pixel'] as const;
 export type SkinId = (typeof SKIN_IDS)[number];
 
 export interface NoteSkin {
@@ -11,9 +11,9 @@ export interface NoteSkin {
   /** index passed to shaders to pick a shading style */
   style: number;
   colors: number[][];
-  gem: 'dome' | 'puck' | 'disc' | 'jewel' | 'block' | 'pill' | 'lens' | 'bead';
-  button: 'wheel' | 'ring' | 'flat' | 'gold' | 'square' | 'soft' | 'bezel';
-  particles: 'sparks' | 'dots' | 'glitter' | 'squares' | 'puffs';
+  gem: 'dome' | 'puck' | 'jewel' | 'block' | 'lens' | 'bead';
+  button: 'wheel' | 'ring' | 'gold' | 'square' | 'bezel';
+  particles: 'sparks' | 'glitter' | 'squares';
   /** scale on HOPO gems (smaller in Neon, like Guitar Hero) */
   hopoScale: number;
 }
@@ -61,7 +61,7 @@ export const SKINS: Record<SkinId, NoteSkin> = {
   },
   glass: {
     id: 'glass',
-    name: 'Liquid Glass',
+    name: 'Crystal',
     description: 'Glass beads, tubes and a flowing glass highway that bend, split and reflect the light behind them.',
     style: 7,
     colors: [
@@ -99,26 +99,7 @@ export const SKINS: Record<SkinId, NoteSkin> = {
     particles: 'sparks',
     hopoScale: 0.86,
   },
-  swiss: {
-    id: 'swiss',
-    name: 'Swiss',
-    description: 'Flat geometric dots, pure colour, no glow. Strum ● HOPO ◉ tap ○.',
-    style: 1,
-    colors: [
-      [0.0, 0.4, 0.09],
-      [0.8, 0.005, 0.01],
-      [1.0, 0.68, 0.0],
-      [0.0, 0.1, 0.5],
-      [1.0, 0.16, 0.0],
-      [0.02, 0.02, 0.02],
-      [0.2, 0.55, 1.0],
-      [0.45, 0.45, 0.45],
-    ],
-    gem: 'disc',
-    button: 'flat',
-    particles: 'dots',
-    hopoScale: 1,
-  },
+
   baroque: {
     id: 'baroque',
     name: 'Baroque',
@@ -159,26 +140,7 @@ export const SKINS: Record<SkinId, NoteSkin> = {
     particles: 'squares',
     hopoScale: 0.9,
   },
-  clay: {
-    id: 'clay',
-    name: 'Clay',
-    description: 'Soft matte pastel pebbles with a hand-made feel.',
-    style: 4,
-    colors: [
-      [0.3, 0.72, 0.36],
-      [0.9, 0.26, 0.28],
-      [0.98, 0.78, 0.3],
-      [0.3, 0.48, 0.92],
-      [0.98, 0.48, 0.24],
-      [0.6, 0.4, 0.88],
-      [0.78, 0.92, 1.0],
-      [0.45, 0.43, 0.42],
-    ],
-    gem: 'pill',
-    button: 'soft',
-    particles: 'puffs',
-    hopoScale: 0.9,
-  },
+
 };
 
 /** sRGB hex for a skin colour (for the DOM: results bars, pickers). */

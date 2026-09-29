@@ -4,7 +4,7 @@ import type { GenreFilter } from './library/genres.ts';
 export type MissFeedback = 'auto' | 'mute' | 'muffle' | 'off';
 export type Quality = 'high' | 'medium' | 'low';
 export type Theme = 'system' | 'classic' | 'ink' | 'swiss' | 'baroque' | 'synthwave' | 'terminal' | 'paper' | 'midnight';
-export type NoteStyle = 'theme' | 'dome' | 'studio' | 'glass' | 'neon' | 'swiss' | 'baroque' | 'pixel' | 'clay';
+export type NoteStyle = 'theme' | 'dome' | 'studio' | 'glass' | 'neon' | 'baroque' | 'pixel';
 export type SongView = 'list' | 'covers';
 
 export interface Settings {

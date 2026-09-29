@@ -6,20 +6,16 @@ import {
   OPEN_R,
   QUAD,
   blockMesh,
-  discMesh,
   domeBarMesh,
   domeMesh,
-  flatButtonMesh,
   fretButtonMesh,
   gemMesh,
   goldButtonMesh,
   jewelMesh,
   openBarMesh,
-  pillMesh,
   lensMesh,
   beadMesh,
   bezelButtonMesh,
-  softButtonMesh,
   squareButtonMesh,
   stripMesh,
   wheelMesh,
@@ -62,10 +58,8 @@ interface ParticleFx {
 
 const FX: Record<NoteSkin['particles'], ParticleFx> = {
   sparks: { flare: true, count: 12, openCount: 26, speed: 1, size: 0.05, sizeVar: 0.05, life: 0.3, lifeVar: 0.35, shape: 0, gravity: -9, gain: 1.8, add: 0.3, gold: 0, sustainRate: 60 },
-  dots: { flare: false, count: 5, openCount: 10, speed: 0.55, size: 0.06, sizeVar: 0.03, life: 0.22, lifeVar: 0.12, shape: 3, gravity: -7, gain: 0.85, add: 0, gold: 0, sustainRate: 10 },
   glitter: { flare: true, count: 16, openCount: 30, speed: 0.8, size: 0.035, sizeVar: 0.04, life: 0.4, lifeVar: 0.4, shape: 0, gravity: -5, gain: 1.7, add: 0.15, gold: 0.65, sustainRate: 45 },
   squares: { flare: false, count: 8, openCount: 16, speed: 0.9, size: 0.07, sizeVar: 0.03, life: 0.3, lifeVar: 0.2, shape: 2, gravity: -12, gain: 1.15, add: 0.05, gold: 0, sustainRate: 22 },
-  puffs: { flare: false, count: 6, openCount: 12, speed: 0.35, size: 0.14, sizeVar: 0.08, life: 0.5, lifeVar: 0.3, shape: 0, gravity: 1.5, gain: 0.55, add: 0.06, gold: 0, sustainRate: 10 },
 };
 const GOLD = [1.0, 0.66, 0.22];
 /** Rail colour by multiplier (index 1-4). */
@@ -250,20 +244,16 @@ export class Renderer {
     this.gemMeshes = {
       dome: lit(domeMesh(), 1024, [4, 4]),
       puck: lit(gemMesh(), 1024, [4, 4]),
-      disc: lit(discMesh(), 1024, [4, 4]),
       jewel: lit(jewelMesh(), 1024, [4, 4]),
       block: lit(blockMesh(), 1024, [4, 4]),
-      pill: lit(pillMesh(), 1024, [4, 4]),
       lens: lit(lensMesh(), 1024, [4, 4]),
       bead: lit(beadMesh(), 1024, [4, 4]),
     };
     this.buttonMeshes = {
       wheel: lit(wheelMesh(), 5, [4, 4]),
       ring: lit(fretButtonMesh(), 5, [4, 4]),
-      flat: lit(flatButtonMesh(), 5, [4, 4]),
       gold: lit(goldButtonMesh(), 5, [4, 4]),
       square: lit(squareButtonMesh(), 5, [4, 4]),
-      soft: lit(softButtonMesh(), 5, [4, 4]),
       bezel: lit(bezelButtonMesh(), 5, [4, 4]),
     };
     this.gems = this.gemMeshes.dome;
@@ -644,6 +634,7 @@ export class Renderer {
     this.setSkin(s.skin);
     this.inkGems = s.theme.ink > 0.5 && s.skin.style === 5 ? 1 : 0;
     this.inkCol = s.theme.inkColor;
+    this.lightBg = s.theme.light ? 1 : 0;
     this.resize();
     this.particles.update(s.dt);
 
@@ -657,7 +648,7 @@ export class Renderer {
     const glass = this.skin.style === 7;
     this.fillNotes(s);
     this.drawBackground(s);
-    // Liquid Glass refracts what is behind it: copy the frame before the highway and before the gems.
+    // Crystal refracts what is behind it: copy the frame before the highway and before the gems.
     if (glass) this.grab(0, fbo);
     this.drawHighway(s);
     this.drawBeats(s);
@@ -675,8 +666,10 @@ export class Renderer {
     this.post(s);
   }
 
-  /** Liquid Glass: copies of the frame so far (behind the highway, behind the gems). */
+  /** Crystal: copies of the frame so far (behind the highway, behind the gems). */
   private grabs: (Target | null)[] = [null, null];
+  /** 1 when the theme's background is light */
+  private lightBg = 0;
 
   private grab(i: number, fbo: WebGLFramebuffer) {
     const gl = this.gl;
@@ -717,6 +710,7 @@ export class Renderer {
     if (p.u.u_dpr) gl.uniform1f(p.u.u_dpr, this.width / Math.max(1, this.cssW));
     if (p.u.u_openL) gl.uniform1f(p.u.u_openL, HALF - 0.28 - OPEN_R);
     if (p.u.u_screen) gl.uniform2f(p.u.u_screen, this.width, this.height);
+    if (p.u.u_lightBg) gl.uniform1f(p.u.u_lightBg, this.lightBg);
     if (p.u.u_view) gl.uniformMatrix4fv(p.u.u_view, false, this.view);
     if (p.u.u_gems) {
       gl.uniform4fv(p.u.u_gems, this.gemList);
