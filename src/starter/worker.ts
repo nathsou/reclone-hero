@@ -1,10 +1,10 @@
-// Renders built-in songs off the main thread.
-import { previewJob, runJob, stemsJob } from './synth.ts';
+// Renders built-in songs off the main thread: a stretch of a song's stems, or a song-list preview.
+import { chunkJob, previewJob, runJob } from './synth.ts';
 
-export type WorkerRequest = { id: number; song: string; kind: 'stems' | 'preview' };
+export type WorkerRequest = { id: number; song: string; kind: 'chunk'; from: number; to: number } | { id: number; song: string; kind: 'preview' };
 export type WorkerResponse =
   | { id: number; type: 'progress'; value: number }
-  | { id: number; type: 'stems'; guitar: Uint8Array; song: Uint8Array }
+  | { id: number; type: 'chunk'; start: number; guitar: Int16Array; song: Int16Array }
   | { id: number; type: 'preview'; wav: Uint8Array }
   | { id: number; type: 'error'; message: string };
 
@@ -14,7 +14,8 @@ const ctx = self as unknown as {
 };
 
 ctx.onmessage = (e: MessageEvent<WorkerRequest>) => {
-  const { id, song, kind } = e.data;
+  const req = e.data;
+  const { id } = req;
   let last = 0;
   const progress = (p: number) => {
     if (p - last < 0.02 && p < 1) return;
@@ -22,11 +23,11 @@ ctx.onmessage = (e: MessageEvent<WorkerRequest>) => {
     ctx.postMessage({ id, type: 'progress', value: p } satisfies WorkerResponse);
   };
   try {
-    if (kind === 'stems') {
-      const s = runJob(stemsJob(song), progress);
-      ctx.postMessage({ id, type: 'stems', guitar: s.guitar, song: s.song } satisfies WorkerResponse, [s.guitar.buffer, s.song.buffer]);
+    if (req.kind === 'chunk') {
+      const c = runJob(chunkJob(req.song, req.from, req.to), progress);
+      ctx.postMessage({ id, type: 'chunk', start: c.start, guitar: c.guitar, song: c.song } satisfies WorkerResponse, [c.guitar.buffer, c.song.buffer]);
     } else {
-      const wav = runJob(previewJob(song), progress);
+      const wav = runJob(previewJob(req.song), progress);
       ctx.postMessage({ id, type: 'preview', wav } satisfies WorkerResponse, [wav.buffer]);
     }
   } catch (err) {

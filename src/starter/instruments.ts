@@ -13,6 +13,11 @@ export interface Voice {
   note(n: Note, index: number, lenSec: number, L: Float32Array, R: Float32Array | null, at: number): void;
   /** Run the effect chain over n samples in place. */
   process(L: Float32Array, R: Float32Array | null, n: number): void;
+  /**
+   * The absolute sample position of the block about to render. Modulation (chorus, Leslie, filter
+   * sweeps) takes its phase from it, so a song rendered in pieces sounds the same as in one go.
+   */
+  clock?(frame: number): void;
 }
 
 const TWO_PI = Math.PI * 2;
@@ -163,6 +168,10 @@ class CleanGuitar implements Voice {
     });
   }
 
+  clock(frame: number): void {
+    this.lfo = (((TWO_PI * 0.8) / this.sr) * frame) % TWO_PI;
+  }
+
   /** Chorus: the right side is a modulated copy. */
   process(L: Float32Array, R: Float32Array | null, n: number): void {
     const d = this.delay;
@@ -277,12 +286,18 @@ class SuperSaw implements Voice {
   private readonly sr: number;
   private readonly tone: number;
   private readonly kind: 'lead' | 'pad' | 'strings' | 'pluck';
+  /** absolute sample position of the current block, for the pad's filter sweep */
+  private frame = 0;
 
   constructor(sr: number, kind: 'lead' | 'pad' | 'strings' | 'pluck', tone = 0.5) {
     this.sr = sr;
     this.kind = kind;
     this.tone = tone;
     this.tail = kind === 'pad' ? 1.6 : kind === 'strings' ? 1 : 0.5;
+  }
+
+  clock(frame: number): void {
+    this.frame = frame;
   }
 
   note(n: Note, index: number, lenSec: number, L: Float32Array, R: Float32Array | null, at: number): void {
@@ -307,7 +322,7 @@ class SuperSaw implements Voice {
       for (let i = 0; i < total; i++) {
         if ((i & 31) === 0) {
           const env = Math.exp(-i / (envT * sr));
-          const lfo = k === 'pad' ? 0.25 * Math.sin((TWO_PI * 0.2 * (at + i)) / sr) : 0;
+          const lfo = k === 'pad' ? 0.25 * Math.sin((TWO_PI * 0.2 * (this.frame + at + i)) / sr) : 0;
           const fc = (base + envAmt * env * (0.5 + n.v)) * (1 + lfo) * (0.6 + this.tone * 0.9);
           svfL.set(fc, sr, 0.9);
           svfR.set(fc * 1.02, sr, 0.9);
@@ -373,6 +388,10 @@ class Organ implements Voice {
         L[at + i] += x * g * amp;
       }
     }
+  }
+
+  clock(frame: number): void {
+    this.lfo = (((TWO_PI * 5.8) / this.sr) * frame) % TWO_PI;
   }
 
   /** Leslie-ish: amplitude and pan wobble, a touch of drive. */
@@ -492,7 +511,8 @@ class Osc implements Voice {
     this.sr = sr;
     this.kind = kind;
     this.tone = tone;
-    this.tail = kind === 'fiddle' ? 0.25 : 0.12;
+    // the release rings for five time constants
+    this.tail = (kind === 'fiddle' ? 0.12 : kind === 'accordion' ? 0.05 : 0.03) * 5;
     this.c =
       kind === 'fiddle'
         ? [Biquad.make('peak', 700, sr, 1.2, 4), Biquad.make('peak', 2800, sr, 1.5, 5), Biquad.make('lp', 7000, sr, 0.7), Biquad.make('hp', 180, sr, 0.7)]
@@ -566,7 +586,7 @@ class Osc implements Voice {
 
 /** Timpani: a tuned drum head (a few inharmonic modes) with a felt-mallet thump. Rolls are fast repeats. */
 class Timpani implements Voice {
-  readonly tail = 2.5;
+  readonly tail = 3;
   readonly stereo = false;
   private readonly sr: number;
 
