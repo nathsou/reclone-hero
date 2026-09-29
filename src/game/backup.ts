@@ -78,26 +78,41 @@ export function summarize(b: Backup): BackupSummary {
   };
 }
 
+const isNum = (x: unknown): x is number => typeof x === 'number' && Number.isFinite(x);
+const isObj = (x: unknown): x is Record<string, unknown> => !!x && typeof x === 'object' && !Array.isArray(x);
+
+/** A best score as it must look to be shown: anything else in a (hand-edited) file is skipped. */
+function validScore(s: unknown): s is BestScore {
+  return isObj(s) && isNum(s.score) && isNum(s.stars) && isNum(s.accuracy) && typeof s.fc === 'boolean' && isNum(s.date);
+}
+
+function validPlay(p: unknown): p is PlayStat {
+  return isObj(p) && isNum(p.count) && isNum(p.last);
+}
+
 /**
- * Apply a backup. Settings and key bindings are replaced, controller profiles are merged per device,
+ * Apply a backup. Throws if storage is full (the caller shows the message). Settings and key bindings are replaced, controller profiles are merged per device,
  * and best scores are merged keeping the higher score, so importing never loses a record.
  */
 export function applyBackup(b: Backup): void {
   const write = (key: string, v: unknown) => localStorage.setItem(key, JSON.stringify(v));
-  if (b.data.settings) write(KEYS.settings, b.data.settings);
-  if (b.data.keys) write(KEYS.keys, b.data.keys);
-  if (b.data.pads) write(KEYS.pads, { ...((read(KEYS.pads) as object) ?? {}), ...(b.data.pads as object) });
-  if (b.data.scores) {
-    const mine = (read(KEYS.scores) as Record<string, BestScore>) ?? {};
-    for (const [k, s] of Object.entries(b.data.scores as Record<string, BestScore>)) {
-      if (!mine[k] || s.score > mine[k].score) mine[k] = s;
+  if (isObj(b.data.settings)) write(KEYS.settings, b.data.settings);
+  if (isObj(b.data.keys)) write(KEYS.keys, b.data.keys);
+  if (isObj(b.data.pads)) write(KEYS.pads, { ...(isObj(read(KEYS.pads)) ? (read(KEYS.pads) as object) : {}), ...b.data.pads });
+  if (isObj(b.data.scores)) {
+    const stored = read(KEYS.scores);
+    const mine = (isObj(stored) ? stored : {}) as Record<string, BestScore>;
+    for (const [k, s] of Object.entries(b.data.scores)) {
+      if (validScore(s) && (!mine[k] || s.score > mine[k].score)) mine[k] = s;
     }
     write(KEYS.scores, mine);
   }
-  if (b.data.plays) {
+  if (isObj(b.data.plays)) {
     // Play history: keep the larger count and the latest date per song.
-    const mine = (read(KEYS.plays) as Record<string, PlayStat>) ?? {};
-    for (const [k, p] of Object.entries(b.data.plays as Record<string, PlayStat>)) {
+    const stored = read(KEYS.plays);
+    const mine = (isObj(stored) ? stored : {}) as Record<string, PlayStat>;
+    for (const [k, p] of Object.entries(b.data.plays)) {
+      if (!validPlay(p)) continue;
       const m = mine[k];
       mine[k] = m ? { count: Math.max(m.count, p.count), last: Math.max(m.last, p.last) } : p;
     }
@@ -106,6 +121,7 @@ export function applyBackup(b: Backup): void {
   if (Array.isArray(b.data.favourites)) {
     // Favourites: the union of both lists.
     const mine = read(KEYS.favourites);
-    write(KEYS.favourites, [...new Set([...(Array.isArray(mine) ? mine : []), ...b.data.favourites])]);
+    const ids = b.data.favourites.filter((x): x is string => typeof x === 'string');
+    write(KEYS.favourites, [...new Set([...(Array.isArray(mine) ? mine : []), ...ids])]);
   }
 }

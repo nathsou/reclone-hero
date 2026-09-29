@@ -60,6 +60,5 @@ export const GALLOP: Grid = { kick: 'x.xxx.xxx.xxx.xx', snare: '....X.......X...
 export const BLAST: Grid = { kick: 'x.x.x.x.x.x.x.x.', snare: '.x.x.x.x.x.x.x.x', ride: 'x.x.x.x.x.x.x.x.' };
 export const FOUR_FLOOR: Grid = { kick: 'x...x...x...x...', clap: '....x.......x...', hat: '..x...x...x...x.', shaker: 'xxxxxxxxxxxxxxxx' };
 export const HOUSE_OPEN: Grid = { kick: 'x...x...x...x...', clap: '....x.......x...', ohat: '..x...x...x...x.', hat: 'x.x.x.x.x.x.x.x.' };
-export const BREAKBEAT: Grid = { kick: 'x.........x.....', snare: '....x..g.g..x...', hat: 'x.xxx.x.x.xxx.x.' };
 export const DNB: Grid = { kick: 'x.........x.....', snare: '....X.......X...', hat: 'x.x.x.xxx.x.x.x.' };
 export const SYNTHWAVE: Grid = { kick: 'x.......x.......', snare: '....X.......X...', hat: 'x.x.x.x.x.x.x.x.' };

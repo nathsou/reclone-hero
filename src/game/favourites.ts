@@ -32,8 +32,3 @@ export function toggleFavourite(songId: string): boolean {
   }
   return on;
 }
-
-/** Forget the in-memory copy (after a backup import rewrote storage). */
-export function reloadFavourites(): void {
-  cache = null;
-}

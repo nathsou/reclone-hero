@@ -78,10 +78,15 @@ export class GenrePanel {
     this.families = tally(songs);
     anchor.after(this.el);
     this.render();
-    setTimeout(() => document.addEventListener('pointerdown', this.onOutside), 0);
+    // Listen for outside clicks from the next task on, so the click that opened the panel is not one.
+    clearTimeout(this.listenTimer);
+    this.listenTimer = window.setTimeout(() => document.addEventListener('pointerdown', this.onOutside), 0);
   }
 
+  private listenTimer = 0;
+
   close(): void {
+    clearTimeout(this.listenTimer);
     document.removeEventListener('pointerdown', this.onOutside);
     this.el.remove();
   }

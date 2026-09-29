@@ -59,7 +59,11 @@ export class SettingsModal implements Screen {
     queueMicrotask(() => this.focusTab());
   }
 
+  /** Stop waiting for a key to bind (settings closed, or another binding started). */
+  private cancelCapture: (() => void) | null = null;
+
   destroy(): void {
+    this.cancelCapture?.();
     clearInterval(this.padTimer);
     this.stopPreview?.();
   }
@@ -182,7 +186,12 @@ export class SettingsModal implements Screen {
               {
                 class: 'btn primary',
                 onclick: () => {
-                  applyBackup(backup);
+                  try {
+                    applyBackup(backup);
+                  } catch (err) {
+                    replace(status, h('p', { class: 'error' }, `Could not import: ${(err as Error).message}`));
+                    return;
+                  }
                   location.reload();
                 },
               },
@@ -305,11 +314,12 @@ export class SettingsModal implements Screen {
                 class: 'btn small',
                 onclick: (e: Event) => {
                   const btn = e.currentTarget as HTMLButtonElement;
+                  this.cancelCapture?.();
                   btn.textContent = 'press a key…';
                   const onKey = (ev: KeyboardEvent) => {
                     ev.preventDefault();
                     ev.stopPropagation();
-                    window.removeEventListener('keydown', onKey, true);
+                    this.cancelCapture?.();
                     if (ev.code !== 'Escape' || a === 'start') {
                       kb[a] = [ev.code];
                       saveKeyBindings(kb);
@@ -318,6 +328,10 @@ export class SettingsModal implements Screen {
                     renderKeys();
                   };
                   window.addEventListener('keydown', onKey, true);
+                  this.cancelCapture = () => {
+                    window.removeEventListener('keydown', onKey, true);
+                    this.cancelCapture = null;
+                  };
                 },
               },
               (kb[a] ?? []).map(keyLabel).join(' / ') || '—',

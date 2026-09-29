@@ -60,10 +60,6 @@ export interface GenreFilter {
   items: string[];
 }
 
-export function genreFilterActive(f: GenreFilter): boolean {
-  return f.items.length > 0;
-}
-
 /** Does a song's genre match the filter's selection? */
 export function genreSelected(genre: string, f: GenreFilter): boolean {
   const g = genreKey(genre);

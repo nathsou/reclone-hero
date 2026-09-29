@@ -35,3 +35,23 @@ test('rejects files that are not backups', () => {
   assert.throws(() => parseBackup('{"hello":1}'));
   assert.throws(() => parseBackup('not json'));
 });
+
+test('a hand-edited backup cannot store broken scores, plays or favourites', () => {
+  store.clear();
+  const b = parseBackup(
+    JSON.stringify({
+      app: 'reclone-hero',
+      format: 1,
+      exportedAt: '',
+      data: {
+        scores: { good: { score: 10, stars: 1, accuracy: 0.5, fc: false, date: 1 }, bad: { score: 'lots' }, worse: null },
+        plays: { a: { count: 2, last: 5 }, b: 'x' },
+        favourites: ['one', 7, null],
+      },
+    }),
+  );
+  applyBackup(b);
+  assert.deepEqual(Object.keys(JSON.parse(store.get('chsq.scores')!)), ['good']);
+  assert.deepEqual(Object.keys(JSON.parse(store.get('chsq.plays')!)), ['a']);
+  assert.deepEqual(JSON.parse(store.get('chsq.favourites')!), ['one']);
+});

@@ -225,25 +225,6 @@ export class Reverb {
   }
 }
 
-/** Ping-pong echo with a darkening feedback path. */
-export function pingPong(input: Float32Array, outL: Float32Array, outR: Float32Array, delaySamples: number, feedback: number, wet: number, sr: number): void {
-  const len = Math.max(1, Math.round(delaySamples));
-  const bl = new Float32Array(len);
-  const br = new Float32Array(len);
-  const lpL = Biquad.make('lp', 3500, sr);
-  const lpR = Biquad.make('lp', 3500, sr);
-  let i = 0;
-  for (let n = 0; n < input.length; n++) {
-    const yl = bl[i];
-    const yr = br[i];
-    bl[i] = input[n] + lpR.tick(yr) * feedback;
-    br[i] = lpL.tick(yl) * feedback;
-    if (++i >= len) i = 0;
-    outL[n] += yl * wet;
-    outR[n] += yr * wet;
-  }
-}
-
 /**
  * Karplus-Strong plucked string. Static notes are tuned with an allpass for the fractional delay,
  * so chords stay in tune; bends and vibrato read the delay line with linear interpolation.
