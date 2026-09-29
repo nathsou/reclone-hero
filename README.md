@@ -4,7 +4,8 @@
 
 A Clone Hero–compatible rhythm game that runs in the browser. It reads your existing song folders
 (`notes.chart` / `notes.mid` + `song.ini` + audio stems), plays them on a WebGL2 highway, and is built with
-nothing but TypeScript 7 and Vite: no runtime dependencies.
+nothing but TypeScript 7 and Vite: no runtime dependencies. No songs and no guitar? It comes with eight
+built-in songs and plays on the keyboard.
 
 ## Running it
 
@@ -15,15 +16,17 @@ npm run dev
 
 Open the printed URL in a Chromium-based browser (Chrome, Edge, Arc, Brave).
 
-- **Your library:** click **Open charts folder…** and pick the folder that holds your songs. The browser
+- **Built-in songs:** on a first visit the song list opens straight away with the eight songs that ship with
+  the game (see [Built-in songs](#built-in-songs)).
+- **Your library:** click the folder button (or **Open charts folder…**) and pick the folder that holds your songs. The browser
   remembers it, so next time you only confirm access. Songs are read straight from disk; nothing is uploaded.
 - **Dev shortcut:** the dev server also serves a folder directly (default `/Volumes/S/charts`, override with
   `CHARTS_DIR=/path/to/songs npm run dev`), so the song list appears without a picker.
 
 ### Without any server
 
-`npm run build` produces a single self-contained file, `dist/index.html` (about 330 KB, all scripts, fonts and
-styles inlined). Double-click it to play from disk (`file://`), or put it on any static host (GitHub Pages,
+`npm run build` produces a single self-contained file, `dist/index.html` (about 470 KB, all scripts, fonts,
+styles and the built-in songs inlined). Double-click it to play from disk (`file://`), or put it on any static host (GitHub Pages,
 Netlify, a USB stick). Pushing to `main` deploys it to GitHub Pages (`.github/workflows/pages.yml`). Nothing runs server-side: songs are read in the browser.
 
 - **Chrome / Edge / Brave / Arc:** uses the File System Access API; the folder is remembered between visits.
@@ -37,7 +40,14 @@ controllers after a button press. Then open **Settings › Controls › Set up**
 (frets, strum up/down, select, tilt, start, whammy). The wizard handles buttons, D-pad/hat strums and analog
 tilt/whammy axes, and the mapping is saved per device.
 
-Keyboard: `A S D F G` (or `1`–`5`) frets, `↑`/`↓`/`Enter` strum, `Space` Star Power, `W` whammy, `Esc` pause.
+## Playing on the keyboard
+
+`A S D F G` (or `1`–`5`) are the frets and, by default, **pressing a fret key plays the note**: no separate
+strum key is needed, and keys pressed together within 40 ms count as one chord. Hold keys through sustains.
+Turn **Settings › Controls › Fret keys strum** off to strum with `↑`/`↓`/`Enter` instead, like a guitar.
+`Space` is Star Power, `W` whammy, `Esc` pause. While you play on the keyboard, the key for each fret is shown
+under it. All keys can be remapped in Settings › Controls. Easy (three frets) and Medium (four) are good places
+to start.
 In menus, strum moves, green confirms, red goes back, yellow opens practice, blue/orange change difficulty.
 On the results screen `Enter` returns to the song list, `R` retries and `P` practises the weakest section.
 
@@ -56,7 +66,8 @@ On the results screen `Enter` returns to the song list, `R` retries and `P` prac
 - **Practice:** loop any range of sections at 40–100% speed. Audio is time-stretched without changing pitch
   (WSOLA), and each loop reports its accuracy.
 - **Calibration:** tap along to clicks (audio offset) and flashes (video offset).
-- **Song list** grouped the way Clone Hero does it (by artist, title letter, difficulty, length, year,
+- **Song list** (scroll with the mouse wheel; in the cover view the wheel or a trackpad swipe moves through
+  the covers) grouped the way Clone Hero does it (by artist, title letter, difficulty, length, year,
   genre, charter, folder, most played or recently played), ascending or descending, with a sticky group
   header, `PgUp`/`PgDn` to jump between groups, `R` for a random song and `/` to search. `V` switches
   between the list (with the song's details beside it) and a cover-flow view with an A–Z scrubber.
@@ -65,7 +76,8 @@ On the results screen `Enter` returns to the song list, `R` retries and `P` prac
 - **Themes:** Classic dark (the default: a textured board, steel rails, domed gems and wheel frets) and
   Daylight ink (a paper highway with inked outlines). "Match system" switches between the two. The earlier
   colour schemes (Swiss, Baroque, Synthwave, Terminal, Paper, Midnight) are still there under Settings › Display.
-- **Note styles**, independent of the theme: Classic dome (the default), Neon (glowing pucks), Swiss (flat
+- **Note styles**, independent of the theme: Classic dome (the default), Studio (glass lenses in chrome
+  bezels on a lacquered board, with ray-traced reflections; see [Graphics](#graphics)), Neon (glowing pucks), Swiss (flat
   geometric dots), Baroque (faceted jewels in gold, pearls for HOPOs), Pixel (8-bit blocks) and Clay (soft
   pastel pebbles). Each keeps the same strum / HOPO / tap language and has its own sustains, fret buttons and
   hit particles.
@@ -73,6 +85,39 @@ On the results screen `Enter` returns to the song list, `R` retries and `P` prac
   to import on another computer (scores merge, keeping the best).
 - **Controls:** remap any single guitar input (Settings › Controls › Change) without redoing the rest.
 - **Video backgrounds**, album-art backgrounds, fullscreen (`Shift+F`, `Esc` to leave), lefty flip, quality levels.
+
+## Built-in songs
+
+Eight songs ship inside the game, so there is always something to play. They are not recordings: each is a
+score written in TypeScript (`src/starter/songs`), synthesized in the browser when you pick it (a Web Worker
+renders the stems in 2–4 s) and charted from the same score, so notes and audio cannot drift apart. They add
+about 140 KB to the build, need no download, and carry no licensing strings.
+
+| Song | Credit | Style | Expert |
+| --- | --- | --- | --- |
+| Ode to Joy | Beethoven, Symphony No. 9 (1824) | pop-punk, key change | gentle, quarter notes |
+| Midnight Drive | original | synthwave, 100 BPM | held chords, arpeggios |
+| Ignition | original | rock, 140 BPM | palm-muted riffs, a solo |
+| Neon Skyline | original | electro house, 126 BPM | long hammer-on arpeggios |
+| Für Elise | Beethoven, WoO 59 (1810) | electro in 3/8 | sixteenth-note melody |
+| Canon in D | Pachelbel (c. 1700) | rock | busier each variation, shred section |
+| In the Hall of the Mountain King | Grieg, Peer Gynt (1875) | metal, 100 → 185 BPM | speeds up all the way |
+| Redline | original | punk-metal, 176 BPM | gallops, fills, twin leads |
+
+The classical pieces are public-domain compositions in new arrangements; the originals were written for the
+game. Instruments are synthesized from scratch: Karplus–Strong strings through an amp and cabinet model for
+guitars and bass, band-limited supersaws, FM electric piano and bells, additive organ, and a synthesized drum
+kit, mixed with a Freeverb reverb, tempo-synced echo and a limiter shared by both stems.
+
+Charts are generated for all four difficulties. Expert plays every note of the guitar part. Lower difficulties
+keep the metrically strongest notes within a note budget (about 40 / 60 / 80 % of Expert), a minimum spacing and
+a density cap, drop to three frets on Easy and four on Medium, and simplify chords. Frets are chosen by a
+second-order Viterbi search that follows the melody's contour (higher pitch, further right; bigger leaps,
+bigger moves; repeated notes stay put) and saves hand-position resets for rests. Star power phrases, solos and
+sections are placed too. Hide the built-in songs under Settings › Data › Built-in songs.
+
+`node tests/tools/starter-dev.ts <song-id> <out-dir>` renders a song to WAV, prints per-instrument levels and
+writes its `.chart`; add `--chart expert --bars 8-12` for a text view of the notes.
 
 ## Feedback when you make a mistake
 
@@ -96,6 +141,13 @@ Raw WebGL2, no engine. There is one instanced draw call per kind of object (gems
 beat lines, fret buttons, particles), so the CPU only uploads the handful of notes on screen each frame. The
 scene renders to an HDR (half-float), multisampled target, then goes through a bloom chain and an ACES tonemap.
 The look is neon-on-dark, emissive shapes carry most of the meaning, and a miss reads as missing light.
+
+The **Studio** note style is lit like a product shot: a procedural studio environment (a large softbox over
+the far end of the highway, strip lights at the sides, a warm kicker behind the player) with Fresnel
+reflections on glass lenses, polished and anodised metal, and clear-coated bodies. Reflections are ray-traced in
+the fragment shaders: each frame the 32 nearest gems are uploaded as spheres, reflection rays from gems and fret
+buttons are traced against them and against the highway plane, and the highway itself becomes lacquer that
+traces the mirror images of the approaching gems and darkens under them with soft contact shadows.
 
 `visual-test.html` (dev server only) shows every gem and sustain state in a frozen scene for tuning.
 

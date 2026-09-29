@@ -1,7 +1,7 @@
 // Note skins: how gems, sustains, fret buttons and hit particles look. Independent of the page theme.
 // Colour order: green, red, yellow, blue, orange, open, star power, missed (linear light).
 
-export const SKIN_IDS = ['dome', 'neon', 'swiss', 'baroque', 'pixel', 'clay'] as const;
+export const SKIN_IDS = ['dome', 'studio', 'neon', 'swiss', 'baroque', 'pixel', 'clay'] as const;
 export type SkinId = (typeof SKIN_IDS)[number];
 
 export interface NoteSkin {
@@ -11,8 +11,8 @@ export interface NoteSkin {
   /** index passed to shaders to pick a shading style */
   style: number;
   colors: number[][];
-  gem: 'dome' | 'puck' | 'disc' | 'jewel' | 'block' | 'pill';
-  button: 'wheel' | 'ring' | 'flat' | 'gold' | 'square' | 'soft';
+  gem: 'dome' | 'puck' | 'disc' | 'jewel' | 'block' | 'pill' | 'lens';
+  button: 'wheel' | 'ring' | 'flat' | 'gold' | 'square' | 'soft' | 'bezel';
   particles: 'sparks' | 'dots' | 'glitter' | 'squares' | 'puffs';
   /** scale on HOPO gems (smaller in Neon, like Guitar Hero) */
   hopoScale: number;
@@ -38,6 +38,26 @@ export const SKINS: Record<SkinId, NoteSkin> = {
     button: 'wheel',
     particles: 'sparks',
     hopoScale: 0.94,
+  },
+  studio: {
+    id: 'studio',
+    name: 'Studio',
+    description: 'Glass lenses in chrome bezels on a lacquered board, with ray-traced reflections and soft shadows.',
+    style: 6,
+    colors: [
+      [0.03, 0.46, 0.13],
+      [0.66, 0.025, 0.035],
+      [0.92, 0.52, 0.035],
+      [0.025, 0.15, 0.7],
+      [0.86, 0.2, 0.02],
+      [0.32, 0.07, 0.62],
+      [0.6, 0.88, 1.0],
+      [0.22, 0.21, 0.2],
+    ],
+    gem: 'lens',
+    button: 'bezel',
+    particles: 'sparks',
+    hopoScale: 0.92,
   },
   neon: {
     id: 'neon',

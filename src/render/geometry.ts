@@ -369,3 +369,44 @@ export function softButtonMesh(): Float32Array {
   }
   return lathe([...chain([[0, 0.01], [0.31, 0.01]], 1), ...chain(ring, 0)], 40, 0.72);
 }
+
+/**
+ * Studio: a glass lens (2) in a polished bezel (1) on a lacquered body (0). Smooth normals, so
+ * reflections glide across it rather than breaking into facets.
+ */
+export function lensMesh(): Float32Array {
+  const lens: [number, number][] = [];
+  for (let i = 0; i <= 6; i++) {
+    const r = (i / 6) * 0.29;
+    lens.push([r, 0.19 + 0.065 * (1 - (r / 0.29) ** 2)]);
+  }
+  const bezel: [number, number][] = [[0.29, 0.19]];
+  for (let i = 0; i <= 6; i++) {
+    const a = (i / 6) * Math.PI;
+    bezel.push([0.355 - Math.cos(a) * 0.065, 0.19 + Math.sin(a) * 0.04]);
+  }
+  bezel.push([0.43, 0.15], [0.44, 0.12]);
+  return lathe(
+    [...chain(lens, 2), ...chain(bezel, 1), ...chain([[0.44, 0.12], [0.44, 0.04], [0.42, 0.01], [0.39, 0], [0, 0]], 0)],
+    48,
+    0.72,
+    false,
+    0,
+    true,
+  );
+}
+
+/** Studio fret button: an anodised ring (0) around a smoked-glass well that lights up (1). */
+export function bezelButtonMesh(): Float32Array {
+  return lathe(
+    [
+      ...chain([[0, 0.018], [0.27, 0.022]], 1),
+      ...chain([[0.27, 0.022], [0.29, 0.058], [0.33, 0.074], [0.41, 0.074], [0.45, 0.055], [0.47, 0.02], [0.47, 0]], 0),
+    ],
+    48,
+    0.72,
+    false,
+    0,
+    true,
+  );
+}
