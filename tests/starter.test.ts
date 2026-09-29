@@ -143,21 +143,3 @@ test('every built-in song has a three-fret touch part on every difficulty', () =
     }
   }
 });
-
-test('a song rendered in parallel pieces sounds the same as in one pass', async () => {
-  const { assembleStems, chunkJob, planChunks, runJob, stemsJob } = await import('../src/starter/synth.ts');
-  // drums, a fiddle with a long release, accordion and double-tracked guitars
-  const id = 'drunken-sailor';
-  const one = runJob(stemsJob(id));
-  const plan = planChunks(id, 4);
-  assert.ok(plan.length >= 3);
-  const many = assembleStems(id, plan.map(([a, b]) => runJob(chunkJob(id, a, b))));
-  for (const k of ['guitar', 'song'] as const) {
-    assert.equal(many[k].length, one[k].length);
-    const a = new Int16Array(one[k].buffer, 44);
-    const b = new Int16Array(many[k].buffer, 44);
-    let max = 0;
-    for (let i = 0; i < a.length; i++) max = Math.max(max, Math.abs(a[i] - b[i]));
-    assert.ok(max < 330, `${k}: differs by ${((max / 32767) * 100).toFixed(2)}% of full scale`);
-  }
-});

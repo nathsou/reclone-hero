@@ -93,6 +93,9 @@ export function* renderSong(def: SongDef, sr: number, from = 0, to = songSeconds
   const tempo = new Tempo(def.tempo);
   const startS = Math.round(from * sr);
   const endS = Math.round(to * sr);
+  // Start a little early so reverb tails and ringing notes are in place at the window start.
+  const preroll = from > 0 ? Math.round(3 * sr) : 0;
+  const renderStart = Math.max(0, startS - preroll);
   const toS = (beat: number) => Math.round(tempo.toSec(beat) * sr);
 
   const tracks: NoteTrack[] = [];
@@ -110,28 +113,13 @@ export function* renderSong(def: SongDef, sr: number, from = 0, to = songSeconds
     });
     const size = BLOCK + Math.ceil((Math.min(maxLen, 16) + voice.tail + 0.3) * sr);
     const [gl, gr] = panGains(part.pan ?? 0);
-    tracks.push({ voice, part, notes, player, starts, lens, next: 0, L: new Float32Array(size), R: voice.stereo ? new Float32Array(size) : null, gl, gr });
+    const t: NoteTrack = { voice, part, notes, player, starts, lens, next: 0, L: new Float32Array(size), R: voice.stereo ? new Float32Array(size) : null, gl, gr };
+    // Notes that start before the render window are skipped.
+    while (t.next < notes.length && starts[t.next] < renderStart) t.next++;
+    tracks.push(t);
   };
   for (const p of def.player) addPart(p, true);
   for (const p of def.backing) addPart(p, false);
-
-  // A window that starts mid-song starts rendering early, so that what rings at its start is in
-  // place: reverb and echo tails (3 s), and any note begun before it that still sounds (a held pad
-  // can last many seconds; capped at 20 s). This is what lets a song render in parallel pieces.
-  let renderStart = startS;
-  if (from > 0) {
-    renderStart = startS - Math.round(3 * sr);
-    const earliest = startS - Math.round(20 * sr);
-    for (const t of tracks) {
-      const tail = (t.voice.tail + 0.3) * sr;
-      for (let i = 0; i < t.notes.length && t.starts[i] < startS; i++) {
-        if (t.starts[i] < renderStart && t.starts[i] >= earliest && t.starts[i] + Math.min(t.lens[i], 16) * sr + tail > startS) renderStart = t.starts[i];
-      }
-    }
-    renderStart = Math.max(0, renderStart);
-  }
-  // Notes that start before the render window are skipped.
-  for (const t of tracks) while (t.next < t.notes.length && t.starts[t.next] < renderStart) t.next++;
 
   const drums: DrumTrack[] = def.drums.map((d: DrumPart, di) => {
     const kit = makeKit(d.kit, sr);
@@ -139,16 +127,12 @@ export function* renderSong(def: SongDef, sr: number, from = 0, to = songSeconds
     const human = d.kit === 'electro' ? 0 : 1;
     const hits = [...d.hits]
       .sort((a, b) => a.b - b.b)
-      .map((h) => ({ at: Math.max(0, toS(h.b) + Math.round(human * (rand() - 0.5) * 0.006 * sr)), k: h.k, v: h.v * (1 - human * rand() * 0.1) }))
-      // humanising can swap two hits on the same beat: play them in the order they now fall
-      .sort((a, b) => a.at - b.at);
+      .map((h) => ({ at: Math.max(0, toS(h.b) + Math.round(human * (rand() - 0.5) * 0.006 * sr)), k: h.k, v: h.v * (1 - human * rand() * 0.1) }));
     let next = 0;
     while (next < hits.length && hits[next].at < renderStart) next++;
     const size = BLOCK + Math.ceil(2.4 * sr);
     return { kit, hits, next, L: new Float32Array(size), R: new Float32Array(size), S: new Float32Array(size), gain: (d.gain ?? 1) * 0.45, verb: d.verb ?? 1 };
   });
-
-  const lookahead = Math.round(0.02 * sr);
 
   // Sidechain pumping follows every kick.
   const kicks = drums.flatMap((d) => d.hits.filter((h) => h.k === 'kick').map((h) => h.at)).sort((a, b) => a - b);
@@ -196,10 +180,7 @@ export function* renderSong(def: SongDef, sr: number, from = 0, to = songSeconds
     }
 
     for (const t of tracks) {
-      t.voice.clock?.(c);
-      // Notes are queued a little ahead of their block, so one that a voice starts slightly early
-      // (a double-tracked take) is never clipped by the block edge wherever the blocks fall.
-      while (t.next < t.notes.length && t.starts[t.next] < c + n + lookahead) {
+      while (t.next < t.notes.length && t.starts[t.next] < c + n) {
         const i = t.next++;
         t.voice.note(t.notes[i], i, t.lens[i], t.L, t.R, t.starts[i] - c);
       }
