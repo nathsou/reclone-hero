@@ -101,7 +101,7 @@ export interface SongDef {
   solos: [number, number][];
   lengthBeats: number;
   previewBeat: number;
-  /** cover art: two colours and a motif */
+  /** Cover palette and fallback motif; shipped songs have bespoke vectors in coverDesign.ts. */
   art: { from: string; to: string; ink: string; motif: 'sun' | 'grid' | 'rings' | 'bars' | 'wave' | 'crest' | 'shards' | 'orbit' };
 }
 

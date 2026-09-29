@@ -69,7 +69,7 @@ export const DEFAULT_SETTINGS: Settings = {
   volSfx: 0.7,
   volCrowd: 0.5,
   volPreview: 0.6,
-  quality: 'high',
+  quality: 'medium',
   theme: 'system',
   noteStyle: 'theme',
   songView: 'list',

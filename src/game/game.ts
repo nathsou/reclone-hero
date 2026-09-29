@@ -161,6 +161,7 @@ export class Game {
   }
 
   private autoIdx = 0;
+  private prepared = false;
 
   /** Auto Star Power: once the bar is half full, set it off just before the next notes arrive. */
   private autoStarPower(t: number) {
@@ -180,6 +181,7 @@ export class Game {
   }
 
   private reset() {
+    this.prepared = false;
     this.presses = { kb: 0, pad: 0, touch: 0 };
     this.autoIdx = 0;
     const { track, chart, practice } = this.setup;
@@ -216,20 +218,28 @@ export class Game {
     this.botIdx = 0;
   }
 
-  start(): void {
+  /** Establish the final canvas layout before shader/target warm-up and before the audio clock runs. */
+  prepareStart(): void {
+    if (this.prepared) return;
+    this.prepared = true;
     const { song, practice } = this.setup;
     const t = this.setup.track;
     this.hud.setTitle(song.name, song.artist, `${INSTRUMENT_LABEL[t.instrument]} · ${t.difficulty}`);
     this.hud.setSections(this.setup.chart.sections.map((s) => s.time), practice ? practice.start : this.startTime, this.endTime);
     if (practice) this.hud.toast(`PRACTICE · ${practice.label}`, 'info', `${Math.round(practice.speed * 100)}% speed`);
-    input().gameMode = true;
-    input().setPollRate(4);
-    input().clear();
-    this.srcMask = { kb: 0, pad: input().padFretMask(), touch: 0 };
     const touch = !this.setup.bot && TouchFrets.wanted();
     this.hud.touch.setVisible(touch, this.setup.track.instrument === 'touch' ? TOUCH_LANES : undefined);
     this.hud.onTouchPause = () => this.pause();
     this.setKeyboardActive(!this.setup.bot && !input().hasPads && !touch);
+  }
+
+  start(): void {
+    this.prepareStart();
+    const { practice } = this.setup;
+    input().gameMode = true;
+    input().setPollRate(4);
+    input().clear();
+    this.srcMask = { kb: 0, pad: input().padFretMask(), touch: 0 };
     audio().play(this.startTime, practice?.speed ?? 1);
     this.lastFrame = performance.now();
     cancelAnimationFrame(this.raf);

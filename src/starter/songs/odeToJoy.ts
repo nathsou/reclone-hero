@@ -99,7 +99,7 @@ export const odeToJoy: SongDef = {
     {
       inst: 'lead',
       tone: 0.55,
-      gain: 1,
+      gain: 1.35,
       verb: 0.22,
       echo: 0.12,
       notes: [...seq(MELODY, bar(4)), ...seq(MELODY, bar(24), { transpose: 12 }), ...seq(SOLO, bar(40), { transpose: 12 }), ...seq(MELODY, bar(48), { transpose: 14, v: 0.9 })],
@@ -109,7 +109,7 @@ export const odeToJoy: SongDef = {
     {
       inst: 'drive',
       tone: 0.4,
-      gain: 0.55,
+      gain: 0.45,
       verb: 0.05,
       notes: [...rhythm(4, CHORDS), ...rhythm(24, CHORDS), ...rhythm(40, SOLO_CHORDS), ...rhythm(48, CHORDS, 2)],
     },
@@ -117,7 +117,7 @@ export const odeToJoy: SongDef = {
     { inst: 'lead', tone: 0.45, gain: 0.6, pan: 0.35, verb: 0.2, notes: diatonic(seq(MELODY, bar(24), { transpose: 12, v: 0.7 }), D_MAJOR, -2) },
     {
       inst: 'pickbass',
-      gain: 1,
+      gain: 0.8,
       verb: 0,
       notes: [
         ...seq(INTRO_BASS, bar(0)),
@@ -131,7 +131,7 @@ export const odeToJoy: SongDef = {
     },
     { inst: 'organ', gain: 0.7, pan: -0.25, verb: 0.3, notes: transpose(diatonic(seq(MELODY, bar(48), { v: 0.55 }), D_MAJOR, -2), 2) },
   ],
-  drums: [{ kit: 'rock', hits: drums() }],
+  drums: [{ kit: 'rock', hits: drums(), gain: 0.75 }],
   solos: [[bar(40), bar(48)]],
   lengthBeats: bar(68),
   previewBeat: bar(24),

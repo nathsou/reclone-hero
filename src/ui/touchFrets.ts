@@ -56,6 +56,12 @@ export class TouchFrets {
     );
     this.el = h('div', { class: 'touch-frets' }, zone, this.spButton, pause);
     this.el.addEventListener('contextmenu', (e) => e.preventDefault());
+    // Safari can still recognize a double-tap through compatibility touch events. Cancel their
+    // default gesture explicitly while Pointer Events continue to judge every fret press.
+    const preventGesture = (e: Event) => { if (e.cancelable) e.preventDefault(); };
+    for (const type of ['touchstart', 'touchmove', 'touchend', 'gesturestart', 'gesturechange']) {
+      this.el.addEventListener(type, preventGesture, { passive: false });
+    }
   }
 
   /** Whether the frets should show: always, never, or on screens whose main pointer is a finger. */

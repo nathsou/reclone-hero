@@ -4,7 +4,7 @@
 
 A Clone Hero–compatible rhythm game that runs in the browser. It reads your existing song folders
 (`notes.chart` / `notes.mid` + `song.ini` + audio stems), plays them on a WebGL2 highway, and is built with
-nothing but TypeScript 7 and Vite: no runtime dependencies. No songs and no guitar? It comes with 23
+nothing but TypeScript 7 and Vite: no runtime dependencies. No songs and no guitar? It comes with 53
 built-in songs and plays on the keyboard.
 
 ## Running it
@@ -16,7 +16,7 @@ npm run dev
 
 Open the printed URL in a Chromium-based browser (Chrome, Edge, Arc, Brave).
 
-- **Built-in songs:** on a first visit the song list opens straight away with the 43 songs that ship with
+- **Built-in songs:** on a first visit the song list opens straight away with the 53 songs that ship with
   the game (see [Built-in songs](#built-in-songs)).
 - **Your library:** click the folder button (or **Open charts folder…**) and pick the folder that holds your songs. The browser
   remembers it, so next time you only confirm access. Songs are read straight from disk; nothing is uploaded.
@@ -25,7 +25,7 @@ Open the printed URL in a Chromium-based browser (Chrome, Edge, Arc, Brave).
 
 ### Without any server
 
-`npm run build` produces a single self-contained file, `dist/index.html` (about 570 KB, all scripts, fonts,
+`npm run build` produces a single self-contained file, `dist/index.html` (about 796 KB, all scripts, fonts,
 styles and the built-in songs inlined). Double-click it to play from disk (`file://`), or put it on any static host (GitHub Pages,
 Netlify, a USB stick). Pushing to `main` deploys it to GitHub Pages (`.github/workflows/pages.yml`). Nothing runs server-side: songs are read in the browser.
 
@@ -60,7 +60,9 @@ On a touch screen, pads across the bottom of the screen are the frets (Settings 
 turns them on or off anywhere). There is no strum: touching a pad plays the note, several fingers make a
 chord, sliding onto another pad moves to that fret, and moving a held finger up and down is the whammy.
 Flick up, or press ★, for Star Power; the other button pauses. The highway ends above the pads, and on a
-phone held upright the score and Star Power meter sit in the top corners.
+phone held upright the score and Star Power meter sit in the top corners. Gameplay pads cancel browser
+double-tap gestures. In the phone library, **Browse** expands filters and folder tools; **More** opens
+secondary song actions. Landscape phones show the list and song controls beside each other.
 
 Every song also has a **Touch** part, next to Guitar and Bass: three big frets (drawn on the green, yellow
 and orange lanes) at every difficulty. The built-in songs have it charted from their scores; other charts
@@ -85,7 +87,7 @@ before the next notes, which helps on a phone.
   (WSOLA), and each loop reports its accuracy.
 - **Calibration:** tap along to clicks (audio offset) and flashes (video offset).
 - **Song list** (scroll with the mouse wheel; in the cover view the wheel or a trackpad swipe moves through
-  the covers) grouped the way Clone Hero does it (by artist, title letter, difficulty, length, year,
+  the covers; touch swipes drag them directly and coast to a stop) grouped the way Clone Hero does it (by artist, title letter, difficulty, length, year,
   genre, charter, folder, most played or recently played), ascending or descending, with a sticky group
   header, `PgUp`/`PgDn` to jump between groups, `R` for a random song and `/` to search. `V` switches
   between the list (with the song's details beside it) and a cover-flow view with an A–Z scrubber.
@@ -108,10 +110,10 @@ before the next notes, which helps on a phone.
 
 ## Built-in songs
 
-Forty-three songs ship inside the game, so there is always something to play. They are not recordings: each is a
+Fifty-three songs ship inside the game, so there is always something to play. They are not recordings: each is a
 score written in TypeScript (`src/starter/songs`), synthesized in the browser when you pick it (a Web Worker
-renders the stems in 2–6 s) and charted from the same score, so notes and audio cannot drift apart. They add
-about 390 KB to the build, need no download, and carry no licensing strings.
+renders the stems in 2–6 s) and charted from the same score, so notes and audio cannot drift apart. Their
+scores and synthesis are bundled with the game; they need no download and carry no licensing strings.
 
 | Song | Credit | Style | Expert |
 | --- | --- | --- | --- |
@@ -158,11 +160,34 @@ about 390 KB to the build, need no download, and carry no licensing strings.
 | Seventh Gear | original | progressive metal in 7/8 | 2+2+3 riffs, a clean interlude, a solo |
 | Afterglow Protocol | original | trance, 138 BPM | plucked arpeggios, a supersaw drop |
 | Sunday Tape | original | lo-fi neo-soul, swung | chord stabs, fills, double stops |
+| Mars (War Machine) | Holst, The Planets (1916), excerpt and variations | orchestral march in 5/4, electric climax | triplet ostinato, brass octaves |
+| Mercury (Winged Messenger) | Holst, The Planets (1916), excerpt and variations | orchestral scherzo in 6/8 | quick chromatic turns, harp interlude |
+| Jupiter (Jollity) | Holst, The Planets (1916), excerpt and variations | orchestral celebration in 2/4 | brass tune, running strings |
+| Paper Hearts | original | power pop, 132 BPM | guitar verse, singable chorus, arpeggio bridge |
+| City Lights | original | synth pop, 116 BPM | plucked chords and a bright synth hook |
+| Golden Hour | original | dance pop, 122 BPM | piano groove, four-on-the-floor chorus |
+| Warehouse Current | original | French house, 125 BPM | syncopated bass, organ stabs, filter lifts |
+| Prism Parade | original | disco house, 118 BPM | melodic lead, electric-piano break |
+| Assembly Line | original | electro rock, 110 BPM | mechanical muted riffs and a chip breakdown |
+| Photon Run | original | cinematic electronica, 104 BPM | pulse arpeggios, strings and brass |
 
 The classical and traditional pieces are public-domain compositions. Some are played straight, as written
 (Spring, the Little Fugue, Pomp and Circumstance, the Can-Can, the Gymnopédie); the others are new
 arrangements (melodies as written, with new bass lines, drums and some new passages). The originals were
-written for the game. Many of the older melodies are quoted note for note from public ABC transcriptions,
+written for the game. The Holst tracks are short arrangements of opening motifs, followed by original
+variations and transitions; they do not reproduce the complete movements. Their pitch and rhythm sources
+are the public-domain incipits on [IMSLP's The Planets page](https://imslp.org/wiki/The_Planets,_Op.32_(Holst,_Gustav)).
+The Circuit Atlas tracks draw on the production palettes of Daft Punk's *Homework*, *Discovery*,
+*Human After All* and *TRON: Legacy*, respectively, with newly written melodies and no samples from those records.
+Ode to Joy's lead/band balance and Pocket Change's headroom have also been improved.
+
+Every starter song has a bespoke vector cover illustrating its musical theme, with prominent title and
+composer/artist lettering. Compact path commands and shared drawing routines generate the covers on demand;
+no cover image files, external downloads or extra fonts are bundled. Three poster layouts, seven background
+treatments and individually drawn silhouettes keep all 53 covers distinct at both Cover Flow and thumbnail sizes.
+`tests/tools/cover-audit.mjs` renders a contact sheet for reviewing the complete collection.
+
+Many of the older melodies are quoted note for note from public ABC transcriptions,
 read by a small ABC reader (`src/starter/abc.ts`, checked bar by bar by a test): thesession.org (Korobeiniki,
 Drunken Sailor, The Irish Washerwoman), John Chambers' collection at trillian.mit.edu (Hava Nagila, the
 Can-Can, Pomp and Circumstance; Frank Nordberg's Spring, Jeff Bigler's two-voice Little Fugue, and the Paganini
@@ -224,6 +249,12 @@ are glass rings that fill with colour.
 
 ## Performance
 
+Medium is the default graphics quality; explicit quality choices remain saved. At device pixel ratio 2,
+Medium renders 61% fewer pixels than High and uses 2× instead of 4× MSAA. Touch controls establish the
+final canvas size before GPU warm-up, avoiding a target rebuild on the first gameplay frame.
+See [the performance audit](docs/performance-audit.md) for measurements, limitations and the WASM assessment.
+
+
 The frame loop is built to avoid garbage-collection stutter:
 - Render state, HUD state, matrices, uniform arrays, particles, input events, judgement events and
   sustain records are all preallocated or pooled.
@@ -243,6 +274,10 @@ The frame loop is built to avoid garbage-collection stutter:
 Node and reports JS time and heap garbage per frame on the densest chart. With `--profile` it attributes
 allocations to source lines. **Settings › Video › Show FPS** displays fps, CPU time and the worst frame of the
 last half second in-game.
+
+`node tests/bench/starter.bench.ts [song-id] [--full]` audits synthesis time, stem levels, mix peaks and
+limiter reduction. `tests/tools/browser-audit.mjs` contains optional real-Chrome regressions, including
+phone layouts, cover momentum, result recording and touch startup; its header lists the required environment.
 
 ## Development
 
