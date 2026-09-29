@@ -14,10 +14,12 @@ const HIGH = 'G5:4 F5:2 G5:2 D5:4';
 const BELLS = 'G5:2 G5 F5 Eb5 D5:4 | D5:2 D5 C5 Bb4 C5:4 | C5:2 C5 D5 C5 G4:4 | G4:2 A4 Bb4 C5 D5:4';
 /** the bass falls a step every bar under the unchanging ostinato */
 const FALL_H = prog('Gm Gm/F Eb D');
+/** What the strings hold over it: minor chords over the falling bass, so they never rub the ostinato's G and B-flat. */
+const STRINGS_H: Record<string, string> = { Gm: 'Gm', 'Gm/F': 'Gm/F', Eb: 'Cm/Eb', D: 'Gm/D' };
 
 const times = (s: string, n: number) => Array(n).fill(s).join(' ');
 const chugs = (h: string[], from: number, v = 0.75) => comp(h, BAR, bar(from), 'x.x.x.x.x.x.', (c) => powerOf(c, 'E2'), { v });
-const pads = (h: string[], from: number) => comp(h, BAR, bar(from), 'x-----------', (c) => voicing(c, 'G3'), { v: 0.55 });
+const pads = (h: string[], from: number) => comp(h.map((c) => STRINGS_H[c] ?? c), BAR, bar(from), 'x-----------', (c) => voicing(c, 'G3'), { v: 0.55 });
 const bass = (h: string[], from: number) => comp(h, BAR, bar(from), 'x.x.x.x.x.x.', (c) => [bassOf(c, 'D1')], { v: 0.8 });
 const fall = (n: number) => Array.from({ length: n }, (_, i) => FALL_H[i % 4]);
 const METAL = { kick: 'x.x.x.x.x.x.', snare: '....X.......', ride: 'x...x...x...' };

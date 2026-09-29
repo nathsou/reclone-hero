@@ -1,7 +1,7 @@
 import { abc } from '../abc.ts';
-import { bassOf, comp, nearVoicing, prog, voicing } from '../arrange.ts';
+import { bassOf, comp, nearVoicing, parseChord, prog, voicing } from '../arrange.ts';
 import { drumBars, FOUR_FLOOR, HOUSE_OPEN } from '../patterns.ts';
-import { diatonic, transpose } from '../score.ts';
+import { transpose } from '../score.ts';
 import type { Hit, Note, SongDef } from '../score.ts';
 
 // Uplifting trance in A minor, 138 BPM: plucked arpeggios, a breakdown on pads, a snare-roll build
@@ -14,14 +14,23 @@ a2 a2 g2 a2 | c'3 a3 g2 | g2 g2 e2 g2 | d'3 b3 g2 |
 a2 a2 g2 a2 | c'3 d'3 e'2 | e'3 d'3 c'2 | b3 c'3 d'2 |]
 `);
 const H = prog('Am F C G Am F C G');
-const A_MINOR = [9, 11, 0, 2, 4, 5, 7];
 const bar = (n: number) => n * 4;
 // Bar map: intro 0, arps 16, breakdown 32, build 40, drop 48, outro 64, end 72.
 const [INTRO, ARPS, BREAK, BUILD, DROP, OUTRO, END] = [0, 16, 32, 40, 48, 64, 72].map(bar);
 
 const place = (notes: Note[], at: number): Note[] => notes.map((n) => ({ ...n, b: n.b + at }));
 const melody = (at: number) => transpose(place(LEAD.notes, at), -12);
-const thirds = (notes: Note[]): Note[] => notes.map((n) => ({ ...n, p: [...diatonic([n], A_MINOR, -2)[0].p, ...n.p] }));
+/** Every section starts on a multiple of eight bars: the chord of the bar a beat falls in. */
+const chordAt = (b: number) => parseChord(H[Math.floor(b / 4) % H.length]);
+/** A second voice under the tune: the nearest note of the bar's chord a third to a sixth below. */
+const harmony = (notes: Note[]): Note[] =>
+  notes.map((n) => {
+    const c = chordAt(n.b);
+    const pcs = c.intervals.map((i) => (c.root + i) % 12);
+    const top = n.p[n.p.length - 1];
+    for (let below = top - 3; below >= top - 9; below--) if (pcs.includes(((below % 12) + 12) % 12)) return { ...n, p: [below, top] };
+    return n;
+  });
 const eightBars = (from: number, n: number) => [...Array(n)].map((_, i) => from + i * bar(8));
 const arp16 = (at: number, v = 0.7) => comp(H, 4, at, 'xxxxxxxxxxxxxxxx', (c) => [...voicing(c, 'A3'), voicing(c, 'A3')[0] + 12], { arp: [0, 1, 2, 3, 2, 1, 2, 3], v });
 const stabs = (at: number) => comp(H, 4, at, '..x...x...x...x.', (c) => nearVoicing(c, 'C4'), { v: 0.6 });
@@ -70,9 +79,9 @@ export const afterglow: SongDef = {
     { beat: OUTRO, name: 'Outro' },
   ],
   player: [
-    { inst: 'pluck', tone: 0.6, gain: 1, verb: 0.3, echo: 0.25, notes: [...eightBars(INTRO + bar(8), 1).flatMap(stabs), ...eightBars(ARPS, 2).flatMap((b) => arp16(b)), ...melody(BUILD), ...eightBars(OUTRO, 1).flatMap((b) => arp16(b, 0.6))] },
+    { inst: 'pluck', tone: 0.6, gain: 1, verb: 0.3, echo: 0.25, notes: [...comp(H.slice(4), 4, INTRO + bar(4), '..x...x...x...x.', (c) => nearVoicing(c, 'C4'), { v: 0.45 }), ...eightBars(INTRO + bar(8), 1).flatMap(stabs), ...eightBars(ARPS, 2).flatMap((b) => arp16(b)), ...melody(BUILD), ...eightBars(OUTRO, 1).flatMap((b) => arp16(b, 0.6))] },
     { inst: 'piano', gain: 1.5, verb: 0.5, echo: 0.2, notes: melody(BREAK).map((n) => ({ ...n, p: n.p.map((p) => p + 12) })) },
-    { inst: 'supersaw', tone: 0.65, gain: 1.4, verb: 0.35, echo: 0.2, notes: [...melody(DROP), ...thirds(melody(DROP + bar(8)).map((n) => ({ ...n, p: n.p.map((p) => p + 12) })))] },
+    { inst: 'supersaw', tone: 0.65, gain: 1.4, verb: 0.35, echo: 0.2, notes: [...melody(DROP), ...harmony(melody(DROP + bar(8)).map((n) => ({ ...n, p: n.p.map((p) => p + 12) })))] },
   ],
   backing: [
     { inst: 'pad', tone: 0.45, gain: 0.7, verb: 0.5, pump: 0.6, notes: [...pads(INTRO, 0.4), ...pads(ARPS + bar(8), 0.45), ...pads(BREAK, 0.6), ...pads(BUILD, 0.6), ...pads(DROP, 0.55), ...pads(DROP + bar(8), 0.6), ...pads(OUTRO, 0.4)] },

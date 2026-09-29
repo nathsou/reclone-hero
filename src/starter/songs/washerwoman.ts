@@ -72,7 +72,7 @@ export const washerwoman: SongDef = {
   ],
   backing: [
     { inst: 'clean', gain: 0.55, pan: -0.3, verb: 0.3, notes: [...strum(0, 0.5), ...strum(1, 0.55)] },
-    { inst: 'fiddle', tone: 0.55, gain: 0.7, pan: 0.35, verb: 0.3, notes: [...tune(1, -12).map((n) => ({ ...n, v: 0.6 })), ...tune(2, 12).map((n) => ({ ...n, v: 0.65 }))] },
+    { inst: 'fiddle', tone: 0.55, gain: 0.7, pan: 0.35, verb: 0.3, notes: [...tune(1, 12).map((n) => ({ ...n, v: 0.6 })), ...tune(2, 12).map((n) => ({ ...n, v: 0.65 }))] },
     { inst: 'drive', tone: 0.45, gain: 0.5, verb: 0.05, notes: chugs(2) },
     { inst: 'pickbass', gain: 0.95, verb: 0, notes: [...bass(1, 0.7), ...bass(2, 0.8), { b: END, d: 2, p: [31], v: 0.9 }] },
     { inst: 'accordion', gain: 0.85, pan: -0.35, verb: 0.3, notes: comp(H, 1.5, pass(2), 'x-.', (c) => voicing(c, 'B3'), { v: 0.5, step: 0.5 }) },

@@ -52,7 +52,12 @@ const withThirds = (notes: Note[]): Note[] =>
 
 const banjoChords = (at: number, v: number) => comp(H, 4, at, 'x...x...x...x...', (c) => voicing(c, 'G3'), { v });
 const tuba = (at: number, v: number) => comp(H, 4, at, 'x.......x.......', (c) => [bassOf(c, 'F1'), bassOf(c, 'F1') + 7], { v, arp: [0, 1] });
-const bones = (at: number, v: number) => comp(H, 4, at, 'x-------x-------', (c) => nearVoicing(c, 'E3').slice(0, 2), { v });
+/** Trombones on root and fifth: the tune's passing notes (the F in "when the saints") never grind on a held third. */
+const rootFifth = (c: string) => {
+  const r = bassOf(c, 'C3');
+  return [r, r + 7];
+};
+const bones = (at: number, v: number) => comp(H, 4, at, 'x-------x-------', rootFifth, { v });
 const reeds = (at: number, v: number) => swing(comp(H, 4, at, 'x.x.x.x.x.x.x.x.', (c) => voicing(c, 'C5'), { v, arp: [0, 1, 2, 3, 2, 1, 0, 1] }));
 /** A part's last four bars, for the tag. */
 const tag = (part: (at: number) => Note[]) => part(TAG - bar(12)).filter((n) => n.b >= TAG - 1e-6 && n.b < END - 1e-6);
@@ -116,7 +121,7 @@ export const saints: SongDef = {
   ],
   backing: [
     // trombones
-    { inst: 'brass', tone: 0.35, gain: 0.7, pan: -0.25, verb: 0.35, notes: [...comp(H.slice(0, 8), 4, DIRGE, 'x---------------', (c) => nearVoicing(c, 'E3'), { v: 0.45 }), ...bones(CH[0], 0.55), ...bones(CH[1], 0.45), ...bones(CH[2], 0.65), ...tag((at) => bones(at, 0.65))] },
+    { inst: 'brass', tone: 0.35, gain: 0.7, pan: -0.25, verb: 0.35, notes: [...comp(H.slice(0, 8), 4, DIRGE, 'x---------------', rootFifth, { v: 0.45 }), ...bones(CH[0], 0.55), ...bones(CH[1], 0.45), ...bones(CH[2], 0.65), ...tag((at) => bones(at, 0.65))] },
     // tuba
     { inst: 'brass', tone: 0.3, gain: 0.85, verb: 0.15, notes: [...comp(H.slice(0, 8), 4, DIRGE, 'x.......x.......', (c) => [bassOf(c, 'F1')], { v: 0.6 }), ...CH.flatMap((at) => tuba(at, 0.75)), ...tag((at) => tuba(at, 0.75)), { b: END, d: 2, p: [36], v: 0.9 }] },
     { inst: 'banjo', gain: 0.6, pan: 0.3, verb: 0.2, notes: [...banjoChords(CH[0], 0.55), ...banjoChords(CH[1], 0.4), ...banjoChords(CH[2], 0.6), ...tag((at) => banjoChords(at, 0.6))] },

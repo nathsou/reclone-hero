@@ -1,4 +1,5 @@
 import type { SongDef } from '../score.ts';
+import { LEVELS } from './levels.ts';
 import { afterglow } from './afterglow.ts';
 import { blueDanube } from './blueDanube.ts';
 import { canCan } from './canCan.ts';
@@ -46,5 +47,5 @@ import { mars, mercury, jupiter } from './planets.ts';
 import { paperHearts, cityLights, goldenHour } from './popSingles.ts';
 import { warehouseCurrent, prismParade, assemblyLine, photonRun } from './robotSuite.ts';
 
-/** The built-in songs, in the order they are listed. */
-export const STARTER_SONGS: SongDef[] = [odeToJoy, ignition, midnightDrive, neonSkyline, furElise, canon, mountainKing, redline, fifth, nachtmusik, forty, toccata, preludeInC, minuet, williamTell, swanLake, valkyries, blueDanube, morningMood, moonlight, funeralMarch, entertainer, carolOfTheBells, korobeiniki, drunkenSailor, spring, littleFugue, pompAndCircumstance, canCan, greensleeves, washerwoman, havaNagila, saints, gymnopedie, caprice24, glassElevator, pocketChange, switchback, rustBelt, lowOrbit, seventhGear, afterglow, sundayTape, mars, mercury, jupiter, paperHearts, cityLights, goldenHour, warehouseCurrent, prismParade, assemblyLine, photonRun];
+/** The built-in songs, in the order they are listed, each with its loudness trim. */
+export const STARTER_SONGS: SongDef[] = [odeToJoy, ignition, midnightDrive, neonSkyline, furElise, canon, mountainKing, redline, fifth, nachtmusik, forty, toccata, preludeInC, minuet, williamTell, swanLake, valkyries, blueDanube, morningMood, moonlight, funeralMarch, entertainer, carolOfTheBells, korobeiniki, drunkenSailor, spring, littleFugue, pompAndCircumstance, canCan, greensleeves, washerwoman, havaNagila, saints, gymnopedie, caprice24, glassElevator, pocketChange, switchback, rustBelt, lowOrbit, seventhGear, afterglow, sundayTape, mars, mercury, jupiter, paperHearts, cityLights, goldenHour, warehouseCurrent, prismParade, assemblyLine, photonRun].map((s) => ({ ...s, levelDb: LEVELS[s.id] ?? s.levelDb ?? 0 }));

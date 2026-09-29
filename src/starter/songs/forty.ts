@@ -74,9 +74,10 @@ export const forty: SongDef = {
       notes: [...seq(THEME + ' ' + THEME, bar(8)), ...seq(THEME + ' ' + THEME, bar(32), { transpose: 12, v: 0.85 }), ...seq(THEME, bar(56), { transpose: 12, v: 0.9 }), ...seq(END, bar(64), { transpose: 12 })],
     },
     { inst: 'pluck', tone: 0.6, gain: 1, verb: 0.2, echo: 0.25, notes: [...arps(BREAK_H, 24), ...arps(BREAK_H, 48)] },
+    // the theme on piano first: the song starts with something to play
+    { inst: 'piano', gain: 0.9, pan: -0.15, verb: 0.4, notes: seq(THEME, bar(0), { v: 0.7 }) },
   ],
   backing: [
-    { inst: 'piano', gain: 0.9, pan: -0.15, verb: 0.4, notes: seq(THEME, bar(0), { v: 0.7 }) },
     { inst: 'strings', gain: 0.8, pan: -0.25, verb: 0.45, notes: [...pads(THEME_H, 0), ...pads([...THEME_H, ...THEME_H], 8), ...pads(BREAK_H, 24), ...pads(BREAK_H, 48)] },
     { inst: 'pad', tone: 0.4, gain: 0.8, verb: 0.3, pump: 0.35, notes: [...pads([...THEME_H, ...THEME_H], 32), ...pads(THEME_H, 56), ...seq('G3+Bb3+D4:32', bar(64), { v: 0.6 })] },
     { inst: 'synthbass', tone: 0.6, gain: 1, verb: 0, notes: [...reese([...THEME_H, ...THEME_H], 8), ...reese([...THEME_H, ...THEME_H], 32), ...reese(THEME_H, 56), ...seq('G1:32', bar(64))] },

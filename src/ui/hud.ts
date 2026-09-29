@@ -400,7 +400,24 @@ export class Hud {
     setTimeout(() => title.remove(), 5200);
     const box = this.root.getBoundingClientRect();
     const cannons: [number, number][] = [[0, box.height], [box.width, box.height], ...this.lanes.filter((_, i) => i % 2 === 0)];
-    void import('./confetti.ts').then(({ celebrate }) => celebrate(this.root, { cannons, fireworks: 6, spread: 2.2 }));
+    const run = ++this.runId;
+    void import('./confetti.ts').then(({ celebrate }) => {
+      if (run === this.runId) this.stopConfetti = celebrate(this.root, { cannons, fireworks: 6, spread: 2.2 });
+    });
+  }
+
+  private runId = 0;
+  private stopConfetti: (() => void) | null = null;
+
+  /** A new run (start, restart, practice loop): clear what the last one left on screen. */
+  resetRun(): void {
+    this.runId++;
+    clearTimeout(this.soloTimer);
+    this.soloTimer = 0;
+    this.solo.classList.remove('on', 'done', 'perfect', 'slipping');
+    this.root.querySelectorAll('.hud-fc').forEach((el) => el.remove());
+    this.stopConfetti?.();
+    this.stopConfetti = null;
   }
 
   /** Add a tick to the hit-timing bar. delta in seconds; negative is early. */

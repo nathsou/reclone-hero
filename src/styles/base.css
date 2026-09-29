@@ -37,6 +37,12 @@ button {
   animation: screen-in 0.22s ease-out;
 }
 
+/* phones in landscape: keep menus clear of the notch (the game and results screens pad themselves) */
+.screen:not(.game-screen):not(.results-screen) {
+  padding-left: env(safe-area-inset-left);
+  padding-right: env(safe-area-inset-right);
+}
+
 @keyframes screen-in {
   from {
     opacity: 0;

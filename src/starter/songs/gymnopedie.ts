@@ -1,8 +1,8 @@
 import { abc } from '../abc.ts';
 import type { Note, SongDef } from '../score.ts';
 
-// Erik Satie, Gymnopédie No. 1 (1888; public domain), played straight on the piano: you play the
-// right hand and the left hand's chords; the bass notes are played for you. After Colin Hume's
+// Erik Satie, Gymnopédie No. 1 (1888; public domain), played straight on the piano: you play all
+// of it, the right hand and the left hand's bass notes and chords. After Colin Hume's
 // transcription.
 const MELODY = `
 |: z3 | z3 | z3 | z3 | zfa | gfc | Bcd | A3 |
@@ -59,8 +59,10 @@ export const gymnopedie: SongDef = {
   player: [
     { inst: 'piano', gain: 1.2, pan: 0.1, verb: 0.45, notes: read(MELODY) },
     { inst: 'piano', gain: 1, pan: -0.05, verb: 0.45, notes: read(CHORDS).map((n) => ({ ...n, v: 0.55 })) },
+    // the bass too: the whole waltz (bass, chord, melody) is yours to play
+    { inst: 'piano', gain: 1, pan: -0.15, verb: 0.45, notes: read(BASS, -24).map((n) => ({ ...n, v: 0.6 })) },
   ],
-  backing: [{ inst: 'piano', gain: 1, pan: -0.15, verb: 0.45, notes: read(BASS, -24).map((n) => ({ ...n, v: 0.6 })) }],
+  backing: [],
   drums: [],
   solos: [],
   lengthBeats: END + 3,

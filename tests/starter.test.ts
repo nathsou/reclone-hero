@@ -185,3 +185,24 @@ test('Holst opening excerpts keep their original meter and pitches', async () =>
   assert.equal(seqLength(JUPITER_MOTIF) + 0.5, 14);
   assert.deepEqual(MERCURY_MOTIF.slice(0, 6).map(n => n.p[0]), [65, 70, 74, 76, 71, 68]);
 });
+
+test('no voice rings longer than the tail it declares (so no note is cut at a block edge)', async () => {
+  const { makeVoice } = await import('../src/starter/instruments.ts');
+  // The renderer sizes each part's buffer from the longest note plus the voice's declared tail
+  // (and 0.3 s): a voice that writes further than that loses the end of a note that starts late in
+  // a render block. The fiddle's release used to outlast its tail.
+  const kinds = ['drive', 'lead', 'clean', 'pickbass', 'synthbass', 'subbass', 'supersaw', 'pluck', 'pad', 'choir', 'strings', 'organ', 'piano', 'harpsichord', 'bell', 'chip', 'brass', 'accordion', 'fiddle', 'banjo', 'timpani'] as const;
+  const sr = 44100;
+  for (const kind of kinds) {
+    for (const len of [0.1, 0.5, 2]) {
+      const v = makeVoice(kind, sr, 0.5);
+      const L = new Float32Array(sr * 8);
+      const R = new Float32Array(sr * 8);
+      v.note({ b: 0, d: 1, p: [kind === 'timpani' ? 43 : kind.includes('bass') ? 36 : 60], v: 1 }, 0, len, L, R, 0);
+      let last = 0;
+      for (let i = 0; i < L.length; i++) if (Math.abs(L[i]) > 1e-7 || Math.abs(R[i]) > 1e-7) last = i;
+      const ring = last / sr - len;
+      assert.ok(ring <= v.tail + 0.3 + 1e-3, `${kind} (${len} s note) rings ${ring.toFixed(2)} s past its end, declares ${v.tail} s`);
+    }
+  }
+});

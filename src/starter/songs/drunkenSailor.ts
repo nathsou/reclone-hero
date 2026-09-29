@@ -82,7 +82,7 @@ export const drunkenSailor: SongDef = {
   ],
   backing: [
     { inst: 'accordion', gain: 0.7, pan: -0.3, verb: 0.2, notes: [...at(VERSE.notes, bar(8)), ...squeeze(16), ...squeeze(24), ...at(VERSE.notes, bar(32)), ...squeeze(40, 2)] },
-    { inst: 'fiddle', gain: 0.75, pan: 0.35, verb: 0.3, notes: [...transpose(at(CHORUS.notes, bar(16)), -12), ...diatonic(at(BREAK.notes, bar(24)), EDOR, -2), ...at(CHORUS.notes, bar(48))] },
+    { inst: 'fiddle', gain: 0.75, pan: 0.35, verb: 0.3, notes: [...transpose(at(CHORUS.notes, bar(16)), 12), ...diatonic(at(BREAK.notes, bar(24)), EDOR, -2), ...at(CHORUS.notes, bar(48))] },
     { inst: 'drive', tone: 0.4, gain: 0.55, verb: 0.05, notes: chugs(16, 2).concat(chugs(32, 3)) },
     { inst: 'pickbass', gain: 1, verb: 0, notes: [...oompah(8, 6), ...seq('E1:8 D1:8 E1:16', bar(56))] },
   ],

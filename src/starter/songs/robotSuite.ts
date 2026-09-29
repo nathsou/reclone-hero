@@ -1,6 +1,6 @@
 import { bassOf, comp, nearVoicing, prog, voicing } from '../arrange.ts';
 import { drumBars, HOUSE_OPEN, FOUR_FLOOR, HALF_TIME } from '../patterns.ts';
-import { loop, seq } from '../score.ts';
+import { loop, seq, transpose } from '../score.ts';
 import type { Part, SongDef } from '../score.ts';
 
 // Original compositions informed by four production palettes: raw French house (Homework),
@@ -54,13 +54,16 @@ export const prismParade: SongDef = {
 
 const A = prog('E5 E5 G5 A5 E5 E5 C5 D5');
 const piston = 'E3*:1 E3* . E3* G3*:2 E3*:1 . E3*:2 D3*:1 E3* B3*:2 G3*:2';
+/** The piston riff follows the progression, a bar per chord, moved to each chord's root. */
+const ROOT_SHIFT: Record<string, number> = { E5: 0, G5: 3, A5: 5, C5: -4, D5: -2 };
+const pistons = (at: number) => A.flatMap((c, i) => transpose(seq(piston, at + i * 4), ROOT_SHIFT[c]));
 export const assemblyLine: SongDef = {
   ...meta('assembly-line', 'Assembly Line', 'Electro Rock', 110, ['#282b2f', '#d9d6c7'], 'shards'),
   sections: [section(0, 'Boot'), section(32, 'Pistons'), section(64, 'Human Override'), section(96, 'Power Cut'), section(128, 'Restart'), section(160, 'Overdrive'), section(192, 'Shutdown')],
   player: [
-    { inst: 'drive', gain: 0.95, verb: 0.08, notes: [0, 32, 128, 192].flatMap(at => loop(seq(piston), 8, 4, at)) },
-    { inst: 'drive', gain: 1.2, tone: 0.7, verb: 0.08, notes: [64, 160].flatMap(at => comp(A, 4, at, 'mm.m..m.mm.m..m.', c => voicing(c, 'E2'), { v: 0.8 })) },
-    { inst: 'chip', tone: 0.3, gain: 0.75, verb: 0.12, echo: 0.1, notes: [...loop(seq('E4:2 .:2 B4:2 G4:2 E4:4 D4:2 B3:2'), 8, 4, 96)] },
+    { inst: 'drive', gain: 2.1, verb: 0.08, notes: [0, 32, 128, 192].flatMap(pistons) },
+    { inst: 'drive', gain: 2, tone: 0.7, verb: 0.08, notes: [64, 160].flatMap(at => comp(A, 4, at, 'mm.m..m.mm.m..m.', c => voicing(c, 'E2'), { v: 0.8 })) },
+    { inst: 'chip', tone: 0.3, gain: 1.5, verb: 0.12, echo: 0.1, notes: [...loop(seq('E4:2 .:2 B4:2 G4:2 E4:4 D4:2 B3:2'), 8, 4, 96)] },
   ],
   backing: [
     { inst: 'synthbass', tone: 0.65, gain: 0.65, verb: 0, notes: [0, 32, 64, 128, 160, 192].flatMap(at => bass(A, at, 'x.x.x.x.x.x.x.x.')) },

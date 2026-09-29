@@ -37,7 +37,7 @@ function single(o: {
 }
 
 export const paperHearts = single({
-  id: 'paper-hearts', name: 'Paper Hearts', artist: 'The Skylights', genre: 'Power Pop', bpm: 132,
+  id: 'paper-hearts', name: 'Paper Hearts', artist: 'Harbour Kites', genre: 'Power Pop', bpm: 132,
   verse: 'D A Bm G D A G A', chorus: 'G D A Bm G D A A', bridge: 'Em G Bm A', sound: 'clean', groove: ROCK, colors: ['#422247', '#ff867a'],
   hook: 'B4:2 A4:2 G4:4 D5:4 B4:4 A4:2 F#4:2 A4:4 F#4:8 | E5:2 D5:2 C#5:4 A4:4 E5:4 D5:6 B4:2 F#5:4 D5:4 | B4:2 A4:2 G4:4 D5:6 B4:2 A4:4 F#4:4 E4:4 D4:4 | E4:2 F#4:2 A4:4 C#5:4 B4:4 A4:12 .:4',
 });

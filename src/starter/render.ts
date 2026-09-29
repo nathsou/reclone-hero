@@ -1,4 +1,4 @@
-import { Biquad, Reverb, rng } from './dsp.ts';
+import { Biquad, dbToGain, Reverb, rng } from './dsp.ts';
 import { makeKit, makeVoice } from './instruments.ts';
 import type { DrumSample, Voice } from './instruments.ts';
 import { Tempo } from './score.ts';
@@ -127,7 +127,10 @@ export function* renderSong(def: SongDef, sr: number, from = 0, to = songSeconds
     const human = d.kit === 'electro' ? 0 : 1;
     const hits = [...d.hits]
       .sort((a, b) => a.b - b.b)
-      .map((h) => ({ at: Math.max(0, toS(h.b) + Math.round(human * (rand() - 0.5) * 0.006 * sr)), k: h.k, v: h.v * (1 - human * rand() * 0.1) }));
+      .map((h) => ({ at: Math.max(0, toS(h.b) + Math.round(human * (rand() - 0.5) * 0.006 * sr)), k: h.k, v: h.v * (1 - human * rand() * 0.1) }))
+      // humanising can swap two hits on the same beat: play them in the order they now fall, or
+      // a block edge between them would cut the start off the later one
+      .sort((a, b) => a.at - b.at);
     let next = 0;
     while (next < hits.length && hits[next].at < renderStart) next++;
     const size = BLOCK + Math.ceil(2.4 * sr);
@@ -156,6 +159,7 @@ export function* renderSong(def: SongDef, sr: number, from = 0, to = songSeconds
   const sendEB = new Float32Array(BLOCK);
   const pump = new Float32Array(BLOCK);
   const lim = { env: 0 };
+  const trim = dbToGain(def.levelDb ?? 0);
   const att = Math.exp(-1 / (0.0015 * sr));
   const rel = Math.exp(-1 / (0.15 * sr));
   const THRESH = 0.72;
@@ -250,10 +254,13 @@ export function* renderSong(def: SongDef, sr: number, from = 0, to = songSeconds
     echoP.process(sendEP, pl, pr, n);
     echoB.process(sendEB, bl, br, n);
 
-    // Master: one limiter linked across both stems, so the game's sum of the two never clips.
+    // Master: the song's level trim, then one limiter linked across both stems, so the game's sum
+    // of the two never clips.
     for (let i = 0; i < n; i++) {
-      bl[i] = hpB[0].tick(bl[i]);
-      br[i] = hpB[1].tick(br[i]);
+      bl[i] = hpB[0].tick(bl[i]) * trim;
+      br[i] = hpB[1].tick(br[i]) * trim;
+      pl[i] *= trim;
+      pr[i] *= trim;
       const x = Math.max(Math.abs(pl[i] + bl[i]), Math.abs(pr[i] + br[i]));
       lim.env = x > lim.env ? att * lim.env + (1 - att) * x : rel * lim.env + (1 - rel) * x;
       const g = lim.env > THRESH ? (THRESH + (lim.env - THRESH) / 10) / lim.env : 1;

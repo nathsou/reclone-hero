@@ -123,7 +123,7 @@ interface Mesh {
 export class Renderer {
   readonly canvas: HTMLCanvasElement;
   private readonly gl: GL;
-  private readonly hdr: boolean;
+  private hdr: boolean;
   private quality: Quality = 'high';
 
   private pBg!: Program;
@@ -209,7 +209,52 @@ export class Renderer {
       this.resizeObserver.observe(canvas);
     }
     window.addEventListener('resize', this.markDirty);
+    canvas.addEventListener('webglcontextlost', this.onLost);
+    canvas.addEventListener('webglcontextrestored', this.onRestored);
   }
+
+  /**
+   * Called when the GPU context goes (false) and comes back (true). Phones drop it when the app is
+   * backgrounded or the GPU resets; everything is rebuilt on restore, so the song can go on.
+   */
+  onContextChange: ((available: boolean) => void) | null = null;
+  private lost = false;
+  /** the background image, kept to upload again after a lost context */
+  private bgSource: TexImageSource | null = null;
+
+  get contextLost(): boolean {
+    return this.lost;
+  }
+
+  private onLost = (e: Event) => {
+    e.preventDefault(); // ask for the context back
+    this.lost = true;
+    this.onContextChange?.(false);
+  };
+
+  private onRestored = () => {
+    const gl = this.gl;
+    this.hdr = !!gl.getExtension('EXT_color_buffer_float');
+    gl.getExtension('OES_texture_float_linear');
+    // Every GL object died with the old context: forget them all and build again.
+    this.scene = null;
+    this.msFbo = this.msColor = this.msDepth = this.sceneDepth = null;
+    this.bloom = [];
+    this.grabs = [null, null];
+    this.bgTex = null;
+    this.videoW = this.videoH = 0;
+    this.width = this.height = 0;
+    this.sizeDirty = true;
+    this.init();
+    this.applySkin();
+    const video = this.video;
+    if (video) {
+      this.video = null;
+      this.setVideo(video);
+    } else if (this.bgSource) this.setBackground(this.bgSource);
+    this.lost = false;
+    this.onContextChange?.(true);
+  };
 
   private markDirty = () => {
     this.sizeDirty = true;
@@ -341,6 +386,7 @@ export class Renderer {
   setBackground(img: TexImageSource | null): void {
     const gl = this.gl;
     if (this.video) return;
+    this.bgSource = img;
     if (this.bgTex) gl.deleteTexture(this.bgTex);
     this.bgTex = null;
     if (!img) return;
@@ -494,6 +540,11 @@ export class Renderer {
   private setSkin(skin: NoteSkin) {
     if (skin === this.skin) return;
     this.skin = skin;
+    this.applySkin();
+  }
+
+  private applySkin() {
+    const skin = this.skin;
     this.colorsFlat = new Float32Array(skin.colors.flat());
     this.gems = this.gemMeshes[skin.gem];
     this.buttons = this.buttonMeshes[skin.button];
@@ -599,6 +650,7 @@ export class Renderer {
    * compiling pipelines during loading instead of hitching on the first hit, open note or star power.
    */
   warmUp(beats: BeatList, skin: NoteSkin = this.skin, theme: RenderTheme = DEFAULT_RENDER_THEME): void {
+    if (this.lost) return;
     const notes = noteListOf([
       { time: 0.1, mask: 1, type: 0, endTime: 0.6 },
       { time: 0.3, mask: 2, type: 1, sp: 0 },
@@ -639,6 +691,7 @@ export class Renderer {
   // ---------------------------------------------------------------- frame
 
   render(s: RenderState): void {
+    if (this.lost) return;
     const gl = this.gl;
     this.lefty = s.lefty;
     this.time = s.time;
@@ -1101,6 +1154,9 @@ export class Renderer {
   dispose(): void {
     this.resizeObserver?.disconnect();
     window.removeEventListener('resize', this.markDirty);
+    this.canvas.removeEventListener('webglcontextlost', this.onLost);
+    this.canvas.removeEventListener('webglcontextrestored', this.onRestored);
+    this.onContextChange = null;
     this.gl.getExtension('WEBGL_lose_context')?.loseContext();
   }
 }

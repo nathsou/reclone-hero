@@ -492,7 +492,8 @@ class Osc implements Voice {
     this.sr = sr;
     this.kind = kind;
     this.tone = tone;
-    this.tail = kind === 'fiddle' ? 0.25 : 0.12;
+    // the release rings for five time constants (see note())
+    this.tail = (kind === 'fiddle' ? 0.12 : kind === 'accordion' ? 0.05 : 0.03) * 5;
     this.c =
       kind === 'fiddle'
         ? [Biquad.make('peak', 700, sr, 1.2, 4), Biquad.make('peak', 2800, sr, 1.5, 5), Biquad.make('lp', 7000, sr, 0.7), Biquad.make('hp', 180, sr, 0.7)]

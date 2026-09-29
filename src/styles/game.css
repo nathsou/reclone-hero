@@ -107,9 +107,9 @@
 /* title / part row and the song timeline */
 .hud-top {
   position: absolute;
-  left: 32px;
-  right: 32px;
-  top: 24px;
+  left: calc(32px + env(safe-area-inset-left));
+  right: calc(32px + env(safe-area-inset-right));
+  top: calc(24px + env(safe-area-inset-top));
   display: flex;
   align-items: baseline;
   gap: 14px;
@@ -149,9 +149,9 @@
 .hud-timeline {
   --p: 0;
   position: absolute;
-  left: 32px;
-  right: 32px;
-  top: 56px;
+  left: calc(32px + env(safe-area-inset-left));
+  right: calc(32px + env(safe-area-inset-right));
+  top: calc(56px + env(safe-area-inset-top));
   height: 36px;
 }
 
@@ -858,13 +858,10 @@
 }
 
 @media (max-width: 760px) {
-  .hud-top {
-    left: 16px;
-    right: 16px;
-  }
+  .hud-top,
   .hud-timeline {
-    left: 16px;
-    right: 16px;
+    left: calc(16px + env(safe-area-inset-left));
+    right: calc(16px + env(safe-area-inset-right));
   }
 }
 
@@ -1191,7 +1188,7 @@
 
 .tf-sp {
   right: max(12px, env(safe-area-inset-right));
-  top: 96px;
+  top: calc(96px + env(safe-area-inset-top));
   width: 58px;
   height: 58px;
   border-radius: 50%;
@@ -1219,7 +1216,7 @@
 
 .tf-pause {
   left: max(12px, env(safe-area-inset-left));
-  top: 96px;
+  top: calc(96px + env(safe-area-inset-top));
   width: 46px;
   height: 46px;
   border-radius: 10px;
@@ -1243,11 +1240,11 @@
 }
 
 .hud.narrow .tf-pause {
-  top: 200px;
+  top: calc(200px + env(safe-area-inset-top));
 }
 
 .hud.narrow .tf-sp {
-  top: 236px;
+  top: calc(236px + env(safe-area-inset-top));
 }
 
 /* the game screen must not scroll, zoom or select while fingers are on it */
@@ -1259,6 +1256,20 @@
 }
 
 /* portrait: score and Star Power docked in the top corners, smaller */
+.hud.narrow .hud-left,
+.hud.narrow .hud-right {
+  /* docked below the top bar: clear the notch too */
+  top: env(safe-area-inset-top);
+}
+
+.hud.narrow .hud-left {
+  left: env(safe-area-inset-left);
+}
+
+.hud.narrow .hud-right {
+  left: calc(-1 * env(safe-area-inset-right));
+}
+
 .hud.narrow .hud-left {
   align-items: flex-start;
   padding-right: 0;
