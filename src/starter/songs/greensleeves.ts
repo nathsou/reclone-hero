@@ -66,10 +66,10 @@ export const greensleeves: SongDef = {
     { beat: pass(2) + 48, name: 'Last Chorus' },
   ],
   player: [
-    { inst: 'clean', gain: 1.1, pan: -0.1, verb: 0.35, notes: melody(0) },
+    { inst: 'clean', gain: 1.45, pan: -0.1, verb: 0.35, notes: melody(0) },
     // then the lute in thirds under the fiddle, and in octaves at the end
-    { inst: 'clean', gain: 0.95, pan: -0.1, verb: 0.35, notes: thirds(melody(1)) },
-    { inst: 'clean', gain: 0.95, pan: -0.1, verb: 0.35, notes: melody(2).map((n) => ({ ...n, p: [n.p[0] - 12, n.p[0]] })) },
+    { inst: 'clean', gain: 1.25, pan: -0.1, verb: 0.35, notes: thirds(melody(1)) },
+    { inst: 'clean', gain: 1.25, pan: -0.1, verb: 0.35, notes: melody(2).map((n) => ({ ...n, p: [n.p[0] - 12, n.p[0]] })) },
   ],
   backing: [
     { inst: 'clean', gain: 0.55, pan: 0.2, verb: 0.35, notes: [...lute(0, 0.55), ...lute(1, 0.5), ...lute(2, 0.6), { b: pass(3), d: 4, p: [43, 50, 55, 58, 62], v: 0.6 }] },

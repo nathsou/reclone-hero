@@ -57,6 +57,12 @@ const CODA = 'Bb2^5!:16 | Gb2^5!:8 F2^5! | Bb2^5!:16 | .:16';
 
 const DOOM = { kick: 'x.......x.x.....', snare: '........X.......', ride: 'x...x...x...x...' };
 const pads = (h: string[], from: number, v = 0.5) => comp(h, 4, bar(from), 'x---------------', (c) => voicing(c, 'F3'), { v });
+/** Open fifths under the march: its melody passes through C and A, which a held D-flat would rub against. */
+const fifths = (h: string[], from: number, v = 0.5) =>
+  comp(h, 4, bar(from), 'x---------------', (c) => {
+    const r = voicing(c, 'F3')[0];
+    return [r, r + 7, r + 12];
+  }, { v });
 const roots = (h: string[], from: number) => comp(h, 4, bar(from), 'x-------x-------', (c) => [bassOf(c, 'D1')], { v: 0.8 });
 
 // Bar map: prelude 0, march 4, procession 12, trio 20, solo 28, last march 36, coda 44, end 48.
@@ -107,11 +113,11 @@ export const funeralMarch: SongDef = {
     { inst: 'lead', tone: 0.55, gain: 1, verb: 0.35, echo: 0.2, notes: [...seq(LEAD, bar(12)), ...seq(SOLO, bar(28))] },
   ],
   backing: [
-    { inst: 'strings', gain: 0.75, pan: 0.2, verb: 0.55, notes: [...pads(INTRO_H, 0, 0.4), ...pads([...MARCH_H, ...MARCH_H], 4), ...pads(TRIO_H, 20), ...pads(SOLO_H, 28), ...pads(MARCH_H, 36)] },
+    { inst: 'strings', gain: 0.75, pan: 0.2, verb: 0.55, notes: [...pads(INTRO_H, 0, 0.4), ...fifths([...MARCH_H, ...MARCH_H], 4), ...pads(TRIO_H, 20), ...pads(SOLO_H, 28), ...fifths(MARCH_H, 36)] },
     { inst: 'drive', tone: 0.35, gain: 0.5, verb: 0.1, notes: [...seq(HEAVY, bar(12), { v: 0.7 }), ...comp(SOLO_H, 4, bar(28), 'x.......x.......', (c) => [bassOf(c, 'E2'), bassOf(c, 'E2') + 7], { v: 0.7 })] },
     { inst: 'lead', tone: 0.5, gain: 0.7, pan: -0.3, verb: 0.35, notes: seq(MARCH, bar(36), { transpose: 12, v: 0.7 }) },
     { inst: 'lead', tone: 0.45, gain: 0.55, pan: 0.35, verb: 0.35, notes: diatonic(seq(MARCH, bar(36), { transpose: 12, v: 0.65 }), BB_MINOR, -2) },
-    { inst: 'choir', tone: 0.3, gain: 0.6, verb: 0.55, notes: [...pads(MARCH_H, 36), ...pads(prog('Bbm Gb Bbm'), 44)] },
+    { inst: 'choir', tone: 0.3, gain: 0.6, verb: 0.55, notes: [...fifths(MARCH_H, 36), ...pads(prog('Bbm Gb Bbm'), 44)] },
     { inst: 'pickbass', gain: 1.3, verb: 0, notes: [...seq('Bb1:16 Gb1 Bb1 F1', bar(0), { v: 0.6 }), ...roots([...MARCH_H, ...MARCH_H], 4), ...roots(TRIO_H, 20), ...roots([...SOLO_H, ...MARCH_H], 28), ...seq('Bb1:16 Gb1:8 F1 Bb1:16', bar(44))] },
   ],
   drums: [{ kit: 'rock', hits: drums(), gain: 1.25, verb: 1.3 }],

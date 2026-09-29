@@ -60,7 +60,7 @@ export const havaNagila: SongDef = {
   album: 'Songs for Dancing',
   genre: 'Klezmer Surf',
   year: '1918',
-  composer: 'Traditional',
+  composer: 'Traditional, arr. Abraham Zvi Idelsohn',
   loadingPhrase: 'Let us rejoice, and let us be glad. Then faster.',
   tempo: [
     { beat: 0, bpm: 92 },

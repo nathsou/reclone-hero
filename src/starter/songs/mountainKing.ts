@@ -87,7 +87,8 @@ export const mountainKing: SongDef = {
   backing: [
     { inst: 'pickbass', gain: 1, verb: 0, notes: [...pedal(0, 'R*:4 . R* .'), ...pedal(16, '(R:2)x8'), ...pedal(32, '(R:2)x8'), ...pedal(48, '(R:2)x8'), ...seq(CODA_BASS, bar(64))] },
     { inst: 'strings', gain: 0.9, pan: -0.15, verb: 0.4, notes: [...strings(16), ...strings(32)] },
-    { inst: 'drive', tone: 0.35, gain: 0.55, verb: 0.05, notes: [...chugs(32), ...statement(48, { transpose: -12, v: 0.75 })] },
+    // (an octave down, but never below the guitar's low E)
+    { inst: 'drive', tone: 0.35, gain: 0.55, verb: 0.05, notes: [...chugs(32), ...statement(48, { transpose: -12, v: 0.75 }).map((n) => (n.p[0] < 40 ? { ...n, p: n.p.map((p) => p + 12) } : n))] },
   ],
   drums: [{ kit: 'rock', hits: drums() }],
   solos: [],

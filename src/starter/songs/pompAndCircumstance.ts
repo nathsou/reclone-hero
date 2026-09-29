@@ -53,6 +53,14 @@ function harmonised(notes: Note[]): Note[] {
 const melody = TUNE.notes.map((n) => ({ ...n, b: n.b + INTRO }));
 const firstPass = melody.filter((n) => n.b < SECOND);
 const secondPass = melody.filter((n) => n.b >= SECOND);
+/**
+ * The second pass's march: the strings' quarter-note chords. Where the tune holds a long note, the
+ * player takes them over (same instrument, same sound), so the chart keeps moving under it.
+ */
+const march = chords(SECOND, END, (c) => nearVoicing(c, 'G3'), 0.6, 1);
+const holding = (b: number) => secondPass.some((n) => n.b < b - 1e-6 && n.b + n.d > b + 1e-6);
+const marchPlayed = march.filter((n) => holding(n.b));
+const marchBacked = march.filter((n) => !holding(n.b));
 
 const tempo: TempoPoint[] = [
   { beat: 0, bpm: 92 },
@@ -103,6 +111,7 @@ export const pompAndCircumstance: SongDef = {
   player: [
     { inst: 'strings', tone: 0.6, gain: 1.1, verb: 0.4, notes: firstPass.map((n) => ({ ...n, v: 0.7 })) },
     { inst: 'brass', tone: 0.6, gain: 1, verb: 0.4, notes: [...harmonised(secondPass), ...seq('G3+B3+D4+G4!:4 .:8 G3+B3+D4+G4!:8', END)] },
+    { inst: 'strings', tone: 0.55, gain: 0.6, pan: -0.3, verb: 0.4, notes: marchPlayed },
   ],
   backing: [
     // first pass: sustained strings and horns
@@ -110,7 +119,7 @@ export const pompAndCircumstance: SongDef = {
     { inst: 'strings', tone: 0.35, gain: 0.8, pan: 0.1, verb: 0.35, notes: [{ b: 0, d: INTRO, p: [38], v: 0.5 }, ...chords(INTRO, END, bass, 0.65)] },
     { inst: 'brass', tone: 0.35, gain: 0.9, pan: 0.3, verb: 0.45, notes: chords(INTRO + bar(8), SECOND, (c) => nearVoicing(c, 'G3'), 0.45) },
     // second pass: the strings march in quarters, the organ holds everything together
-    { inst: 'strings', tone: 0.55, gain: 0.6, pan: -0.3, verb: 0.4, notes: [...chords(SECOND, END, (c) => nearVoicing(c, 'G3'), 0.6, 1), ...seq('G2+D3+G3+B3+D4!:4 .:8 G2+D3+G3+B3+D4!:8', END)] },
+    { inst: 'strings', tone: 0.55, gain: 0.6, pan: -0.3, verb: 0.4, notes: [...marchBacked, ...seq('G2+D3+G3+B3+D4!:4 .:8 G2+D3+G3+B3+D4!:8', END)] },
     { inst: 'organ', gain: 0.75, verb: 0.55, notes: [...chords(SECOND, END, (c) => [...nearVoicing(c, 'B3'), bassOf(c, 'G1')], 0.6), { b: END, d: 6, p: [31, 43, 55, 59, 62, 67], v: 0.8 }] },
     { inst: 'timpani', gain: 0.9, verb: 0.35, notes: timpani() },
   ],

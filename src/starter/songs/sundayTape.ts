@@ -76,7 +76,7 @@ export const sundayTape: SongDef = {
   player: [
     {
       inst: 'clean',
-      gain: 1.6,
+      gain: 2.5,
       verb: 0.35,
       echo: 0.1,
       notes: [
