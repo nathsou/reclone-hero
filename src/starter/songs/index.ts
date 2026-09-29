@@ -18,6 +18,7 @@ import { havaNagila } from './havaNagila.ts';
 import { ignition } from './ignition.ts';
 import { littleFugue } from './littleFugue.ts';
 import { midnightDrive } from './midnightDrive.ts';
+import { lowOrbit } from './lowOrbit.ts';
 import { minuet } from './minuet.ts';
 import { moonlight } from './moonlight.ts';
 import { morningMood } from './morningMood.ts';
@@ -32,6 +33,7 @@ import { redline } from './redline.ts';
 import { rustBelt } from './rustBelt.ts';
 import { saints } from './saints.ts';
 import { spring } from './spring.ts';
+import { seventhGear } from './seventhGear.ts';
 import { swanLake } from './swanLake.ts';
 import { switchback } from './switchback.ts';
 import { toccata } from './toccata.ts';
@@ -40,4 +42,4 @@ import { washerwoman } from './washerwoman.ts';
 import { williamTell } from './williamTell.ts';
 
 /** The built-in songs, in the order they are listed. */
-export const STARTER_SONGS: SongDef[] = [odeToJoy, ignition, midnightDrive, neonSkyline, furElise, canon, mountainKing, redline, fifth, nachtmusik, forty, toccata, preludeInC, minuet, williamTell, swanLake, valkyries, blueDanube, morningMood, moonlight, funeralMarch, entertainer, carolOfTheBells, korobeiniki, drunkenSailor, spring, littleFugue, pompAndCircumstance, canCan, greensleeves, washerwoman, havaNagila, saints, gymnopedie, caprice24, glassElevator, pocketChange, switchback, rustBelt];
+export const STARTER_SONGS: SongDef[] = [odeToJoy, ignition, midnightDrive, neonSkyline, furElise, canon, mountainKing, redline, fifth, nachtmusik, forty, toccata, preludeInC, minuet, williamTell, swanLake, valkyries, blueDanube, morningMood, moonlight, funeralMarch, entertainer, carolOfTheBells, korobeiniki, drunkenSailor, spring, littleFugue, pompAndCircumstance, canCan, greensleeves, washerwoman, havaNagila, saints, gymnopedie, caprice24, glassElevator, pocketChange, switchback, rustBelt, lowOrbit, seventhGear];
