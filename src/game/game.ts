@@ -1,8 +1,10 @@
 import { audio } from '../audio/audio.ts';
 import type { Chart } from '../chart/build.ts';
 import type { Instrument, Track } from '../chart/types.ts';
-import { GEM_COUNT, HOPO, INSTRUMENT_LABEL, TAP } from '../chart/types.ts';
+import { GEM_COUNT, HOPO, INSTRUMENT_LABEL, TAP, TOUCH_LANES } from '../chart/types.ts';
 import { applyAction, botActions } from '../engine/bot.ts';
+import type { PlayedWith } from './scores.ts';
+import { TouchFrets } from '../ui/touchFrets.ts';
 import type { Action as BotAction } from '../engine/bot.ts';
 import { Engine, HIT, baseScore, starProgress } from '../engine/engine.ts';
 import type { EngineEvent } from '../engine/engine.ts';
@@ -52,6 +54,8 @@ export interface SectionResult {
 
 export interface GameResult {
   setup: GameSetup;
+  /** what the run was mostly played with */
+  input: PlayedWith;
   score: number;
   stars: number;
   hits: number;
@@ -91,7 +95,9 @@ export class Game {
   private readonly laneHit = new Float32Array(5);
   private readonly laneWrong = new Float32Array(5);
   private missPulse = 0;
-  private srcMask = { kb: 0, pad: 0 };
+  private srcMask = { kb: 0, pad: 0, touch: 0 };
+  /** fret presses per source during the run, to tell what it was played with */
+  private presses = { kb: 0, pad: 0, touch: 0 };
   private raf = 0;
   private lastFrame = 0;
   private paused = false;
@@ -154,7 +160,28 @@ export class Game {
     this.reset();
   }
 
+  private autoIdx = 0;
+
+  /** Auto Star Power: once the bar is half full, set it off just before the next notes arrive. */
+  private autoStarPower(t: number) {
+    const e = this.engine;
+    if (e.spActive || e.spBar < 0.5 || t < e.time - 0.01) return;
+    const times = this.setup.track.notes.time;
+    while (this.autoIdx < times.length && times[this.autoIdx] < t) this.autoIdx++;
+    if (this.autoIdx < times.length && times[this.autoIdx] - t < 0.8) e.activateStarPower(t);
+  }
+
+  /** The source with the most fret presses; a guitar when nothing was pressed at all. */
+  private playedWith(): PlayedWith {
+    const p = this.presses;
+    if (p.touch > p.kb && p.touch > p.pad) return 'touch';
+    if (p.kb > p.pad) return 'keyboard';
+    return 'guitar';
+  }
+
   private reset() {
+    this.presses = { kb: 0, pad: 0, touch: 0 };
+    this.autoIdx = 0;
     const { track, chart, practice } = this.setup;
     const n = track.notes.length;
     this.engine = new Engine(
@@ -198,8 +225,11 @@ export class Game {
     input().gameMode = true;
     input().setPollRate(4);
     input().clear();
-    this.srcMask = { kb: 0, pad: input().padFretMask() };
-    this.setKeyboardActive(!this.setup.bot && !input().hasPads);
+    this.srcMask = { kb: 0, pad: input().padFretMask(), touch: 0 };
+    const touch = !this.setup.bot && TouchFrets.wanted();
+    this.hud.touch.setVisible(touch, this.setup.track.instrument === 'touch' ? TOUCH_LANES : undefined);
+    this.hud.onTouchPause = () => this.pause();
+    this.setKeyboardActive(!this.setup.bot && !input().hasPads && !touch);
     audio().play(this.startTime, practice?.speed ?? 1);
     this.lastFrame = performance.now();
     cancelAnimationFrame(this.raf);
@@ -268,7 +298,7 @@ export class Game {
     input().gameMode = true;
     input().setPollRate(4);
     input().clear();
-    this.srcMask = { kb: 0, pad: input().padFretMask() };
+    this.srcMask = { kb: 0, pad: input().padFretMask(), touch: 0 };
     this.lastFrame = performance.now();
   }
 
@@ -351,6 +381,7 @@ export class Game {
         engine.setWhammy(t, inp.whammy(now));
       }
       engine.advance(t - JUDGE_LAG);
+      if (settings.autoStarPower && !this.setup.bot) this.autoStarPower(t);
       for (let i = 0; i < engine.pendingEvents; i++) this.handleEvent(engine.event(i));
       engine.clearEvents();
     }
@@ -403,12 +434,13 @@ export class Game {
     rs.sustainHeld = this.sustainHeld;
     rs.sustainDrop = this.sustainDrop;
     rs.sustainMask = sustainMask;
-    rs.frets = this.setup.bot ? engine.frets : this.srcMask.kb | this.srcMask.pad;
+    rs.frets = this.setup.bot ? engine.frets : this.srcMask.kb | this.srcMask.pad | this.srcMask.touch;
     rs.spActive = engine.spActive;
     rs.multiplier = engine.multiplier > 4 ? 4 : engine.multiplier;
     rs.missPulse = this.missPulse;
     rs.whammy = this.setup.bot ? 0.5 + 0.5 * Math.sin(now / 60) : engine.whammy;
     rs.lefty = settings.lefty;
+    rs.laneMask = this.setup.track.instrument === 'touch' ? 0b10101 : 0b11111;
     rs.solo = engine.activeSolo >= 0;
     rs.beatPulse = beatPulse;
     rs.theme = renderTheme();
@@ -465,10 +497,12 @@ export class Game {
       if (ev.down) this.srcMask[ev.source] |= bit;
       else this.srcMask[ev.source] &= ~bit;
       if (this.setup.bot) return;
-      e.setFrets(Math.max(t, e.time), this.srcMask.kb | this.srcMask.pad);
-      // Tap mode: the key press is the strum. The engine's strum leniency waits for the rest of a
-      // chord, so only the first key of a chord strums.
-      if (ev.down && ev.source === 'kb' && settings.kbTapMode && t >= e.time - 0.01 && !(Math.abs(t - this.lastTapStrum) <= TAP_CHORD_WINDOW)) {
+      if (ev.down && t >= e.time - 0.01) this.presses[ev.source]++;
+      e.setFrets(Math.max(t, e.time), this.srcMask.kb | this.srcMask.pad | this.srcMask.touch);
+      // Tap mode: the press is the strum (always on touch screens, optional on the keyboard). The
+      // engine's strum leniency waits for the rest of a chord, so only the first fret of a chord strums.
+      const taps = ev.source === 'touch' || (ev.source === 'kb' && settings.kbTapMode);
+      if (ev.down && taps && t >= e.time - 0.01 && !(Math.abs(t - this.lastTapStrum) <= TAP_CHORD_WINDOW)) {
         this.lastTapStrum = t;
         e.strum(t);
       }
@@ -703,6 +737,7 @@ export class Game {
       missByType,
       wrongFret: this.wrongFret,
       lateMiss: this.lateMiss,
+      input: this.playedWith(),
       noteState: e.noteState.slice(),
       hitDelta: e.hitDelta.slice(),
       start: Math.min(0, notes.length ? notes.time[0] : 0),

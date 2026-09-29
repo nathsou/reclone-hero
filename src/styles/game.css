@@ -1100,3 +1100,186 @@
     color: var(--gold);
   }
 }
+
+/* on-screen frets for touch screens */
+.game-screen {
+  --tf-h: clamp(84px, 24vh, 220px);
+}
+
+.touch-frets {
+  display: none;
+}
+
+.touch-frets.on {
+  display: block;
+}
+
+.tf-zone {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: var(--tf-h);
+  padding: 10px max(8px, env(safe-area-inset-left)) max(12px, env(safe-area-inset-bottom)) max(8px, env(safe-area-inset-right));
+  display: grid;
+  grid-template-columns: repeat(var(--tf-cols, 5), 1fr);
+  gap: 8px;
+  pointer-events: auto;
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+  -webkit-tap-highlight-color: transparent;
+  background: var(--bg);
+  border-top: 1px solid var(--line);
+}
+
+.tf-pad {
+  position: relative;
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--c) 22%, transparent);
+  border: 2px solid color-mix(in srgb, var(--c) 70%, transparent);
+  transition:
+    background-color 0.06s,
+    transform 0.06s;
+}
+
+.tf-pad i {
+  position: absolute;
+  left: 50%;
+  top: 45%;
+  height: 40%;
+  aspect-ratio: 1;
+  border-radius: 50%;
+  transform: translate(-50%, -50%);
+  background: color-mix(in srgb, var(--c) 55%, transparent);
+}
+
+.tf-pad.down {
+  background: color-mix(in srgb, var(--c) 60%, transparent);
+  transform: scale(0.97);
+  box-shadow: 0 0 22px color-mix(in srgb, var(--c) 70%, transparent);
+}
+
+.tf-pad.green {
+  --c: var(--green);
+}
+.tf-pad.red {
+  --c: var(--red);
+}
+.tf-pad.yellow {
+  --c: var(--yellow);
+}
+.tf-pad.blue {
+  --c: var(--blue);
+}
+.tf-pad.orange {
+  --c: var(--orange);
+}
+
+.tf-sp,
+.tf-pause {
+  position: absolute;
+  pointer-events: auto;
+  touch-action: none;
+  -webkit-tap-highlight-color: transparent;
+  border: 0;
+  cursor: pointer;
+}
+
+.tf-sp {
+  right: max(12px, env(safe-area-inset-right));
+  top: 96px;
+  width: 58px;
+  height: 58px;
+  border-radius: 50%;
+  font-size: 26px;
+  line-height: 1;
+  color: var(--dim);
+  background: color-mix(in srgb, var(--panel) 85%, transparent);
+  border: 2px solid var(--line);
+  opacity: 0.55;
+}
+
+.tf-sp.ready {
+  opacity: 1;
+  color: #fff;
+  background: var(--sp);
+  border-color: var(--sp);
+  box-shadow: 0 0 22px var(--sp);
+  animation: sp-ready 0.9s ease-in-out infinite alternate;
+}
+
+.tf-sp.active {
+  opacity: 1;
+  color: var(--sp);
+}
+
+.tf-pause {
+  left: max(12px, env(safe-area-inset-left));
+  top: 96px;
+  width: 46px;
+  height: 46px;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  background: color-mix(in srgb, var(--panel) 80%, transparent);
+}
+
+.tf-pause i {
+  width: 5px;
+  height: 16px;
+  border-radius: 2px;
+  background: var(--text);
+}
+
+/* with touch frets the highway ends above them, so notes never pass under a finger */
+.game-screen:has(.touch-frets.on) .game-canvas {
+  height: calc(100% - var(--tf-h));
+}
+
+.hud.narrow .tf-pause {
+  top: 200px;
+}
+
+.hud.narrow .tf-sp {
+  top: 236px;
+}
+
+/* the game screen must not scroll, zoom or select while fingers are on it */
+.game-screen {
+  touch-action: none;
+  overscroll-behavior: none;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+/* portrait: score and Star Power docked in the top corners, smaller */
+.hud.narrow .hud-left {
+  align-items: flex-start;
+  padding-right: 0;
+}
+
+.hud.narrow .hud-right {
+  flex-direction: row-reverse;
+  align-items: flex-start;
+  padding-left: 0;
+}
+
+.hud.narrow .hud-info {
+  align-items: flex-end;
+}
+
+.hud.narrow .hud-score {
+  font-size: 24px;
+}
+
+.hud.narrow .hud-sp .seg {
+  height: 22px;
+}
+
+.hud.narrow .hud-stars {
+  font-size: 16px;
+}

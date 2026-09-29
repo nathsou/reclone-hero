@@ -8,6 +8,7 @@ const INST_NAMES: Record<string, Instrument> = {
   doublebass: 'bass',
   doublerhythm: 'rhythm',
   keyboard: 'keys',
+  touch: 'touch',
 };
 
 export function emptyTrack(): RawTrack {
@@ -41,7 +42,7 @@ export function parseDotChart(text: string): RawChart {
       section = line.slice(1, -1);
       track = null;
       soloStart = -1;
-      const m = /^(easy|medium|hard|expert)(single|doubleguitar|doublebass|doublerhythm|keyboard)$/i.exec(section);
+      const m = /^(easy|medium|hard|expert)(single|doubleguitar|doublebass|doublerhythm|keyboard|touch)$/i.exec(section);
       if (m) {
         const key = trackKey(INST_NAMES[m[2].toLowerCase()], DIFF_NAMES[m[1].toLowerCase()]);
         track = emptyTrack();

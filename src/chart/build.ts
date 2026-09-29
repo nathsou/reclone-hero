@@ -1,3 +1,4 @@
+import { foldToTouch } from './touch.ts';
 import { TempoMap } from './tempo.ts';
 import type { BeatList, ChartOptions, Difficulty, Instrument, NoteList, NoteType, Phrase, RawChart, RawTrack, Section, TickRange, Track } from './types.ts';
 import { DIFFICULTIES, GEM_COUNT, HOPO, INSTRUMENTS, STRUM, TAP, allocNotes, trackKey } from './types.ts';
@@ -91,7 +92,12 @@ export function buildChart(raw: RawChart, opts: ChartOptions = {}): Chart {
   for (const instrument of INSTRUMENTS) {
     for (const difficulty of DIFFICULTIES) {
       const key = trackKey(instrument, difficulty);
-      const rt = raw.tracks.get(key);
+      let rt = raw.tracks.get(key);
+      // Every chart gets a three-fret touch part: its own if it has one, else folded from the guitar.
+      if (!rt && instrument === 'touch') {
+        const guitar = raw.tracks.get(trackKey('guitar', difficulty));
+        if (guitar && guitar.notes.tick.length) rt = foldToTouch(guitar, res);
+      }
       if (!rt || rt.notes.tick.length === 0) continue;
       const packed = pack(rt);
       const { tick, len } = packed;

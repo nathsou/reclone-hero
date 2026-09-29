@@ -1,9 +1,16 @@
+/** What a run was played with. */
+export type PlayedWith = 'guitar' | 'keyboard' | 'touch';
+
+export const PLAYED_WITH_LABEL: Record<PlayedWith, string> = { guitar: 'Guitar', keyboard: 'Keyboard', touch: 'Touch' };
+
 export interface BestScore {
   score: number;
   stars: number;
   accuracy: number;
   fc: boolean;
   date: number;
+  /** controls used for the run (missing on scores from before this was recorded) */
+  input?: PlayedWith;
 }
 
 const KEY = 'chsq.scores';

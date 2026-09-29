@@ -65,7 +65,7 @@ function yearOf(s: SongEntry): number {
 }
 
 function ratingOf(s: SongEntry, instrument: Instrument): number {
-  const r = s.diffs[instrument] ?? (instrument === 'guitarcoop' ? s.diffs.guitar : undefined);
+  const r = s.diffs[instrument] ?? (instrument === 'guitarcoop' || instrument === 'touch' ? s.diffs.guitar : undefined);
   return r === undefined || r < 0 ? NaN : r;
 }
 

@@ -6,8 +6,11 @@ export interface InputEvent {
   down: boolean;
   /** performance.now() timestamp of the physical change */
   time: number;
-  source: 'kb' | 'pad';
+  source: InputSource;
 }
+
+/** Keyboard, a guitar (or other gamepad), or on-screen touch frets. */
+export type InputSource = 'kb' | 'pad' | 'touch';
 
 export type NavAction = 'up' | 'down' | 'left' | 'right' | 'confirm' | 'back' | 'start' | 'alt' | 'menu';
 
@@ -45,6 +48,8 @@ export class InputManager {
   private padDown = new Map<number, Set<Action>>();
   private padWhammy = 0;
   private kbWhammyHeld = false;
+  private touchMask = 0;
+  private touchWhammy = 0;
   private timer = 0;
   /** Browsers expose no pads before a connect event, so skip polling (and its allocations) until then. */
   private padCount = 0;
@@ -83,6 +88,8 @@ export class InputManager {
     // Keys pressed in one mode must not appear held in the other.
     this.kbDown.clear();
     this.kbWhammyHeld = false;
+    this.touchMask = 0;
+    this.touchWhammy = 0;
     this.clear();
   }
 
@@ -184,7 +191,27 @@ export class InputManager {
     if (!this.gameMode) this.clear();
   }
 
-  private push(action: Action, down: boolean, time: number, source: 'kb' | 'pad') {
+  /** The on-screen frets now held (bit per fret, green first): queues a press or release for each change. */
+  touchFrets(mask: number, time: number): void {
+    if (!this._gameMode) return;
+    const changed = mask ^ this.touchMask;
+    this.touchMask = mask;
+    for (let i = 0; i < FRET_ACTIONS.length; i++) if (changed & (1 << i)) this.push(FRET_ACTIONS[i], (mask & (1 << i)) !== 0, time, 'touch');
+  }
+
+  /** A tap on an on-screen button (Star Power, pause). */
+  touchPress(action: Action, time: number): void {
+    if (!this._gameMode) return;
+    this.push(action, true, time, 'touch');
+    this.push(action, false, time, 'touch');
+  }
+
+  /** 0..1 from moving a held finger up and down. */
+  setTouchWhammy(v: number): void {
+    this.touchWhammy = v;
+  }
+
+  private push(action: Action, down: boolean, time: number, source: InputSource) {
     const e = this.pool.pop() ?? { action, down, time, source };
     e.action = action;
     e.down = down;
@@ -215,6 +242,8 @@ export class InputManager {
 
   isDown(a: Action): boolean {
     if (this.kbDown.has(a)) return true;
+    const f = (FRET_ACTIONS as readonly Action[]).indexOf(a);
+    if (f >= 0 && this.touchMask & (1 << f)) return true;
     for (const s of this.padDown.values()) if (s.has(a)) return true;
     return false;
   }
@@ -235,7 +264,7 @@ export class InputManager {
   /** 0..1; keyboard "whammy" key wobbles the value while held. */
   whammy(now: number): number {
     if (this.kbWhammyHeld) return 0.5 + 0.5 * Math.sin(now / 45);
-    return this.padWhammy;
+    return Math.max(this.padWhammy, this.touchWhammy);
   }
 }
 

@@ -125,3 +125,21 @@ test('every ABC tune quoted in a built-in song adds up, bar by bar', async () =>
   }
   assert.ok(tunes >= 5);
 });
+
+test('every built-in song has a three-fret touch part on every difficulty', () => {
+  for (const def of STARTER_SONGS) {
+    const chart = buildChart(parseDotChart(generateChart(def).text));
+    let prev = 0;
+    for (const d of ['easy', 'medium', 'hard', 'expert'] as const) {
+      const track = chart.tracks.get(`touch:${d}`);
+      assert.ok(track && track.notes.length, `${def.id} touch:${d}`);
+      for (let i = 0; i < track.notes.length; i++) {
+        const mask = track.notes.mask[i];
+        assert.equal(mask & 0b01010, 0, `${def.id} touch:${d} uses only green, yellow and orange`);
+        assert.ok([1, 4, 16, 5, 17, 20].includes(mask), `${def.id} touch:${d}: at most two frets (mask ${mask})`);
+      }
+      assert.ok(track.notes.length >= prev, `${def.id}: touch difficulties scale`);
+      prev = track.notes.length;
+    }
+  }
+});
