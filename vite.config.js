@@ -126,6 +126,8 @@ export default defineConfig({
   server: { port: Number(process.env.PORT) || 5230 },
   build: {
     target: 'es2023',
+    // the bundled fonts must end up inside the single index.html too
+    assetsInlineLimit: 200_000,
     modulePreload: false,
     cssCodeSplit: false,
     rolldownOptions: { output: { codeSplitting: false } },

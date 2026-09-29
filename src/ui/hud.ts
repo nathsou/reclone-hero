@@ -1,8 +1,9 @@
+import { formatTime } from '../util/text.ts';
 import { h, setText } from './dom.ts';
 
 const MULT_CLASS = ['', 'm1', 'm2', 'm3', 'm4'];
-const MULT_TEXT = ['', '1×', '2×', '3×', '4×', '5×', '6×', '7×', '8×'];
-const RING = ['0', '0.1', '0.2', '0.3', '0.4', '0.5', '0.6', '0.7', '0.8', '0.9', '1'];
+const MULT_TEXT = ['', '×1', '×2', '×3', '×4', '×5', '×6', '×7', '×8'];
+const SP_SEGMENTS = 4;
 
 /** Group digits without Intl (cheaper, and only called when the number changes). */
 function groupDigits(n: number): string {
@@ -38,7 +39,14 @@ export interface HudState {
   spBar: number;
   spActive: boolean;
   stars: number;
+  /** hits / notes judged so far, 0..1 */
+  accuracy: number;
   progress: number;
+  /** seconds into the song (or practice range) and its length */
+  elapsed: number;
+  total: number;
+  /** estimated seconds of Star Power left while it is active */
+  spSeconds: number;
   fps: number;
   cpuMs: number;
   /** longest frame interval over the last half second */
@@ -55,19 +63,28 @@ export class Hud {
   private readonly mult: HTMLDivElement;
   private readonly multText: HTMLSpanElement;
   private readonly streak: HTMLDivElement;
-  private readonly streakRing: HTMLDivElement;
-  private readonly spFill: HTMLDivElement;
+  private readonly meter: HTMLDivElement;
+  private readonly spFills: HTMLElement[] = [];
   private readonly spMeter: HTMLDivElement;
+  private readonly spText: HTMLDivElement;
+  private readonly acc: HTMLDivElement;
   private readonly stars: HTMLDivElement;
   private readonly toasts: HTMLDivElement;
-  private readonly section: HTMLDivElement;
+  private readonly section: HTMLSpanElement;
+  private readonly ghost: HTMLDivElement;
+  private readonly timeline: HTMLDivElement;
+  private readonly marks: HTMLDivElement;
+  private readonly elapsed: HTMLSpanElement;
+  private readonly totalEl: HTMLSpanElement;
+  private markTimes: number[] = [];
+  private readonly track: HTMLDivElement;
   private readonly solo: HTMLDivElement;
   private readonly soloPct: HTMLSpanElement;
   private readonly soloCount: HTMLSpanElement;
-  private readonly progress: HTMLDivElement;
   private readonly timing: HTMLDivElement;
   private readonly timingTicks: HTMLDivElement[] = [];
   private readonly title: HTMLDivElement;
+  private readonly partEl: HTMLSpanElement;
   private readonly fps: HTMLDivElement;
   private readonly countdown: HTMLDivElement;
   private tickIndex = 0;
@@ -76,6 +93,9 @@ export class Hud {
   private lastStreak = -1;
   private lastRing = -1;
   private lastSp = -1;
+  private lastSecond = -1;
+  private lastAcc = -1;
+  private lastSpText = '';
   private lastSpReady = false;
   private lastSpActive = false;
   private lastProgress = -1;
@@ -88,41 +108,62 @@ export class Hud {
   constructor() {
     this.score = h('div', { class: 'hud-score' });
     this.score.append(this.scoreText);
-    this.multText = h('span', null, '1×');
-    this.streakRing = h('div', { class: 'hud-ring' });
-    this.mult = h('div', { class: 'hud-mult m1' }, this.streakRing, this.multText);
+    this.multText = h('span', null, '×1');
+    this.mult = h('div', { class: 'hud-mult m1' }, this.multText);
     this.streak = h('div', { class: 'hud-streak' }, '');
-    this.left = h('div', { class: 'hud-left' }, this.score, this.mult, this.streak);
-    this.spFill = h('div', { class: 'hud-sp-fill' });
-    this.spMeter = h('div', { class: 'hud-sp' }, this.spFill, h('div', { class: 'hud-sp-ticks' }), h('div', { class: 'hud-sp-label' }, 'SP'));
+    this.meter = h('div', { class: 'hud-meter' });
+    this.left = h('div', { class: 'hud-left', 'data-m': '1' }, this.score, h('div', { class: 'hud-row' }, this.streak, this.mult), this.meter);
+    this.spMeter = h('div', { class: 'hud-sp' });
+    for (let i = 0; i < SP_SEGMENTS; i++) {
+      const fill = h('i');
+      this.spFills.push(fill);
+      this.spMeter.append(h('div', { class: 'seg' }, fill));
+    }
+    this.spMeter.append(h('div', { class: 'hud-sp-label' }, 'SP'));
+    this.acc = h('div', { class: 'hud-acc' });
     this.stars = h('div', { class: 'hud-stars' });
-    this.right = h('div', { class: 'hud-right' }, this.spMeter, this.stars);
+    this.spText = h('div', { class: 'hud-sp-text' });
+    this.right = h('div', { class: 'hud-right' }, this.spMeter, h('div', { class: 'hud-info' }, this.acc, this.stars, this.spText));
     this.toasts = h('div', { class: 'hud-toasts' });
-    this.section = h('div', { class: 'hud-section' });
+    this.section = h('span', { class: 'hud-section' });
+    this.ghost = h('div', { class: 'hud-ghost' });
     this.soloPct = h('span', { class: 'pct' });
     this.soloCount = h('span', { class: 'cnt' });
     this.solo = h('div', { class: 'hud-solo' }, h('span', { class: 'lbl' }, 'SOLO'), this.soloPct, this.soloCount);
-    this.progress = h('div', { class: 'hud-progress-fill' });
-    this.timing = h('div', { class: 'hud-timing' }, h('div', { class: 'hud-timing-center' }), h('span', { class: 'early' }, 'early'), h('span', { class: 'late' }, 'late'));
+    this.marks = h('div', { class: 'hud-marks' });
+    this.elapsed = h('span', null, '0:00');
+    this.totalEl = h('span', null, '0:00');
+    this.timeline = h(
+      'div',
+      { class: 'hud-timeline' },
+      h('div', { class: 'hud-line' }, h('div', { class: 'hud-line-fill' })),
+      this.marks,
+      h('div', { class: 'hud-dot' }),
+      h('div', { class: 'hud-times' }, this.elapsed, this.section, this.totalEl),
+    );
+    this.track = h('div', { class: 'hud-track' }, h('div', { class: 'hud-timing-center' }));
+    this.timing = h('div', { class: 'hud-timing' }, h('span', { class: 'early' }, 'early'), this.track, h('span', { class: 'late' }, 'late'));
     for (let i = 0; i < 24; i++) {
       const t = h('div', { class: 'hud-tick' });
       this.timingTicks.push(t);
-      this.timing.append(t);
+      this.track.append(t);
     }
-    this.title = h('div', { class: 'hud-title' });
+    this.partEl = h('span', { class: 'part' });
+    this.title = h('div', { class: 'hud-top' }, h('span', { class: 't' }), h('span', { class: 'a' }), h('span', { class: 'grow' }), this.partEl);
     this.fps = h('div', { class: 'hud-fps' });
     this.countdown = h('div', { class: 'hud-countdown' });
     this.root = h(
       'div',
       { class: 'hud' },
-      h('div', { class: 'hud-progress' }, this.progress),
+      this.ghost,
+      h('div', { class: 'hud-vignette' }),
+      this.title,
+      this.timeline,
       this.left,
       this.right,
       this.toasts,
-      this.section,
       this.solo,
       this.timing,
-      this.title,
       this.fps,
       this.countdown,
     );
@@ -140,11 +181,17 @@ export class Hud {
     this.solo.style.transform = `translate(${farCenter[0]}px, ${farCenter[1] + 70}px) translate(-50%, 0)`;
   }
 
-  setTitle(name: string, artist: string, charter: string): void {
-    this.title.replaceChildren(h('div', { class: 't' }, name), h('div', { class: 'a' }, artist));
-    if (charter) this.title.append(h('div', { class: 'c' }, `charted by ${charter}`));
-    this.title.classList.remove('gone');
-    setTimeout(() => this.title.classList.add('gone'), 4500);
+  setTitle(name: string, artist: string, part: string): void {
+    this.title.children[0].textContent = name;
+    this.title.children[1].textContent = artist;
+    this.partEl.textContent = part;
+  }
+
+  /** Section tick marks on the timeline; times in seconds, range = the span the bar covers. */
+  setSections(times: number[], start: number, end: number): void {
+    this.markTimes = times.filter((t) => t > start + 0.5 && t < end - 0.5);
+    const span = Math.max(0.001, end - start);
+    this.marks.replaceChildren(...this.markTimes.map((t) => h('i', { style: `left:${(((t - start) / span) * 100).toFixed(3)}%` })));
   }
 
   setTimingWindow(ms: number): void {
@@ -171,26 +218,40 @@ export class Hud {
       this.lastMult = s.multiplier;
       setText(this.multText, MULT_TEXT[s.multiplier] ?? '');
       this.mult.className = s.multiplier > 4 ? 'hud-mult sp' : `hud-mult ${MULT_CLASS[s.multiplier]}`;
+      this.left.dataset.m = s.multiplier > 4 ? 'sp' : String(s.multiplier);
       if (up) restartAnim(this.mult, 'pop-a', 'pop-b');
     }
     const ring = s.multiplier >= 4 ? 10 : s.streak % 10;
     if (ring !== this.lastRing) {
       this.lastRing = ring;
-      this.streakRing.style.setProperty('--p', RING[ring]);
+      this.meter.style.setProperty('--n', String(ring));
     }
     if (s.streak !== this.lastStreak) {
       this.lastStreak = s.streak;
-      setText(this.streak, s.streak >= 5 ? String(s.streak) : '');
+      setText(this.streak, s.streak >= 5 ? `${s.streak} streak` : '');
       const fifty = Math.floor(s.streak / 50);
       if (fifty !== this.lastStreakTen) {
-        if (fifty > this.lastStreakTen && fifty > 0) this.toast(`${fifty * 50} NOTE STREAK!`, 'streak');
+        if (fifty > this.lastStreakTen && fifty > 0) this.toast(`${fifty * 50} note streak`, 'streak');
         this.lastStreakTen = fifty;
       }
     }
     const sp = Math.round(s.spBar * 200);
     if (sp !== this.lastSp) {
       this.lastSp = sp;
-      this.spFill.style.transform = `scaleY(${sp / 200})`;
+      for (let i = 0; i < SP_SEGMENTS; i++) {
+        const f = Math.max(0, Math.min(1, (sp / 200) * SP_SEGMENTS - i));
+        this.spFills[i].style.transform = `scaleY(${f})`;
+      }
+    }
+    const spText = s.spActive ? `Star Power active · ${Math.max(0, Math.round(s.spSeconds))}s` : s.spBar >= 0.5 ? 'Star Power ready · tilt' : '';
+    if (spText !== this.lastSpText) {
+      this.lastSpText = spText;
+      setText(this.spText, spText);
+    }
+    const acc = Math.round(s.accuracy * 1000);
+    if (acc !== this.lastAcc) {
+      this.lastAcc = acc;
+      setText(this.acc, `${(acc / 10).toFixed(1)}%`);
     }
     const ready = s.spBar >= 0.5 && !s.spActive;
     if (ready !== this.lastSpReady) {
@@ -207,10 +268,16 @@ export class Hud {
       this.stars.replaceChildren(...Array.from({ length: 5 }, (_, i) => h('span', { class: i < full ? (full >= 6 ? 'on gold' : 'on') : '' }, '★')));
       if (full > 0) restartAnim(this.stars, 'pop-a', 'pop-b');
     }
-    const progress = Math.round(Math.min(1, Math.max(0, s.progress)) * 1000);
+    const progress = Math.round(Math.min(1, Math.max(0, s.progress)) * 2000);
     if (progress !== this.lastProgress) {
       this.lastProgress = progress;
-      this.progress.style.transform = `scaleX(${progress / 1000})`;
+      this.timeline.style.setProperty('--p', String(progress / 2000));
+    }
+    const second = Math.floor(Math.max(0, s.elapsed));
+    if (second !== this.lastSecond) {
+      this.lastSecond = second;
+      setText(this.elapsed, formatTime(second));
+      setText(this.totalEl, formatTime(s.total));
     }
     if (s.showFps) {
       if ((this.fpsFrame & 63) === 0) setText(this.fps, `${s.fps.toFixed(0)} fps · ${s.cpuMs.toFixed(2)} ms cpu · worst frame ${s.worstMs.toFixed(1)} ms`);
@@ -233,7 +300,8 @@ export class Hud {
 
   setSection(name: string): void {
     if (!name) return;
-    this.section.replaceChildren(h('span', null, name));
+    setText(this.section, name);
+    setText(this.ghost, name);
     restartAnim(this.section, 'pop-a', 'pop-b');
   }
 

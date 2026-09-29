@@ -11,7 +11,8 @@ import type { SongEntry } from '../../library/song.ts';
 import { settings } from '../../settings.ts';
 import { recordPlay } from '../../game/plays.ts';
 import type { App, Screen } from '../app.ts';
-import { h, setText } from '../dom.ts';
+import { fmtScore, h, setText } from '../dom.ts';
+import { formatTime } from '../../util/text.ts';
 import { Hud } from '../hud.ts';
 import { Menu } from '../menu.ts';
 import { canFullscreen, isFullscreen, toggleFullscreen } from '../fullscreen.ts';
@@ -36,6 +37,7 @@ export class GameScreen implements Screen {
   private readonly loadBar: HTMLDivElement;
   private game: Game | null = null;
   private pauseMenu: Menu | null = null;
+  private pauseEl: HTMLElement | null = null;
   private destroyed = false;
   private videoUrl: string | null = null;
 
@@ -53,7 +55,7 @@ export class GameScreen implements Screen {
       art,
       h('div', { class: 'load-title' }, req.song.name),
       h('div', { class: 'load-artist' }, req.song.artist),
-      h('div', { class: 'load-part' }, `${INSTRUMENT_LABEL[req.instrument]} · ${req.difficulty}${req.bot ? ' · bot' : ''}`),
+      h('div', { class: 'load-part' }, `${INSTRUMENT_LABEL[req.instrument]} · ${req.difficulty}${req.bot ? ' · bot' : ''}${req.practice ? ' · practice' : ''}`),
       req.song.loadingPhrase ? h('div', { class: 'load-phrase' }, /^["“]/.test(req.song.loadingPhrase) ? req.song.loadingPhrase : `“${req.song.loadingPhrase}”`) : null,
       h('div', { class: 'load-bar' }, this.loadBar),
       this.loadStatus,
@@ -163,7 +165,9 @@ export class GameScreen implements Screen {
 
   private showPause() {
     const g = this.game!;
-    const menu = new Menu('Paused', [
+    const st = g.pauseStats;
+    const t = g.setup.track;
+    const menu = new Menu(`Paused · ${formatTime(st.time)} of ${formatTime(st.total)}`, [
       { label: 'Resume', action: () => this.resume() },
       { label: 'Restart', action: () => this.restart() },
       ...(this.req.practice || this.req.bot ? [] : [{ label: 'Practice this section', action: () => void this.practiceHere() }]),
@@ -171,11 +175,31 @@ export class GameScreen implements Screen {
       { label: 'Settings', action: () => void import('./settings.ts').then(({ SettingsModal }) => this.app.pushModal(new SettingsModal(this.app, true))) },
       { label: 'Quit to song list', action: () => void this.back() },
     ]);
-    menu.el.classList.add('pause-menu');
-    const t = g.setup.track;
-    menu.el.append(h('div', { class: 'pause-sub' }, `${this.req.song.name} — ${INSTRUMENT_LABEL[t.instrument]} ${t.difficulty}`));
+    const art = h('div', { class: 'art none' });
+    const song = this.req.song;
+    if (song.albumArt) {
+      art.classList.remove('none');
+      void this.app.library.fileUrl(song, song.albumArt).then((u) => (art.style.backgroundImage = `url("${u}")`));
+    }
+    const stat = (label: string, value: string) => h('div', null, h('div', { class: 'label' }, label), h('div', { class: 'v' }, value));
+    const card = h(
+      'div',
+      { class: 'pause-card' },
+      art,
+      h('div', { class: 't' }, song.name),
+      h('div', { class: 'p' }, `${song.artist} · ${INSTRUMENT_LABEL[t.instrument]} ${t.difficulty}`),
+      h('div', { class: 'pause-stats' }, stat('Score', fmtScore(st.score)), stat('Acc', `${(st.accuracy * 100).toFixed(1)}%`), st.section ? stat('Section', st.section) : null),
+    );
+    const hints = h(
+      'div',
+      { class: 'hints pause-hints' },
+      h('span', { class: 'hint' }, h('kbd', null, 'strum'), ' move'),
+      h('span', { class: 'hint' }, h('i', { class: 'sw g' }), ' select'),
+      h('span', { class: 'hint' }, h('i', { class: 'sw r' }), ' / Esc resume'),
+    );
     this.pauseMenu = menu;
-    this.el.append(menu.el);
+    this.pauseEl = h('div', { class: 'pause' }, menu.el, card, hints);
+    this.el.append(this.pauseEl);
   }
 
   private refreshPause() {
@@ -185,7 +209,8 @@ export class GameScreen implements Screen {
   }
 
   private hidePause() {
-    this.pauseMenu?.el.remove();
+    this.pauseEl?.remove();
+    this.pauseEl = null;
     this.pauseMenu = null;
   }
 

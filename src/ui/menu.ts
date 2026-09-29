@@ -7,14 +7,14 @@ export interface MenuItem {
   action: () => void;
 }
 
-/** Vertical menu navigable by mouse, keyboard and guitar. */
+/** Big-type numbered menu, navigable by mouse, keyboard and guitar. */
 export class Menu {
   readonly el: HTMLDivElement;
   private readonly items: MenuItem[];
   private readonly buttons: HTMLButtonElement[];
   private sel = 0;
 
-  constructor(title: string, items: MenuItem[]) {
+  constructor(caption: string, items: MenuItem[]) {
     this.items = items;
     this.buttons = items.map((it, i) =>
       h(
@@ -24,10 +24,11 @@ export class Menu {
           onclick: () => it.action(),
           onmouseenter: () => this.select(i),
         },
-        it.label,
+        h('span', { class: 'n' }, String(i + 1).padStart(2, '0')),
+        h('span', { class: 'l' }, it.label),
       ),
     );
-    this.el = h('div', { class: 'menu' }, h('div', { class: 'menu-title' }, title), ...this.buttons);
+    this.el = h('div', { class: 'menu' }, h('div', { class: 'menu-title' }, caption), ...this.buttons);
     this.select(0);
   }
 
