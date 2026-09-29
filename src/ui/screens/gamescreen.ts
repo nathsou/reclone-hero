@@ -200,6 +200,7 @@ export class GameScreen implements Screen {
     this.pauseMenu = menu;
     this.pauseEl = h('div', { class: 'pause' }, menu.el, card, hints);
     this.el.append(this.pauseEl);
+    this.el.classList.add('paused');
   }
 
   private refreshPause() {
@@ -211,6 +212,7 @@ export class GameScreen implements Screen {
   private hidePause() {
     this.pauseEl?.remove();
     this.pauseEl = null;
+    this.el.classList.remove('paused');
     this.pauseMenu = null;
   }
 

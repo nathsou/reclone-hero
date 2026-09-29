@@ -799,11 +799,19 @@
 }
 
 /* ------------------------------------------------------------------ pause */
+.game-screen .hud {
+  transition: opacity 0.2s;
+}
+
+.game-screen.paused .hud {
+  opacity: 0.12;
+}
+
 .pause {
   position: absolute;
   inset: 0;
   z-index: 10;
-  background: linear-gradient(90deg, color-mix(in srgb, var(--bg) 97%, transparent), color-mix(in srgb, var(--bg) 72%, transparent));
+  background: linear-gradient(90deg, color-mix(in srgb, var(--bg) 97%, transparent), color-mix(in srgb, var(--bg) 78%, transparent));
   color: var(--text);
   animation: screen-in 0.18s ease-out;
 }

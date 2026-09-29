@@ -1,5 +1,7 @@
 import { audio } from '../../audio/audio.ts';
 import { INSTRUMENT_LABEL, trackKey } from '../../chart/types.ts';
+import { HIT } from '../../engine/engine.ts';
+import { formatTime } from '../../util/text.ts';
 import type { GameResult, SectionResult } from '../../game/game.ts';
 import { getBest, recordScore, scoreKey } from '../../game/scores.ts';
 import type { NavAction } from '../../input/input.ts';
@@ -18,6 +20,13 @@ export class ResultsScreen implements Screen {
   private readonly app: App;
   private readonly req: GameRequest;
   private readonly r: GameResult;
+  private readonly weakest: SectionResult | null;
+  private readonly plot: HTMLCanvasElement;
+  private readonly drift: HTMLCanvasElement;
+  private readonly hist: HTMLCanvasElement;
+  private readonly timeline: HTMLDivElement;
+  private resizeObserver: ResizeObserver | null = null;
+  private artUrl: Promise<string> | null = null;
 
   constructor(app: App, r: GameResult, req: GameRequest) {
     this.app = app;
@@ -32,8 +41,55 @@ export class ResultsScreen implements Screen {
       const prev = getBest(scoreKey(song.id, trackKey(t.instrument, t.difficulty)));
       newBest = recordScore(scoreKey(song.id, trackKey(t.instrument, t.difficulty)), { score: r.score, stars: r.stars, accuracy: acc, fc, date: Date.now() }) && !!prev;
     }
-    const weakest = weakestSection(r.sections);
+    const weakest = (this.weakest = req.practice ? null : weakestSection(r.sections));
     const mean = r.deltas.length ? r.deltas.reduce((a, b) => a + b, 0) / r.deltas.length : 0;
+
+    const art = h('div', { class: 'res-art none' });
+    if (song.albumArt) {
+      art.classList.remove('none');
+      this.artUrl = app.library.fileUrl(song, song.albumArt);
+      void this.artUrl.then((u) => (art.style.backgroundImage = `url("${u}")`));
+    }
+    this.plot = h('canvas', { class: 'tl-plot' });
+    this.drift = h('canvas', { class: 'tl-drift' });
+    this.hist = h('canvas', { class: 'timing-chart' });
+    this.timeline = h('div', { class: 'res-timeline' });
+
+    const span = Math.max(1, r.end - r.start);
+    const heads = h('div', { class: 'tl-heads' });
+    r.sections.forEach((s, i) => {
+      const from = Math.max(r.start, s.time);
+      const to = i + 1 < r.sections.length ? r.sections[i + 1].time : r.end;
+      const a = s.hits / s.total;
+      const cls = a >= 0.98 ? 'great' : a >= 0.85 ? 'ok' : 'bad';
+      heads.append(
+        h(
+          'button',
+          {
+            class: `tl-head ${cls}${s === weakest ? ' weak' : ''}`,
+            style: `left:${(((from - r.start) / span) * 100).toFixed(3)}%;width:${(((to - from) / span) * 100).toFixed(3)}%`,
+            title: req.practice ? s.name : `Practice “${s.name}”`,
+            onclick: () => !req.practice && void this.practiceSection(s),
+          },
+          h('span', { class: 'n' }, s.name),
+          h('span', { class: 'p' }, `${Math.round(a * 100)}%`),
+        ),
+      );
+    });
+    const axis = h('div', { class: 'tl-axis' });
+    const step = span > 240 ? 60 : span > 100 ? 30 : 15;
+    for (let x = 0; x < span - step * 0.4; x += step) axis.append(h('span', { style: `position:absolute;left:${(x / span) * 100}%;${x === 0 ? '' : 'transform:translateX(-50%)'}` }, formatTime(r.start + x)));
+    axis.append(h('span', { style: 'position:absolute;right:0' }, formatTime(r.end)));
+    axis.style.position = 'relative';
+    axis.style.height = '16px';
+    this.timeline.append(heads, this.plot, this.drift, axis);
+
+    const stats: (string | HTMLElement)[] = [
+      'Best streak ',
+      h('b', null, String(r.maxStreak)),
+      ` · Star Power ${r.spPhrases} / ${r.spPhrasesTotal} · Sustains dropped ${r.sustainDrops}`,
+    ];
+    if (r.solos.length) stats.push(` · Solos ${r.solos.map((x) => `${Math.round((x.hits / x.total) * 100)}%`).join(' ')}`);
 
     this.el = h(
       'div',
@@ -41,75 +97,201 @@ export class ResultsScreen implements Screen {
       h(
         'div',
         { class: 'res-head' },
-        h('div', { class: 'res-song' }, h('div', { class: 'title' }, song.name), h('div', { class: 'artist' }, `${song.artist} · ${INSTRUMENT_LABEL[t.instrument]} ${t.difficulty}${req.bot ? ' · bot' : ''}`)),
+        art,
+        h('div', { class: 'res-song' }, h('div', { class: 'title' }, song.name), h('div', { class: 'artist' }, `${song.artist} · ${INSTRUMENT_LABEL[t.instrument]} ${t.difficulty}${req.bot ? ' · bot' : ''}${req.practice ? ' · practice' : ''}`)),
         h(
           'div',
-          { class: 'res-score' },
-          h('div', { class: 'stars' }, starsEl(r.stars)),
-          h('div', { class: 'score' }, r.score.toLocaleString('en-US')),
-          h('div', { class: 'acc' }, `${(acc * 100).toFixed(1)}%`, fc ? h('span', { class: 'fc' }, 'FULL COMBO') : null, newBest ? h('span', { class: 'best' }, 'NEW BEST') : null),
+          { class: 'res-nums' },
+          h('div', { class: 'res-num' }, h('div', { class: 'label' }, 'Score'), h('div', { class: 'v' }, r.score.toLocaleString('en-US')), newBest ? h('span', { class: 'tag best' }, 'NEW BEST') : null),
+          h('div', { class: 'res-num' }, h('div', { class: 'label' }, 'Accuracy'), h('div', { class: 'v' }, `${(acc * 100).toFixed(1)}%`), fc ? h('span', { class: 'tag' }, 'FULL COMBO') : null),
+          h('div', { class: 'res-num' }, h('div', { class: 'label' }, 'Stars'), h('div', { class: 'res-stars' }, starsEl(r.stars))),
         ),
       ),
-      h(
-        'div',
-        { class: 'res-grid' },
-        stat('Notes hit', `${r.hits} / ${r.total}`),
-        stat('Best streak', String(r.maxStreak)),
-        stat('Wrong frets', String(r.wrongFret), r.wrongFret ? 'bad' : ''),
-        stat('Not played', String(r.lateMiss), r.lateMiss ? 'bad' : ''),
-        stat('Overstrums', String(r.overstrums), r.overstrums ? 'bad' : ''),
-        stat('Sustains dropped', String(r.sustainDrops), r.sustainDrops ? 'bad' : ''),
-        stat('Star Power phrases', `${r.spPhrases} / ${r.spPhrasesTotal}`),
-        r.solos.length ? stat('Solos', r.solos.map((s) => `${Math.round((s.hits / s.total) * 100)}%`).join(' · ')) : null,
-      ),
+      this.timeline,
       h(
         'div',
         { class: 'res-cols' },
-        h('section', { class: 'res-card' }, h('h3', null, 'Timing'), this.timingChart(), h('p', { class: 'hint' }, timingAdvice(mean, r.deltas.length))),
-        h('section', { class: 'res-card' }, h('h3', null, 'Where notes were lost'), this.missBreakdown(), this.tips()),
-        h('section', { class: 'res-card sections' }, h('h3', null, 'Sections'), this.sectionList(weakest)),
+        h('section', { class: 'res-col' }, h('div', { class: 'label' }, 'Where notes were lost'), this.missBreakdown()),
+        h('section', { class: 'res-col' }, h('div', { class: 'label' }, 'Timing'), this.hist, h('p', { class: 'res-note' }, timingAdvice(mean, r.deltas.length))),
+        h('section', { class: 'res-col res-work' }, h('div', { class: 'label' }, 'What to work on'), this.work(weakest)),
       ),
       h(
         'div',
-        { class: 'res-actions' },
-        h('button', { class: 'btn primary big', onclick: () => this.retry() }, 'Retry'),
-        weakest && !req.practice ? h('button', { class: 'btn', onclick: () => this.practiceSection(weakest) }, `Practice “${weakest.name}”`) : null,
-        h('button', { class: 'btn ghost', onclick: () => this.back() }, 'Song list'),
+        { class: 'res-foot' },
+        h('div', { class: 'stats' }, ...stats),
+        h(
+          'div',
+          { class: 'res-actions' },
+          weakest ? h('button', { class: 'btn', onclick: () => this.practiceSection(weakest) }, h('i', { class: 'dot', style: 'background:var(--blue)' }), `Practice “${weakest.name}”`, h('kbd', null, 'P')) : null,
+          h('button', { class: 'btn', onclick: () => this.retry() }, h('i', { class: 'dot', style: 'background:var(--yellow)' }), 'Retry', h('kbd', null, 'R')),
+          h('button', { class: 'btn primary', onclick: () => this.back() }, h('i', { class: 'dot ring' }), 'Song list', h('kbd', null, 'Enter')),
+        ),
       ),
     );
     if (fc && !req.bot) setTimeout(() => audio().playSfx('soloEnd', 0.8), 300);
   }
 
-  private timingChart(): HTMLElement {
+  shown(): void {
+    this.draw();
+    this.resizeObserver = new ResizeObserver(() => this.draw());
+    this.resizeObserver.observe(this.timeline);
+  }
+
+  destroy(): void {
+    this.resizeObserver?.disconnect();
+    if (this.artUrl) void this.artUrl.then((u) => this.app.library.release(u));
+  }
+
+  private colors() {
+    const cs = getComputedStyle(document.documentElement);
+    const v = (n: string, d: string) => cs.getPropertyValue(n).trim() || d;
+    return { good: v('--good', '#4ef08a'), ok: v('--ok', '#f5d34a'), meh: v('--meh', '#ff8a3d'), bad: v('--bad', '#ff4d5e'), text: v('--text', '#f2efe9'), line: v('--line-soft', 'rgba(255,255,255,.1)'), dim: v('--faint', '#6f6a63') };
+  }
+
+  /** Size a canvas to its CSS box at device resolution and return a scaled 2D context. */
+  private prep(c: HTMLCanvasElement): { g: CanvasRenderingContext2D; w: number; h: number } | null {
+    const w = c.clientWidth;
+    const hgt = c.clientHeight;
+    if (!w || !hgt) return null;
+    const dpr = Math.min(2, window.devicePixelRatio || 1);
+    c.width = Math.round(w * dpr);
+    c.height = Math.round(hgt * dpr);
+    const g = c.getContext('2d')!;
+    g.setTransform(dpr, 0, 0, dpr, 0, 0);
+    return { g, w, h: hgt };
+  }
+
+  private draw() {
+    const col = this.colors();
+    this.drawPlot(col);
+    this.drawDrift(col);
+    this.drawHistogram(col);
+  }
+
+  /** Every note of the song, flattened: one row per lane, hits as pills, misses as red rings. */
+  private drawPlot(col: ReturnType<ResultsScreen['colors']>) {
+    const p = this.prep(this.plot);
+    if (!p) return;
+    const { g, w, h: H } = p;
+    const r = this.r;
+    const notes = r.setup.track.notes;
+    const skin = noteSkin();
+    const span = Math.max(1, r.end - r.start);
+    const laneH = H / 5;
+    const x = (t: number) => ((t - r.start) / span) * w;
+    for (let l = 0; l < 5; l++) {
+      g.fillStyle = l % 2 ? 'rgba(128,128,128,0.05)' : 'rgba(128,128,128,0.09)';
+      g.fillRect(0, l * laneH, w, laneH);
+    }
+    // section dividers
+    g.fillStyle = col.line;
+    for (const s of r.sections) g.fillRect(Math.round(x(Math.max(r.start, s.time))), 0, 1, H);
+    const hex = skin.colors.map(skinHex);
+    // local density (notes within a second) fades sparse passages so busy ones read as solid runs
+    const dens = new Float32Array(notes.length);
+    for (let i = 0, lo = 0, hi = 0; i < notes.length; i++) {
+      while (notes.time[lo] < notes.time[i] - 1) lo++;
+      while (hi < notes.length && notes.time[hi] <= notes.time[i] + 1) hi++;
+      dens[i] = Math.min(1, 0.45 + (hi - lo) / 22);
+    }
+    const pillW = Math.max(3, Math.min(9, w / 200));
+    const pillH = Math.min(14, laneH - 8);
+    const missed: [number, number][] = [];
+    for (let i = 0; i < notes.length; i++) {
+      const mask = notes.mask[i];
+      const px = x(notes.time[i]);
+      const hit = r.noteState[i] === HIT;
+      if (mask === 0) {
+        g.globalAlpha = hit ? 0.45 : 0.9;
+        g.fillStyle = hex[5];
+        g.fillRect(px - pillW / 2, 3, pillW, H - 6);
+        if (!hit) missed.push([px, H / 2]);
+        continue;
+      }
+      for (let l = 0; l < 5; l++) {
+        if (!(mask & (1 << l))) continue;
+        const cy = l * laneH + laneH / 2;
+        if (hit) {
+          g.globalAlpha = dens[i];
+          g.fillStyle = hex[l];
+          g.beginPath();
+          g.roundRect(px - pillW / 2, cy - pillH / 2, pillW, pillH, pillW / 2.2);
+          g.fill();
+        } else missed.push([px, cy]);
+      }
+    }
+    g.globalAlpha = 1;
+    g.strokeStyle = col.bad;
+    g.lineWidth = 2;
+    for (const [px, cy] of missed) {
+      g.beginPath();
+      g.arc(px, cy, 5.5, 0, Math.PI * 2);
+      g.stroke();
+    }
+    const weak = this.weakest;
+    if (weak) {
+      const i = r.sections.indexOf(weak);
+      const from = Math.max(r.start, weak.time);
+      const to = i + 1 < r.sections.length ? r.sections[i + 1].time : r.end;
+      g.strokeStyle = col.text;
+      g.lineWidth = 1.5;
+      g.strokeRect(Math.round(x(from)) + 0.75, 0.75, Math.round(x(to) - x(from)) - 1.5, H - 1.5);
+    }
+  }
+
+  /** Timing drift: how early or late each hit was across the song. */
+  private drawDrift(col: ReturnType<ResultsScreen['colors']>) {
+    const p = this.prep(this.drift);
+    if (!p) return;
+    const { g, w, h: H } = p;
+    const r = this.r;
+    const notes = r.setup.track.notes;
+    const win = settings.hitWindowMs / 1000;
+    const span = Math.max(1, r.end - r.start);
+    g.fillStyle = col.line;
+    g.fillRect(0, Math.round(H / 2), w, 1);
+    g.font = '500 10px ui-monospace, "JetBrains Mono", monospace';
+    g.fillStyle = col.dim;
+    g.fillText('early', 0, 9);
+    g.fillText('late', 0, H - 2);
+    for (let i = 0; i < notes.length; i++) {
+      if (r.noteState[i] !== HIT) continue;
+      const d = r.hitDelta[i];
+      const ms = Math.abs(d * 1000);
+      g.fillStyle = ms < 20 ? col.good : ms < 45 ? col.ok : col.meh;
+      const y = H / 2 + Math.max(-1, Math.min(1, d / win)) * (H / 2 - 4);
+      g.fillRect(((notes.time[i] - r.start) / span) * w - 1, y - 1, 2, 2);
+    }
+  }
+
+  private drawHistogram(col: ReturnType<ResultsScreen['colors']>) {
+    const p = this.prep(this.hist);
+    if (!p) return;
+    const { g, w, h: H } = p;
     const win = settings.hitWindowMs;
-    const c = h('canvas', { class: 'timing-chart', width: 360, height: 120 });
-    const ctx = c.getContext('2d')!;
     const bins = new Array(29).fill(0);
     for (const d of this.r.deltas) {
       const x = Math.max(-1, Math.min(1, (d * 1000) / win));
       bins[Math.round(((x + 1) / 2) * (bins.length - 1))]++;
     }
     const max = Math.max(1, ...bins);
-    const w = c.width / bins.length;
+    const bw = w / bins.length;
     bins.forEach((b, i) => {
       const off = Math.abs(i - (bins.length - 1) / 2) / ((bins.length - 1) / 2);
-      ctx.fillStyle = off < 0.3 ? '#4ef08a' : off < 0.65 ? '#f5d34a' : '#ff8a3d';
-      const hgt = (b / max) * (c.height - 18);
-      ctx.fillRect(i * w + 1, c.height - 16 - hgt, w - 2, hgt);
+      g.fillStyle = off < 0.3 ? col.good : off < 0.65 ? col.ok : col.meh;
+      const bh = b ? Math.max(2, (b / max) * (H - 4)) : 1;
+      g.fillRect(i * bw + 1, H - bh, bw - 2, bh);
     });
-    ctx.fillStyle = 'rgba(255,255,255,.5)';
-    ctx.fillRect(c.width / 2 - 0.5, 0, 1, c.height - 16);
-    ctx.font = '11px system-ui';
-    ctx.fillText(`early −${win}ms`, 2, c.height - 3);
-    const late = `+${win}ms late`;
-    ctx.fillText(late, c.width - ctx.measureText(late).width - 2, c.height - 3);
-    return c;
+    g.fillStyle = col.text;
+    g.globalAlpha = 0.5;
+    g.fillRect(Math.round(w / 2), 0, 1, H);
+    g.globalAlpha = 1;
   }
 
   private missBreakdown(): HTMLElement {
     const r = this.r;
     const totalMissed = r.total - r.hits;
-    if (!totalMissed) return h('p', { class: 'hint' }, 'Nothing. Every note was hit.');
+    if (!totalMissed) return h('p', { class: 'res-note' }, 'Nothing. Every note was hit.');
     const max = Math.max(1, ...r.missByLane);
     const lanes = h(
       'div',
@@ -126,7 +308,6 @@ export class ResultsScreen implements Screen {
     );
     const t = r.missByType;
     const kinds = [
-      ['Strums', t.strum],
       ['HOPOs', t.hopo],
       ['Taps', t.tap],
       ['Chords', r.missChords],
@@ -136,12 +317,13 @@ export class ResultsScreen implements Screen {
       'div',
       null,
       lanes,
-      h('div', { class: 'kinds' }, ...kinds.map(([k, n]) => h('span', { class: 'kind' }, `${k} `, h('b', null, String(n))))),
+      h('p', { class: 'res-note' }, 'Wrong frets ', h('b', null, String(r.wrongFret)), ' · Not played ', h('b', null, String(r.lateMiss)), ' · Overstrums ', h('b', null, String(r.overstrums))),
+      kinds.length ? h('p', { class: 'res-note' }, ...kinds.flatMap(([k, n], i) => [i ? ' · ' : '', `${k} `, h('b', null, String(n))])) : null,
     );
   }
 
   /** Plain-language advice derived from how notes were lost. */
-  private tips(): HTMLElement | null {
+  private tips(): string[] {
     const r = this.r;
     const tips: string[] = [];
     const lost = r.total - r.hits;
@@ -153,30 +335,16 @@ export class ResultsScreen implements Screen {
     if (lost >= 8 && r.missChords > lost * 0.4) tips.push('Chords cost you the most. Chords need exactly their frets: no extra lower frets.');
     const worstLane = r.missByLane.indexOf(Math.max(...r.missByLane));
     if (lost >= 10 && r.missByLane[worstLane] > lost * 0.45) tips.push(`The ${LANE_NAMES[worstLane].toLowerCase()} fret accounts for most misses.`);
-    if (!tips.length) return null;
-    return h('ul', { class: 'tips' }, ...tips.slice(0, 3).map((t) => h('li', null, t)));
+    return tips.slice(0, 2);
   }
 
-  private sectionList(weakest: SectionResult | null): HTMLElement {
-    const list = h('div', { class: 'sec-list' });
-    for (const s of this.r.sections) {
-      const acc = s.hits / s.total;
-      const cls = acc >= 0.98 ? 'great' : acc >= 0.85 ? 'ok' : 'bad';
-      list.append(
-        h(
-          'button',
-          {
-            class: `sec ${cls} ${s === weakest ? 'weak' : ''}`,
-            title: this.req.practice ? '' : 'Practice this section',
-            onclick: () => !this.req.practice && this.practiceSection(s),
-          },
-          h('span', { class: 'name' }, s.name),
-          h('span', { class: 'bar' }, h('span', { style: `width:${acc * 100}%` })),
-          h('span', { class: 'pct' }, `${Math.round(acc * 100)}%`),
-        ),
-      );
-    }
-    return list;
+  private work(weakest: SectionResult | null): HTMLElement {
+    const tips = this.tips();
+    const box = h('div');
+    if (!tips.length) box.append(h('p', { class: 'lead' }, this.r.total === this.r.hits ? 'Nothing to fix: a clean run. Try a harder difficulty.' : 'Nothing stood out. Keep going: consistency comes with repetition.'));
+    for (const t of tips) box.append(h('p', { class: 'lead' }, t));
+    if (weakest) box.append(h('p', { class: 'aside' }, 'The ', h('b', null, weakest.name), ` (outlined) cost you the most: ${weakest.total - weakest.hits} notes.`));
+    return box;
   }
 
   private async retry() {
@@ -196,20 +364,18 @@ export class ResultsScreen implements Screen {
   }
 
   nav(a: NavAction): void {
-    if (a === 'confirm') void this.retry();
-    else if (a === 'back') void this.back();
+    if (a === 'confirm' || a === 'back') void this.back();
+    else if (a === 'alt') void this.retry();
+    else if (a === 'left' && this.weakest) void this.practiceSection(this.weakest);
   }
 
   key(e: KeyboardEvent): boolean {
-    if (e.key === 'Enter') void this.retry();
-    else if (e.key === 'Escape') void this.back();
+    if (e.key === 'Enter' || e.key === 'Escape') void this.back();
+    else if (e.key === 'r' || e.key === 'R') void this.retry();
+    else if ((e.key === 'p' || e.key === 'P') && this.weakest) void this.practiceSection(this.weakest);
     else return false;
     return true;
   }
-}
-
-function stat(label: string, value: string, cls = '') {
-  return h('div', { class: `stat ${cls}` }, h('div', { class: 'v' }, value), h('div', { class: 'l' }, label));
 }
 
 function weakestSection(sections: SectionResult[]): SectionResult | null {

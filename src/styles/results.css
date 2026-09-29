@@ -294,6 +294,8 @@
   padding: 0 20px;
 }
 
+.res-actions .btn .dot { width: 10px; height: 10px; border-radius: 50%; }
+.res-actions .btn .dot.ring { width: 14px; height: 14px; border: 2px solid var(--green); background: color-mix(in srgb, var(--green) 45%, #000); box-sizing: border-box; }
 .res-actions .btn.primary {
   padding: 0 24px;
 }

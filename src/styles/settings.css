@@ -221,7 +221,7 @@
 
 .theme-preview {
   position: relative;
-  height: 132px;
+  aspect-ratio: 300 / 132;
   border-radius: var(--radius-sm);
   overflow: hidden;
   border: 1px solid var(--line-soft);
@@ -306,13 +306,22 @@
   display: block;
 }
 
+.skin-inline {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  margin-top: 18px;
+}
+
 .skin-preview {
-  margin-top: 14px;
+  flex: none;
+  width: 240px;
   border-radius: var(--radius);
   background: var(--stage);
+  border: 1px solid var(--line-soft);
   display: grid;
   place-items: center;
-  padding: 24px 12px;
+  padding: 12px;
 }
 
 .skin-preview svg {
@@ -321,7 +330,6 @@
 }
 
 .skin-name {
-  margin-top: 14px;
   font-size: 17px;
   font-weight: 600;
 }
