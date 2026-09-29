@@ -12,7 +12,10 @@ import { neonSkyline } from './neonSkyline.ts';
 import { odeToJoy } from './odeToJoy.ts';
 import { preludeInC } from './preludeInC.ts';
 import { redline } from './redline.ts';
+import { swanLake } from './swanLake.ts';
 import { toccata } from './toccata.ts';
+import { valkyries } from './valkyries.ts';
+import { williamTell } from './williamTell.ts';
 
 /** The built-in songs, in the order they are listed. */
-export const STARTER_SONGS: SongDef[] = [odeToJoy, ignition, midnightDrive, neonSkyline, furElise, canon, mountainKing, redline, fifth, nachtmusik, forty, toccata, preludeInC, minuet];
+export const STARTER_SONGS: SongDef[] = [odeToJoy, ignition, midnightDrive, neonSkyline, furElise, canon, mountainKing, redline, fifth, nachtmusik, forty, toccata, preludeInC, minuet, williamTell, swanLake, valkyries];
