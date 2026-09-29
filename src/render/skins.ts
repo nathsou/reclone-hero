@@ -37,7 +37,7 @@ export const SKINS: Record<SkinId, NoteSkin> = {
     gem: 'dome',
     button: 'wheel',
     particles: 'sparks',
-    hopoScale: 0.9,
+    hopoScale: 0.94,
   },
   neon: {
     id: 'neon',
