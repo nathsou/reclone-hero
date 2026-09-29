@@ -49,10 +49,24 @@ export function skinPreviewSvg(id: SkinId): string {
         body += `<ellipse cx="${x}" cy="${cy - 1.6}" rx="6.8" ry="4.4" fill="url(#dome-c${idx})"/>`;
         break;
       }
-      case 'swiss': {
-        body += `<ellipse cx="${x}" cy="${cy}" rx="16" ry="11" fill="${col}"/>`;
-        if (kind === 1) body += `<ellipse cx="${x}" cy="${cy}" rx="10" ry="7" fill="none" stroke="#e8e8e8" stroke-width="3.2"/>`;
-        if (kind === 2) body += `<ellipse cx="${x}" cy="${cy}" rx="11.5" ry="7.8" fill="#e8e8e8"/>`;
+      case 'studio': {
+        // chrome bezel, glass lens with a glowing core and a softbox reflection
+        defs += `<linearGradient id="studio-m${idx}" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#f4f2ee"/><stop offset=".45" stop-color="#8a8781"/><stop offset=".55" stop-color="#2b2a28"/><stop offset="1" stop-color="#c9c6c0"/></linearGradient>`;
+        const core = kind === 1 ? '#e9e4da' : kind === 2 ? '#0b0b0c' : mixHex(col, '#ffffff', 0.35);
+        const edge = kind === 2 ? '#000000' : mixHex(col, '#000000', 0.55);
+        defs += `<radialGradient id="studio-g${idx}" cx=".5" cy=".62" r=".7"><stop offset="0" stop-color="${core}"/><stop offset="1" stop-color="${edge}"/></radialGradient>`;
+        body += `<ellipse cx="${x}" cy="${cy + 4}" rx="17" ry="10" fill="rgba(0,0,0,.35)"/>`;
+        body += `<ellipse cx="${x}" cy="${cy}" rx="16" ry="11" fill="url(#studio-m${idx})"/>`;
+        body += `<ellipse cx="${x}" cy="${cy - 0.8}" rx="11" ry="7.4" fill="url(#studio-g${idx})"/>`;
+        body += `<rect x="${x - 6}" y="${cy - 6.6}" width="12" height="2.6" rx="1.3" fill="rgba(255,255,255,.75)"/>`;
+        break;
+      }
+      case 'glass': {
+        // a clear bead: tinted body, bright rim, a crescent highlight and a coloured caustic below
+        defs += `<radialGradient id="glass-b${idx}" cx=".5" cy=".6" r=".65"><stop offset="0" stop-color="${kind === 1 ? '#f4f4f8' : kind === 2 ? '#1a1a1e' : mixHex(col, '#ffffff', 0.25)}" stop-opacity=".9"/><stop offset=".8" stop-color="${kind === 2 ? '#0a0a0c' : col}" stop-opacity=".55"/><stop offset="1" stop-color="#ffffff" stop-opacity=".9"/></radialGradient>`;
+        body += `<ellipse cx="${x}" cy="${cy + 6}" rx="12" ry="5" fill="${col}" opacity=".35"/>`;
+        body += `<ellipse cx="${x}" cy="${cy}" rx="16" ry="11" fill="url(#glass-b${idx})" stroke="rgba(255,255,255,.8)" stroke-width="1"/>`;
+        body += `<path d="M${x - 10} ${cy - 4} Q${x} ${cy - 11} ${x + 10} ${cy - 4}" fill="none" stroke="#ffffff" stroke-width="2" stroke-linecap="round" opacity=".85"/>`;
         break;
       }
       case 'baroque': {
@@ -71,12 +85,6 @@ export function skinPreviewSvg(id: SkinId): string {
       case 'pixel': {
         body += `<rect x="${x - 15}" y="${cy - 10}" width="30" height="20" fill="${kind === 2 ? '#1a1a1a' : col}" stroke="${col}" stroke-width="3"/>`;
         body += `<rect x="${x - 5}" y="${cy - 3.5}" width="10" height="7" fill="${kind === 1 ? '#fafafa' : 'rgba(0,0,0,.55)'}"/>`;
-        break;
-      }
-      case 'clay': {
-        body += `<ellipse cx="${x}" cy="${cy + 3}" rx="16" ry="10" fill="rgba(0,0,0,.18)"/>`;
-        body += `<ellipse cx="${x}" cy="${cy}" rx="16" ry="11" fill="${kind === 2 ? '#ece7df' : col}" stroke="${col}" stroke-width="${kind === 2 ? 3 : 0}"/>`;
-        body += `<ellipse cx="${x}" cy="${cy - 1}" rx="7" ry="4.5" fill="${kind === 1 ? '#f4f1ec' : 'rgba(0,0,0,.08)'}"/>`;
         break;
       }
       default: {

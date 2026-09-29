@@ -66,6 +66,10 @@ export class InputManager {
     this.setPollRate(16);
   }
 
+  get hasPads(): boolean {
+    return this.padCount > 0;
+  }
+
   /** When false, keyboard input is left to the DOM (menus, text fields). */
   get gameMode(): boolean {
     return this._gameMode;

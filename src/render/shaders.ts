@@ -26,6 +26,112 @@ const int SHADE[5] = int[5](0x15803d, 0xa3162a, 0xa87f06, 0x1d4fb0, 0xb35a0c);
 const int DEEP[5]  = int[5](0x0f6b2c, 0x8c1220, 0x8f6a05, 0x163f94, 0x96480a);
 `;
 
+/**
+ * Studio skin: image-based light from an analytic photo studio, and reflection rays traced for real
+ * against the other gems (as spheres, from u_gems) and the highway plane. Needs u_colors declared.
+ */
+const STUDIO_COMMON = `
+uniform vec4 u_gems[32];   // x, y (sphere centre), z, colour index (+8 for star power)
+uniform int u_gemCount;
+const float GEM_R = 0.3;
+
+float panel(float az, float el, float az0, float el0, float w, float h, float soft) {
+  vec2 q = abs(vec2(az - az0, el - el0)) - vec2(w, h);
+  return 1.0 - smoothstep(-soft, soft, max(q.x, q.y));
+}
+
+// A dark room: a big softbox over the far end of the highway, strip lights on both sides, a warm
+// kicker behind the player. Roughness blurs the panels (and spreads their energy).
+vec3 studioEnv(vec3 d, float rough) {
+  float el = asin(clamp(d.y, -1.0, 1.0));
+  float az = atan(d.x, -d.z);
+  float azb = atan(d.x, d.z);
+  float soft = 0.03 + rough * 0.5;
+  float spread = 1.0 + rough * 2.0;
+  vec3 c = mix(vec3(0.004, 0.004, 0.006), vec3(0.028, 0.03, 0.036), smoothstep(-0.1, 0.9, d.y));
+  c += vec3(3.8, 3.65, 3.4) * panel(az, el, 0.0, 0.95, 0.52, 0.3, soft) / spread;
+  c += vec3(1.5, 1.65, 1.9) * (panel(az, el, 1.3, 0.3, 0.07, 0.32, soft) + panel(az, el, -1.3, 0.3, 0.07, 0.32, soft)) / spread;
+  c += vec3(0.7, 0.45, 0.28) * panel(azb, el, 0.0, 0.12, 0.6, 0.06, soft) / spread;
+  return c;
+}
+
+// The highway seen in a reflection: dark lacquer, lane lines and the strike line.
+vec3 studioBoard(vec3 q) {
+  if (abs(q.x) > 2.65 || q.z < -26.0 || q.z > 3.0) return vec3(0.003);
+  float d = abs(fract(q.x) - 0.5);
+  float line = (1.0 - smoothstep(0.0, 0.03, d)) * step(abs(q.x), 2.0);
+  return vec3(0.012, 0.011, 0.012) + vec3(0.05) * line + vec3(0.4, 0.38, 0.35) * exp(-abs(q.z) * 12.0) * step(abs(q.x), 2.5);
+}
+
+// Nearest gem along a ray, ignoring the one the ray leaves from.
+int studioHit(vec3 p, vec3 r, out float tHit) {
+  tHit = 1e9;
+  int hit = -1;
+  for (int i = 0; i < 32; i++) {
+    if (i >= u_gemCount) break;
+    vec3 c = u_gems[i].xyz;
+    vec2 dxz = p.xz - c.xz;
+    if (dot(dxz, dxz) < 0.2) continue;
+    vec3 oc = p - c;
+    float b = dot(oc, r);
+    float cc = dot(oc, oc) - GEM_R * GEM_R;
+    float disc = b * b - cc;
+    if (disc < 0.0 || (b > 0.0 && cc > 0.0)) continue;
+    float t = -b - sqrt(disc);
+    if (t > 0.0 && t < tHit) {
+      tHit = t;
+      hit = i;
+    }
+  }
+  return hit;
+}
+
+vec3 studioGemSeen(int i, vec3 n, vec3 r) {
+  float w = u_gems[i].w;
+  vec3 col = w >= 7.5 ? u_colors[6] : u_colors[int(w)];
+  return col * (0.1 + 0.95 * max(n.y, 0.0)) + studioEnv(reflect(r, n), 0.15) * 0.05;
+}
+
+// Follow a reflected ray: other gems first, then the highway, then the room.
+vec3 studioTrace(vec3 p, vec3 r, float rough) {
+  float t;
+  int hit = studioHit(p, r, t);
+  float tPlane = r.y < -1e-4 ? -p.y / r.y : 1e9;
+  if (hit >= 0 && t < tPlane) return studioGemSeen(hit, normalize(p + r * t - u_gems[hit].xyz), r);
+  if (tPlane < 1e8) return studioBoard(p + r * tPlane);
+  return studioEnv(r, rough);
+}
+
+float schlick(float f0, float cosT) {
+  return f0 + (1.0 - f0) * pow(1.0 - cosT, 5.0);
+}
+`;
+
+/**
+ * Crystal: what is behind a surface (u_grab, a copy of the frame so far) seen through it, bent by
+ * its normal, with each colour channel bent by a slightly different amount (dispersion).
+ */
+const GLASS_COMMON = `
+uniform sampler2D u_grab;
+uniform vec2 u_screen;
+uniform float u_lightBg;   // 1 on light themes: glass reads by its tint and dark edges, not by glow
+vec3 behind(vec2 off, float disp, float blur) {
+  vec2 uv = gl_FragCoord.xy / u_screen;
+  if (blur <= 0.0) {
+    return vec3(texture(u_grab, uv + off * (1.0 - disp)).r, texture(u_grab, uv + off).g, texture(u_grab, uv + off * (1.0 + disp)).b);
+  }
+  // frosted: a small golden-angle disc of taps
+  vec3 acc = vec3(0.0);
+  vec2 aspect = vec2(u_screen.y / u_screen.x, 1.0);
+  for (int i = 0; i < 8; i++) {
+    float a = float(i) * 2.39996;
+    vec2 o = off + vec2(cos(a), sin(a)) * sqrt((float(i) + 0.5) / 8.0) * blur * aspect;
+    acc += vec3(texture(u_grab, uv + o * (1.0 - disp)).r, texture(u_grab, uv + o).g, texture(u_grab, uv + o * (1.0 + disp)).b);
+  }
+  return acc / 8.0;
+}
+`;
+
 export const FULLSCREEN_VS = `
 out vec2 v_uv;
 void main() {
@@ -141,7 +247,13 @@ uniform vec3 u_strike;
 uniform float u_board;     // 1 = textured Classic board
 uniform float u_railMode;  // 0 glow by multiplier, 1 steel, 2 ink
 uniform vec3 u_inkCol;
+uniform vec3 u_cam;
+uniform vec3 u_colors[8];
+uniform float u_gloss;     // Studio skin: lacquered board with traced reflections and contact shadows
+uniform float u_glass;     // Crystal skin: the board is a flowing glass slab
 ${DOME_COMMON}
+${STUDIO_COMMON}
+${GLASS_COMMON}
 float hash21(vec2 p) {
   p = fract(p * vec2(123.34, 456.21));
   p += dot(p, p + 45.32);
@@ -170,6 +282,42 @@ void main() {
     base = mix(disp(hexc(0x1d1511)), disp(hexc(0x33241c)), stripe) * (1.0 + grain * 0.3);
     // the theme's far colour is darker than its near colour: keep that as the fade with distance
     base *= mix(u_hwFar.g / max(u_hwNear.g, 1e-5), 1.0, near);
+  }
+  if (u_glass > 0.5) {
+    // A glass slab over the background: slow swells that travel with the chart and a finer ripple
+    // bend what is behind it; the bevelled edges act as lenses; a light frost softens it.
+    float t = u_time;
+    vec2 slope = vec2(
+      0.55 * sin(track * 0.55 + x * 1.3 + t * 0.7) + 0.3 * sin(track * 1.7 - x * 2.9 + t * 1.3),
+      0.55 * cos(track * 0.45 - x * 0.9 + t * 0.5) + 0.3 * cos(track * 2.1 + x * 2.2 - t * 1.1)
+    );
+    float persp = 0.35 + 0.65 * near;
+    vec2 off = vec2(slope.x, -slope.y) * 0.022 * persp;
+    float bevel = smoothstep(u_half - 0.55, u_half - 0.02, ax);
+    off.x -= sign(x) * bevel * bevel * 0.07 * persp;
+    vec3 n = normalize(vec3(-slope.x * 0.08 - sign(x) * bevel * 0.6, 1.0, -slope.y * 0.08));
+    vec3 V = normalize(u_cam - v_pos);
+    vec3 R = reflect(-V, n);
+    float F = schlick(0.04, max(dot(n, V), 0.0));
+    vec3 seen = behind(off, 0.3 + 0.9 * bevel, 0.006 * persp);
+    float lb = u_lightBg;
+    // On a light background the slab is a cooler, deeper glass with edges that darken towards the bevel.
+    vec3 glassTint = mix(vec3(0.9, 0.94, 1.0), vec3(0.76, 0.83, 0.93), lb);
+    base = seen * glassTint * (0.92 - mix(0.1, 0.4, lb) * bevel) + vec3(0.012, 0.014, 0.018);
+    // sky in the surface, and a bright rim along the bevel
+    base += studioEnv(R, 0.25) * F * 0.35;
+    base += vec3(1.0) * pow(bevel, 6.0) * (0.25 + 0.35 * max(R.y, 0.0));
+    // light focused by the gems above: soft coloured caustics just in front of each gem
+    for (int i = 0; i < 32; i++) {
+      if (i >= u_gemCount) break;
+      vec2 dd = v_pos.xz - u_gems[i].xz - vec2(0.0, 0.22);
+      float w = u_gems[i].w;
+      vec3 gc = w >= 7.5 ? u_colors[6] : u_colors[int(w)];
+      float r2 = dd.x * dd.x * 6.0 + dd.y * dd.y * 10.0;
+      float k = exp(-r2 * 3.0) * 0.35 + exp(-r2 * 18.0) * 0.4;
+      // light boards: the caustic tints the glass instead of adding light to an already bright surface
+      base = mix(base + gc * k, mix(base, base * gc * 1.6, min(1.0, k * 1.5)), lb);
+    }
   }
   base *= u_tint;
   // solo sections tint the lane surface
@@ -220,6 +368,37 @@ void main() {
     }
   }
 
+  if (u_gloss > 0.5 && ax < u_half - 0.08) {
+    // Contact shadows: each gem darkens the board under and just behind it.
+    float ao = 1.0;
+    for (int i = 0; i < 32; i++) {
+      if (i >= u_gemCount) break;
+      vec2 dd = v_pos.xz - u_gems[i].xz - vec2(0.0, 0.05);
+      ao *= 1.0 - 0.6 * exp(-(dd.x * dd.x * 5.0 + dd.y * dd.y * 9.0));
+    }
+    base *= ao;
+    // Reflections: trace the mirrored view ray into the gems. The room only adds its highlights, so
+    // light boards stay light.
+    vec3 V = normalize(u_cam - v_pos);
+    vec3 R = reflect(-V, vec3(0.0, 1.0, 0.0));
+    float F = schlick(0.035, max(V.y, 0.0));
+    float t;
+    int hit = studioHit(v_pos, R, t);
+    if (hit >= 0) {
+      vec3 q = v_pos + R * t;
+      vec3 n = normalize(q - u_gems[hit].xyz);
+      float w = u_gems[hit].w;
+      vec3 col = w >= 7.5 ? u_colors[6] : u_colors[int(w)];
+      // the gem's mirror image: soft at the silhouette, fading with distance from the surface; it
+      // hides a little of the room's light, so it also reads on light boards
+      float rim = smoothstep(0.0, 0.6, dot(n, -R));
+      vec3 img = col * (0.25 + 0.9 * max(n.y + 0.35, 0.0)) + vec3(0.03);
+      float k = clamp(F * 1.8, 0.08, 0.32) * rim * exp(-t * 1.1);
+      base = base * (1.0 - 0.6 * k) + img * k;
+    }
+    base += studioEnv(R, 0.45) * F * 0.06;
+  }
+
   // side rails
   float railD = ax - (u_half - 0.09);
   float rail = smoothstep(-0.02, 0.01, railD) * (1.0 - smoothstep(0.08, 0.1, railD));
@@ -248,7 +427,9 @@ void main() {
   // strike line
   float strikeMask = 0.0;
   float inside = step(ax, u_half - 0.1);
-  if (steel) {
+  if (u_glass > 0.5) {
+    // Crystal: no strike line, the glass fret rings mark it
+  } else if (steel) {
     strikeMask = (1.0 - smoothstep(0.045, 0.06, abs(z))) * inside;
     float t = clamp((z + 0.06) / 0.12, 0.0, 1.0);
     base = mix(base, u_strike * (1.5 - 0.85 * t), strikeMask);
@@ -349,12 +530,15 @@ out vec4 o;
 uniform vec3 u_colors[8];
 uniform vec3 u_cam;
 uniform float u_len;
-uniform float u_style;   // 0 neon, 1 swiss, 2 baroque, 3 pixel, 4 clay, 5 classic dome
+uniform float u_style;   // 0 neon, 2 baroque, 3 pixel, 5 classic dome, 6 studio, 7 crystal
 uniform float u_ink;     // 1 = flat inked look (dome only)
 uniform vec3 u_inkCol;
 uniform float u_dpr;
 uniform float u_openL;   // half length of the straight part of the open-note bar
+uniform mat4 u_view;
 ${DOME_COMMON}
+${STUDIO_COMMON}
+${GLASS_COMMON}
 const float ZS = ${f(DOME_ZS)};
 const float RIM_R = ${f(DOME_RIM)};
 const float BODY_R = ${f(DOME_BODY)};
@@ -479,10 +663,122 @@ vec4 dome(vec3 N, vec3 V, vec3 L) {
   return vec4(c, fade);
 }
 
+// Studio: lacquered body (0), polished bezel (1), glass lens (2); open bars use body (0) and top (1).
+vec4 studio(vec3 N, vec3 V) {
+  bool isOpen = v_b.x > 4.5;
+  int ci = min(int(v_b.x), 5);
+  float type = v_b.y;          // 0 strum, 1 hopo, 2 tap, 3 open
+  float flags = v_b.z;
+  bool sp = mod(flags, 2.0) >= 1.0;
+  bool missed = flags >= 2.0;
+  vec3 col = sp ? u_colors[6] : u_colors[ci];
+  float fade = smoothstep(-u_len, -u_len * 0.75, v_world.z);
+  vec3 p = v_world;
+  float nv = max(dot(N, V), 1e-3);
+  vec3 R = reflect(-V, N);
+  float reg = v_region;
+  // key light glint (the softbox's hot spot)
+  float glint = pow(max(dot(R, normalize(vec3(0.0, 0.82, -0.57))), 0.0), 900.0) * 6.0;
+  vec3 c;
+  bool lensR = isOpen ? reg > 0.5 : reg > 1.5;
+  bool bezelR = !isOpen && reg > 0.5 && reg < 1.5;
+  if (bezelR) {
+    // polished metal: silver, champagne on HOPOs, anodised fret colour on taps, ice on star power
+    vec3 f0 = vec3(0.93, 0.91, 0.87);
+    if (type == 1.0) f0 = vec3(0.96, 0.86, 0.66);
+    if (type == 2.0) f0 = col * 0.9 + 0.06;
+    if (sp) f0 = vec3(0.7, 0.9, 1.0);
+    vec3 F = f0 + (1.0 - f0) * pow(1.0 - nv, 5.0);
+    c = F * studioTrace(p, R, 0.08) + glint * f0;
+  } else if (lensR) {
+    // glass: a dielectric reflection over light scattered in the coloured interior
+    float F = schlick(0.04, nv);
+    vec3 refl = studioTrace(p, R, 0.0);
+    vec2 lp = isOpen ? vec2(0.0, v_local.z / 0.16) : vec2(v_local.x, v_local.z / 0.72) / 0.29;
+    float depth = clamp(1.0 - length(lp), 0.0, 1.0);
+    // light from the softbox refracts in and glows through the lens, brightest towards the far side
+    vec3 T = refract(-V, N, 1.0 / 1.5);
+    float through = 0.35 + 0.65 * smoothstep(-0.6, 0.4, -T.z);
+    vec3 inner;
+    if (type == 1.0) inner = mix(vec3(0.82, 0.8, 0.76), col, 0.25 + 0.5 * (1.0 - depth)) * (0.35 + 0.5 * through);
+    else if (type == 2.0) inner = vec3(0.006) + col * 0.03 * depth;
+    else inner = col * (0.12 + 1.15 * pow(depth, 1.4) * through);
+    if (sp) inner = col * (0.6 + 2.2 * depth);
+    c = mix(inner, refl, F) + glint;
+  } else {
+    // lacquered body with a clear coat: deep colour, sharp reflections at grazing angles
+    float F = schlick(0.05, nv);
+    vec3 base = type == 2.0 ? vec3(0.008) : col * 0.22;
+    float wrap = 0.35 + 0.65 * max(N.y, 0.0);
+    c = base * wrap + F * studioTrace(p, R, 0.15) + glint * 0.5;
+  }
+  if (missed) {
+    float l = dot(c, vec3(0.2126, 0.7152, 0.0722));
+    c = vec3(l) * 0.3 + vec3(0.01);
+  }
+  return vec4(c, fade);
+}
+
+// Crystal bead: refracts the highway below it (with dispersion), reflects the room and its
+// neighbours, glows at the rim. HOPOs are clear with a milky core, taps are smoked glass.
+vec4 glassGem(vec3 N, vec3 V) {
+  bool isOpen = v_b.x > 4.5;
+  int ci = min(int(v_b.x), 5);
+  float type = v_b.y;
+  float flags = v_b.z;
+  bool sp = mod(flags, 2.0) >= 1.0;
+  bool missed = flags >= 2.0;
+  vec3 col = sp ? u_colors[6] : u_colors[ci];
+  float fade = smoothstep(-u_len, -u_len * 0.75, v_world.z);
+  float nv = max(dot(N, V), 1e-3);
+  vec3 R = reflect(-V, N);
+  vec2 lp = isOpen ? vec2(0.0, v_local.z / 0.16) : vec2(v_local.x, v_local.z / 0.72) / 0.43;
+  float rr = clamp(length(lp), 0.0, 1.0);
+  float thick = 1.0 - rr * rr;
+  // screen-space lens: the bead magnifies and bends what is under it
+  vec3 ns = mat3(u_view) * N;
+  vec2 off = -ns.xy * (0.03 + 0.05 * thick);
+  vec3 under = behind(off, 0.45, 0.0);
+  vec3 tint = col / max(max(col.r, col.g), max(col.b, 1e-3));
+  float lb = u_lightBg;
+  // light backgrounds: deeper absorption so the colour holds up against white
+  tint = pow(tint, vec3(1.0 + 1.2 * lb));
+  vec3 trans;
+  if (type == 1.0 && !isOpen) {
+    // clear glass, milky core
+    trans = under * mix(vec3(1.0), tint, 0.3) + mix(vec3(0.0), vec3(0.9, 0.9, 0.95), 1.0 - smoothstep(0.2, 0.55, rr)) * 0.8 + col * 0.1;
+  } else if (type == 2.0 && !isOpen) {
+    trans = under * 0.12 + col * 0.35 * smoothstep(0.55, 0.95, rr);
+  } else {
+    trans = under * mix(vec3(1.0), tint, 0.85) * 0.85 + col * (0.08 + 0.22 * thick);
+  }
+  if (sp) trans += col * (0.4 + 0.8 * thick);
+  float F = schlick(0.04, nv);
+  vec3 refl = studioTrace(v_world, R, 0.0);
+  float glint = pow(max(dot(R, normalize(vec3(-0.35, 0.8, -0.5))), 0.0), 240.0) * 3.5;
+  float rim = pow(1.0 - nv, 3.0);
+  vec3 c = mix(trans, refl, F) + vec3(1.0) * glint + mix(vec3(1.0), tint, 0.5) * rim * 0.45 * (1.0 - 0.8 * lb);
+  // real glass on white shows dark edges: the rim refracts the darker world around it
+  c = mix(c, c * 0.3 + col * 0.06, lb * smoothstep(0.6, 0.97, rr));
+  if (missed) {
+    float l = dot(c, vec3(0.2126, 0.7152, 0.0722));
+    c = vec3(l) * 0.35 + vec3(0.01);
+  }
+  return vec4(c, fade);
+}
+
 void main() {
   vec3 N = normalize(v_normal);
   vec3 V = normalize(u_cam - v_world);
   vec3 L = normalize(vec3(-0.3, 1.0, 0.6));
+  if (u_style > 6.5) {
+    o = glassGem(N, V);
+    return;
+  }
+  if (u_style > 5.5) {
+    o = studio(N, V);
+    return;
+  }
   if (u_style > 4.5) {
     o = dome(N, V, L);
     return;
@@ -515,13 +811,6 @@ void main() {
     }
     c += spec * 0.7;
     if (sp) c += u_colors[6] * 0.25;
-  } else if (u_style < 1.5) {
-    // Swiss: flat colour, no light. Strum = solid dot, HOPO = bullseye, tap = ring.
-    vec3 paper = vec3(0.9);
-    if (type == 3.0 || body) c = base;
-    else if (rim) c = type == 0.0 ? base : paper;
-    else c = type == 2.0 ? paper : base;
-    c *= N.y > 0.5 ? 1.0 : 0.6;
   } else if (u_style < 2.5) {
     // Baroque: faceted jewel in a gold bezel; pearl centre on HOPOs, onyx on taps.
     vec3 gold = vec3(0.85, 0.54, 0.16);
@@ -533,21 +822,13 @@ void main() {
       float sparkle = pow(max(dot(reflect(-L, N), V), 0.0), 60.0) * 3.0;
       c = j * (0.12 + 0.95 * diff) + j * 0.3 + sparkle + fres * j * 0.8;
     }
-  } else if (u_style < 3.5) {
+  } else {
     // Pixel: flat blocks lit only by face direction. Strum = dark centre, HOPO = white centre, tap = hollow.
     float face = N.y > 0.5 ? 1.0 : (abs(N.x) > 0.5 ? 0.72 : 0.5);
     if (rim) c = type == 2.0 ? base : min(base * 1.35 + 0.12, vec3(1.0));
     else if (body) c = type == 2.0 ? base * 0.12 : base;
     else c = type == 1.0 ? vec3(0.98) : base * (type == 2.0 ? 0.12 : 0.3);
     c *= face;
-  } else {
-    // Clay: soft wrap lighting, matte, pastel. Tap = cream pebble with a coloured shoulder.
-    float wrap = dot(N, L) * 0.5 + 0.5;
-    vec3 cl = base;
-    if (rim) cl = base * 1.06 + 0.03;
-    else if (!body) cl = type == 1.0 ? vec3(0.95, 0.93, 0.9) : base * 0.82;
-    if (type == 2.0 && !rim) cl = vec3(0.92, 0.9, 0.86);
-    c = cl * (0.3 + 0.75 * wrap * wrap) + fres * 0.1;
   }
 
   if (missed) {
@@ -577,7 +858,10 @@ flat out vec4 v_a;
 flat out vec4 v_b;
 void main() {
   vec3 p = a_pos;
-  if (u_style > 4.5) {
+  if (u_style > 5.5) {
+    // studio and glass: the well sinks and the ring dips a hair when pressed
+    p.y -= i_a.z * mix(0.006, 0.018, step(0.5, a_region));
+  } else if (u_style > 4.5) {
     // wheel: the ring and hub sink a little when pressed, the base disc sits to the front as a shadow
     p.y -= i_a.z * 0.006 * step(0.5, a_region);
     if (a_region < 0.5) {
@@ -613,7 +897,37 @@ uniform float u_style;
 uniform float u_ink;
 uniform vec3 u_inkCol;
 ${DOME_COMMON}
+${STUDIO_COMMON}
 const float ZS = ${f(DOME_ZS)};
+
+// Studio: an anodised ring (0) reflecting the room and the incoming gems; a smoked-glass well (1)
+// that fills with the fret colour when pressed.
+vec4 bezelButton(vec3 N) {
+  int ci = min(int(v_a.y), 4);
+  vec3 col = u_colors[ci];
+  float pressed = v_a.z;
+  float flash = v_a.w;
+  float wrong = v_b.x;
+  float hold = v_b.y;
+  float lit = clamp(pressed + hold + flash * 0.7, 0.0, 1.0);
+  vec3 V = normalize(u_cam - v_world);
+  vec3 R = reflect(-V, N);
+  float nv = max(dot(N, V), 1e-3);
+  vec3 c;
+  if (v_region < 0.5) {
+    vec3 f0 = mix(col * 0.85 + 0.05, vec3(1.0, 0.25, 0.2), wrong);
+    vec3 F = f0 + (1.0 - f0) * pow(1.0 - nv, 5.0);
+    c = F * studioTrace(v_world + vec3(0.0, 0.02, 0.0), R, 0.28) * (1.0 + 1.5 * flash);
+    c += col * (0.25 * lit + 0.8 * flash);
+  } else {
+    float r = length(vec2(v_local.x, v_local.z / 0.72)) / 0.27;
+    float F = schlick(0.04, nv);
+    vec3 glass = vec3(0.006) + col * lit * (1.8 - 1.1 * r) + col * flash * 2.5;
+    glass = mix(glass, vec3(0.9, 0.02, 0.02), wrong * 0.6);
+    c = mix(glass, studioTrace(v_world, R, 0.0), F);
+  }
+  return vec4(c, 1.0);
+}
 
 // Classic wheel: base disc (0), fret ring (1), well with spokes (2), hub dome (3).
 vec4 wheel(vec3 N) {
@@ -668,8 +982,41 @@ vec4 wheel(vec3 N) {
   return vec4(disp(s) * emis, 1.0);
 }
 
+uniform float u_lightBg;
+
+// Crystal: a tinted glass ring and a clear well that floods with colour when pressed.
+vec4 glassButton(vec3 N) {
+  int ci = min(int(v_a.y), 4);
+  vec3 col = u_colors[ci];
+  float lit = clamp(v_a.z + v_b.y + v_a.w * 0.7, 0.0, 1.0);
+  float wrong = v_b.x;
+  vec3 V = normalize(u_cam - v_world);
+  vec3 R = reflect(-V, N);
+  float nv = max(dot(N, V), 1e-3);
+  float F = schlick(0.04, nv);
+  float rim = pow(1.0 - nv, 3.0);
+  vec3 env = studioTrace(v_world + vec3(0.0, 0.02, 0.0), R, 0.1);
+  if (v_region < 0.5) {
+    float lb = u_lightBg;
+    vec3 c = col * (mix(0.3, 0.55, lb) + 0.5 * lit + 1.5 * v_a.w) + env * F + vec3(1.0) * rim * 0.5 * (1.0 - 0.7 * lb);
+    c = mix(c, vec3(1.2, 0.08, 0.06), wrong * 0.7);
+    return vec4(c, mix(0.78, 0.95, lb) + 0.2 * lit);
+  }
+  float r = length(vec2(v_local.x, v_local.z / 0.72)) / 0.27;
+  vec3 c = col * lit * (1.6 - r) + env * F;
+  return vec4(c, 0.12 + 0.75 * lit + F);
+}
+
 void main() {
   vec3 N = normalize(v_normal);
+  if (u_style > 6.5) {
+    o = glassButton(N);
+    return;
+  }
+  if (u_style > 5.5) {
+    o = bezelButton(N);
+    return;
+  }
   if (u_style > 4.5) {
     o = wheel(N);
     return;
@@ -690,22 +1037,14 @@ void main() {
       float r = length(v_world.xz - vec2(v_a.x, 0.0)) / 0.29;
       c = vec3(0.02) + base * (0.08 + pressed * (1.3 - 0.6 * r) + flash * 3.0 + hold * 1.5);
     }
-  } else if (u_style < 1.5) {
-    // Swiss: flat coloured ring, well fills with colour when pressed
-    float lit = clamp(pressed + flash + hold, 0.0, 1.0);
-    c = ring ? base * (N.y > 0.5 ? 1.0 : 0.6) : mix(vec3(0.06), base, lit) * 0.95;
   } else if (u_style < 2.5) {
     vec3 gold = vec3(0.85, 0.54, 0.16);
     if (ring) c = gold * (0.15 + 0.5 * diff) * (1.0 + 1.5 * flash) + gold * pow(max(dot(reflect(-normalize(vec3(-0.3, 1.0, 0.6)), N), V), 0.0), 18.0) * 1.2;
     else c = base * (0.4 + pressed * 0.9 + flash * 1.8 + hold * 1.0);
-  } else if (u_style < 3.5) {
+  } else {
     float face = N.y > 0.5 ? 1.0 : 0.6;
     float lit = clamp(pressed + flash + hold, 0.0, 1.0);
     c = ring ? base * face * (0.75 + 0.25 * lit) : mix(vec3(0.03), base, lit);
-  } else {
-    float wrap = dot(N, normalize(vec3(-0.3, 1.0, 0.6))) * 0.5 + 0.5;
-    float lit = clamp(pressed + flash * 0.8 + hold, 0.0, 1.0);
-    c = ring ? base * (0.35 + 0.7 * wrap) : mix(vec3(0.85, 0.83, 0.8) * 0.35, base * 0.95, lit);
   }
   // wrong: the button goes dark with a hot red outline, distinct even on the red fret
   float outline = v_region < 0.5 ? 1.0 : 0.0;
@@ -751,6 +1090,7 @@ uniform float u_style;
 uniform float u_ink;
 uniform vec3 u_inkCol;
 uniform float u_dpr;
+uniform float u_lightBg;
 ${DOME_COMMON}
 void main() {
   vec3 base = v_b.w > 0.5 ? u_colors[6] : u_colors[int(v_b.x)];
@@ -760,6 +1100,35 @@ void main() {
   vec3 c;
   float state = v_b.y;   // 0 upcoming, 1 held, 2 dropped/missed
   vec3 grey = vec3(0.14, 0.14, 0.16);
+  if (u_style > 6.5) {
+    // Crystal: a clear tube, see-through in the middle, bright at the walls where light skims it
+    float state = v_b.y;
+    float fade = smoothstep(-u_len, -u_len * 0.75, v_z) * (1.0 - smoothstep(0.8, 2.6, v_z));
+    float wall = pow(u, 5.0);
+    float crest = exp(-pow((v_su.y + 0.3) / 0.12, 2.0));
+    float flow = 0.5 + 0.5 * sin(v_z * 3.0 - u_time * (state == 1.0 ? 14.0 : 4.0) + v_su.y * 2.0);
+    vec3 tint = state == 2.0 ? grey : base;
+    vec3 c2 = tint * (0.25 + 0.6 * wall + (state == 1.0 ? 0.9 * flow : 0.15 * flow)) + vec3(1.0) * (crest * 0.6 + wall * 0.25);
+    float a = 0.28 + 0.6 * wall + 0.3 * crest + (state == 1.0 ? 0.25 : 0.0);
+    // light backgrounds: a denser, darker tube so it does not wash out
+    c2 = mix(c2, tint * (0.35 + 0.5 * wall) + vec3(1.0) * crest * 0.35, u_lightBg);
+    a = mix(a, 0.55 + 0.4 * wall, u_lightBg);
+    o = vec4(c2, a * (1.0 - smoothstep(0.9, 1.0, u)) * fade);
+    return;
+  }
+  if (u_style > 5.5) {
+    // Studio: a glass rod lit from above, a bright specular line running down its crest
+    float state = v_b.y;
+    float fade = smoothstep(-u_len, -u_len * 0.75, v_z) * (1.0 - smoothstep(0.8, 2.6, v_z));
+    float shade = sqrt(max(0.0, 1.0 - u * u));
+    float crest = exp(-pow((v_su.y + 0.25) / 0.14, 2.0));
+    vec3 body = base * (0.08 + 0.7 * shade);
+    if (state == 1.0) body = base * (0.5 + 1.6 * shade) * (0.9 + 0.1 * sin(v_z * 7.0 - u_time * 26.0));
+    if (state == 2.0) body = grey * 0.5 * shade;
+    vec3 c2 = body + vec3(1.0, 0.98, 0.95) * crest * (state == 2.0 ? 0.08 : 0.55) + base * pow(1.0 - shade, 3.0) * 0.4;
+    o = vec4(c2, (1.0 - smoothstep(0.82, 1.0, u)) * fade);
+    return;
+  }
   if (u_style > 4.5) {
     // Classic dome: a capsule, fret colour at the edges and a bright core stripe.
     float fwu = fwidth(v_su.y);
@@ -806,26 +1175,17 @@ void main() {
       c = base * (0.5 + 1.7 * core * shimmer) + vec3(0.22) * core * core;
     } else if (state == 2.0) c = vec3(0.12, 0.12, 0.14) * (0.5 + core);
     else c = base * (0.25 + 0.8 * core);
-  } else if (u_style < 1.5) {
-    // Swiss: a crisp flat bar
-    edge = step(u, 0.62);
-    c = state == 2.0 ? grey * 2.5 : base * (state == 1.0 ? 1.0 : 0.72);
   } else if (u_style < 2.5) {
     // Baroque: gilded edges around a jewel-coloured centre
     vec3 gold = vec3(1.0, 0.66, 0.22) * (state == 2.0 ? 0.25 : 0.9);
     vec3 centre = state == 2.0 ? grey : base * (state == 1.0 ? 1.5 : 0.6);
     c = mix(centre, gold, smoothstep(0.45, 0.6, u));
     edge = 1.0 - smoothstep(0.85, 1.0, u);
-  } else if (u_style < 3.5) {
+  } else {
     // Pixel: hard-edged stepped blocks
     edge = step(u, 0.7);
     float step8 = step(0.5, fract(v_z * 2.0));
     c = (state == 2.0 ? grey * 2.0 : base * (state == 1.0 ? 1.1 : 0.7)) * mix(0.82, 1.0, step8);
-  } else {
-    // Clay: a soft rounded rope
-    float shade = sqrt(max(0.0, 1.0 - u * u));
-    c = (state == 2.0 ? grey * 2.5 : base * (state == 1.0 ? 1.0 : 0.75)) * (0.35 + 0.7 * shade);
-    edge = 1.0 - smoothstep(0.8, 1.0, u);
   }
   float fade = smoothstep(-u_len, -u_len * 0.75, v_z) * (1.0 - smoothstep(0.8, 2.6, v_z));
   o = vec4(c, edge * fade);

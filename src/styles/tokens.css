@@ -43,7 +43,6 @@
   --shadow-color: rgba(0, 0, 0, 0.6);
   --hud-shadow: 0 2px 12px rgba(0, 0, 0, 0.8);
   --hud-star: #ffd23a;
-  --hud-ghost: rgba(242, 239, 233, 0.03);
   --gem-side: #5d5953;
   --gem-top: #f2efe9;
   --gem-ring: #0d0c0b;
@@ -96,7 +95,6 @@
   --shadow-color: rgba(26, 24, 20, 0.22);
   --hud-shadow: none;
   --hud-star: #1a1814;
-  --hud-ghost: rgba(26, 24, 20, 0.055);
   --gem-side: #8a8377;
   --gem-top: #1a1814;
   --gem-ring: #ece6db;
@@ -139,7 +137,6 @@
   --shadow-color: transparent;
   --hud-shadow: none;
   --hud-star: #e30613;
-  --hud-ghost: rgba(0, 0, 0, 0.05);
   --gem-side: #111111;
   --gem-top: #e30613;
   --gem-ring: #ffffff;
@@ -285,7 +282,6 @@
   --shadow-color: rgba(60, 40, 10, 0.2);
   --hud-shadow: none;
   --hud-star: #b7791f;
-  --hud-ghost: rgba(60, 40, 10, 0.06);
   --gem-side: #7c2d12;
   --gem-top: #c2410c;
   --gem-ring: #f5efe3;

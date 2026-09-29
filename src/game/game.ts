@@ -6,6 +6,7 @@ import { applyAction, botActions } from '../engine/bot.ts';
 import type { Action as BotAction } from '../engine/bot.ts';
 import { Engine, HIT, baseScore, starProgress } from '../engine/engine.ts';
 import type { EngineEvent } from '../engine/engine.ts';
+import { FRET_ACTIONS, keyLabel } from '../input/bindings.ts';
 import { input } from '../input/input.ts';
 import type { InputEvent } from '../input/input.ts';
 import type { SongEntry } from '../library/song.ts';
@@ -19,6 +20,8 @@ import { noteSkin, renderTheme } from '../ui/theme.ts';
 /** Misses are judged slightly behind real time so late-arriving input events are never pre-empted. */
 const JUDGE_LAG = 0.02;
 const BASE_SPEED = 11;
+/** In keyboard tap mode, fret keys pressed this close together form one chord, i.e. one strum. */
+const TAP_CHORD_WINDOW = 0.04;
 const FRET_INDEX: Record<string, number> = { green: 0, red: 1, yellow: 2, blue: 3, orange: 4, strumUp: -1, strumDown: -1, starPower: -1, tilt: -1, start: -1 };
 
 export interface PracticeRange {
@@ -164,6 +167,7 @@ export class Game {
     this.sustainHeld = new Uint8Array(n);
     this.sustainDrop = new Float32Array(n).fill(NaN);
     this.missPulse = 0;
+    this.lastTapStrum = -Infinity;
     this.laneHit.fill(0);
     this.laneWrong.fill(0);
     this.spReadyShown = false;
@@ -195,6 +199,7 @@ export class Game {
     input().setPollRate(4);
     input().clear();
     this.srcMask = { kb: 0, pad: input().padFretMask() };
+    this.setKeyboardActive(!this.setup.bot && !input().hasPads);
     audio().play(this.startTime, practice?.speed ?? 1);
     this.lastFrame = performance.now();
     cancelAnimationFrame(this.raf);
@@ -267,6 +272,13 @@ export class Game {
     this.lastFrame = performance.now();
   }
 
+  /** Switch to another difficulty's track and start the song over. */
+  changeTrack(track: Track): void {
+    this.setup.track = track;
+    this.rs.notes = track.notes;
+    this.restart();
+  }
+
   restart(): void {
     this.paused = false;
     this.ended = false;
@@ -299,6 +311,9 @@ export class Game {
   private readonly p1 = new Float64Array(2);
   private readonly p2 = new Float64Array(2);
   private readonly p3 = new Float64Array(2);
+  private readonly lanePts = Array.from({ length: 5 }, () => new Float64Array(2));
+  /** the keyboard played the last fret press: key labels show under the frets */
+  private kbActive = false;
   private readonly hs: HudState = { score: 0, multiplier: 1, streak: 0, spBar: 0, spActive: false, stars: 0, accuracy: 1, progress: 0, elapsed: 0, total: 0, spSeconds: 0, fps: 0, cpuMs: 0, worstMs: 0, showFps: false };
   private rs!: RenderState;
 
@@ -404,7 +419,10 @@ export class Game {
       this.hudCameraKey = r.cameraKey;
       const half = r.highwayHalfWidth;
       this.hud.layout(r.toScreen(-half - 0.25, 0, 0.3, this.p0), r.toScreen(half + 0.25, 0, 0.3, this.p1), r.toScreen(0, 0, 0.9, this.p2), r.toScreen(0, 0, -15, this.p3));
+      for (let i = 0; i < 5; i++) r.toScreen(r.laneX(i), 0, 0.55, this.lanePts[i]);
+      this.hud.layoutKeys(this.lanePts);
     }
+    this.hud.setKeysDown(this.srcMask.kb);
     const practice = this.setup.practice;
     const hs = this.hs;
     hs.score = engine.score;
@@ -442,10 +460,18 @@ export class Game {
     const t = a.songTime(ev.time);
     const fret = FRET_INDEX[ev.action];
     if (fret >= 0) {
+      if (ev.down && !this.setup.bot && (ev.source === 'kb') !== this.kbActive) this.setKeyboardActive(ev.source === 'kb');
       const bit = 1 << fret;
       if (ev.down) this.srcMask[ev.source] |= bit;
       else this.srcMask[ev.source] &= ~bit;
-      if (!this.setup.bot) e.setFrets(Math.max(t, e.time), this.srcMask.kb | this.srcMask.pad);
+      if (this.setup.bot) return;
+      e.setFrets(Math.max(t, e.time), this.srcMask.kb | this.srcMask.pad);
+      // Tap mode: the key press is the strum. The engine's strum leniency waits for the rest of a
+      // chord, so only the first key of a chord strums.
+      if (ev.down && ev.source === 'kb' && settings.kbTapMode && t >= e.time - 0.01 && !(Math.abs(t - this.lastTapStrum) <= TAP_CHORD_WINDOW)) {
+        this.lastTapStrum = t;
+        e.strum(t);
+      }
       return;
     }
     if (!ev.down) return;
@@ -458,7 +484,14 @@ export class Game {
     else if (ev.action === 'starPower' || ev.action === 'tilt') e.activateStarPower(t);
   }
 
+  private lastTapStrum = -Infinity;
   private lastMuffle = -1;
+
+  private setKeyboardActive(on: boolean) {
+    this.kbActive = on;
+    const keys = input().keys;
+    this.hud.setKeyLabels(on ? FRET_ACTIONS.map((a) => (keys[a]?.[0] ? keyLabel(keys[a][0]) : '')) : null);
+  }
   private lastClank = -1;
 
   private missAudio(t: number) {

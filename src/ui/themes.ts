@@ -117,7 +117,7 @@ export const THEMES: Record<ThemeId, ThemeDef> = {
     name: 'Swiss',
     description: 'International Typographic Style: white, black, red, a strict grid.',
     swatch: ['#ffffff', '#f2f2f2', '#e30613', '#111111'],
-    skin: 'swiss',
+    skin: 'dome',
     render: scene({
       light: true,
       bgBottom: [0.86, 0.86, 0.86],
@@ -174,7 +174,7 @@ export const THEMES: Record<ThemeId, ThemeDef> = {
     name: 'Paper',
     description: 'Warm cream pages and serif type.',
     swatch: ['#f5efe3', '#fffaf0', '#c2410c', '#2a2118'],
-    skin: 'clay',
+    skin: 'dome',
     render: scene({ light: true, bgBottom: [0.88, 0.7, 0.44], bgTop: [0.97, 0.85, 0.62], art: 0.25, highwayTint: [1.45, 1.05, 0.7], bloom: 0.35, vignette: 0.1 }),
   },
   midnight: {

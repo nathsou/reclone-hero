@@ -71,6 +71,7 @@ export class LibraryScreen implements Screen {
       );
       this.status.append(h('p', { class: 'hint' }, 'This browser cannot remember folders, so you will choose it again next time. Chrome and Edge remember it.'));
     }
+    this.buttons.append(h('button', { class: 'btn', onclick: () => app.openLibrary(null) }, 'Play the built-in songs'));
     void Library.useDevServer().then((src) => {
       if (!src) return;
       this.buttons.append(h('button', { class: 'btn', onclick: () => app.openLibrary(src) }, 'Use dev server library'));

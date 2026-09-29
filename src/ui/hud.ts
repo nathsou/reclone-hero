@@ -71,7 +71,6 @@ export class Hud {
   private readonly stars: HTMLDivElement;
   private readonly toasts: HTMLDivElement;
   private readonly section: HTMLSpanElement;
-  private readonly ghost: HTMLDivElement;
   private readonly timeline: HTMLDivElement;
   private readonly marks: HTMLDivElement;
   private readonly elapsed: HTMLSpanElement;
@@ -87,6 +86,9 @@ export class Hud {
   private readonly partEl: HTMLSpanElement;
   private readonly fps: HTMLDivElement;
   private readonly countdown: HTMLDivElement;
+  private readonly keys: HTMLDivElement;
+  private readonly keyCaps: HTMLSpanElement[] = [];
+  private lastKeysDown = -1;
   private tickIndex = 0;
   private readonly scoreText = document.createTextNode('0');
   private lastScore = 0;
@@ -126,7 +128,6 @@ export class Hud {
     this.right = h('div', { class: 'hud-right' }, this.spMeter, h('div', { class: 'hud-info' }, this.acc, this.stars, this.spText));
     this.toasts = h('div', { class: 'hud-toasts' });
     this.section = h('span', { class: 'hud-section' });
-    this.ghost = h('div', { class: 'hud-ghost' });
     this.soloPct = h('span', { class: 'pct' });
     this.soloCount = h('span', { class: 'cnt' });
     this.solo = h('div', { class: 'hud-solo' }, h('span', { class: 'lbl' }, 'SOLO'), this.soloPct, this.soloCount);
@@ -152,10 +153,15 @@ export class Hud {
     this.title = h('div', { class: 'hud-top' }, h('span', { class: 't' }), h('span', { class: 'a' }), h('span', { class: 'grow' }), this.partEl);
     this.fps = h('div', { class: 'hud-fps' });
     this.countdown = h('div', { class: 'hud-countdown' });
+    this.keys = h('div', { class: 'hud-keys' });
+    for (let i = 0; i < 5; i++) {
+      const cap = h('span', { class: `cap f${i}` });
+      this.keyCaps.push(cap);
+      this.keys.append(cap);
+    }
     this.root = h(
       'div',
       { class: 'hud' },
-      this.ghost,
       h('div', { class: 'hud-vignette' }),
       this.title,
       this.timeline,
@@ -166,6 +172,7 @@ export class Hud {
       this.timing,
       this.fps,
       this.countdown,
+      this.keys,
     );
   }
 
@@ -179,6 +186,23 @@ export class Hud {
     this.timing.style.transform = `translate(${strikeCenter[0]}px, ${strikeCenter[1]}px) translate(-50%, 0)`;
     this.toasts.style.transform = `translate(${farCenter[0]}px, ${farCenter[1]}px) translate(-50%, -50%)`;
     this.solo.style.transform = `translate(${farCenter[0]}px, ${farCenter[1] + 70}px) translate(-50%, 0)`;
+  }
+
+  /** Screen positions of the five lanes just in front of the strike line, green first. */
+  layoutKeys(lanes: Float64Array[]): void {
+    for (let i = 0; i < 5; i++) this.keyCaps[i].style.transform = `translate(${lanes[i][0]}px, ${lanes[i][1]}px) translate(-50%, 0)`;
+  }
+
+  /** Keyboard labels under the frets; null hides them (e.g. when playing on a guitar). */
+  setKeyLabels(labels: string[] | null): void {
+    this.keys.classList.toggle('on', labels !== null);
+    if (labels) for (let i = 0; i < 5; i++) setText(this.keyCaps[i], labels[i] ?? '');
+  }
+
+  setKeysDown(mask: number): void {
+    if (mask === this.lastKeysDown) return;
+    this.lastKeysDown = mask;
+    for (let i = 0; i < 5; i++) this.keyCaps[i].classList.toggle('down', (mask & (1 << i)) !== 0);
   }
 
   setTitle(name: string, artist: string, part: string): void {
@@ -301,7 +325,6 @@ export class Hud {
   setSection(name: string): void {
     if (!name) return;
     setText(this.section, name);
-    setText(this.ghost, name);
     restartAnim(this.section, 'pop-a', 'pop-b');
   }
 

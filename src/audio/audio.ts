@@ -256,10 +256,16 @@ export class AudioEngine {
   sync(perf: number): void {
     if (!this.playing) return;
     const raw = this.rawSongTime(perf);
-    const est = this.anchorSong + ((perf - this.anchorPerf) / 1000) * this.rate;
-    if (!this.anchored || Math.abs(raw - est) > 0.04) {
+    const dt = (perf - this.anchorPerf) / 1000;
+    const est = this.anchorSong + dt * this.rate;
+    if (!this.anchored || raw - est > 0.04) {
+      // first reading, or the clock is behind: catch up at once
       this.anchorSong = raw;
       this.anchored = true;
+    } else if (raw - est < -0.04) {
+      // Ahead of the audio (e.g. the output timestamp became available and adds the output latency).
+      // Never step back, notes would visibly jump: run at half speed until the audio catches up.
+      this.anchorSong = Math.max(raw, est - dt * this.rate * 0.5);
     } else {
       this.anchorSong = est + (raw - est) * 0.03;
     }

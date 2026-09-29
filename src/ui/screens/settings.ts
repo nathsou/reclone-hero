@@ -1,6 +1,6 @@
 import { audio } from '../../audio/audio.ts';
 import type { Action } from '../../input/bindings.ts';
-import { ACTIONS, ACTION_LABEL, DEFAULT_KEYS, describeAnalog, describeBinding, savePadProfile, saveKeyBindings } from '../../input/bindings.ts';
+import { ACTIONS, ACTION_LABEL, DEFAULT_KEYS, describeAnalog, describeBinding, keyLabel, savePadProfile, saveKeyBindings } from '../../input/bindings.ts';
 import { input } from '../../input/input.ts';
 import type { NavAction } from '../../input/input.ts';
 import { onSettingsChange, settings, updateSettings } from '../../settings.ts';
@@ -191,6 +191,8 @@ export class SettingsModal implements Screen {
     const scores = Object.keys(makeBackup().data.scores ?? {}).length;
     replace(
       this.body,
+      h('div', { class: 'sec-label' }, 'Library'),
+      toggle('Built-in songs', 'builtinSongs', 'Original tracks and public-domain classics that come with the game, synthesized in your browser.', () => void this.app.refreshLibrary()),
       h('div', { class: 'sec-label' }, 'Move to another computer'),
       h(
         'p',
@@ -311,7 +313,7 @@ export class SettingsModal implements Screen {
                   window.addEventListener('keydown', onKey, true);
                 },
               },
-              (kb[a] ?? []).map(prettyKey).join(' / ') || '—',
+              (kb[a] ?? []).map(keyLabel).join(' / ') || '—',
             ),
           ),
         ),
@@ -330,7 +332,14 @@ export class SettingsModal implements Screen {
       );
     };
     renderKeys();
-    replace(this.body, h('div', { class: 'sec-label' }, 'Controllers'), pads, h('div', { class: 'sec-label' }, 'Keyboard'), keys);
+    replace(
+      this.body,
+      h('div', { class: 'sec-label' }, 'Controllers'),
+      pads,
+      h('div', { class: 'sec-label' }, 'Keyboard'),
+      toggle('Fret keys strum', 'kbTapMode', 'Pressing a fret key plays the note, so no strum key is needed. Hold keys through sustains.'),
+      keys,
+    );
   }
 
   /** Rows the arrow keys move between: the primary control of each row. */
@@ -607,11 +616,6 @@ function pct(v: number) {
   return `${Math.round(v * 100)}%`;
 }
 
-function prettyKey(code: string): string {
-  const arrows: Record<string, string> = { ArrowUp: '↑', ArrowDown: '↓', ArrowLeft: '←', ArrowRight: '→' };
-  return arrows[code] ?? code.replace(/^Key/, '').replace(/^Digit/, '');
-}
-
 type NumKey = { [K in keyof Settings]: Settings[K] extends number ? K : never }[keyof Settings];
 type BoolKey = { [K in keyof Settings]: Settings[K] extends boolean ? K : never }[keyof Settings];
 
@@ -630,9 +634,12 @@ function slider(label: string, key: NumKey, min: number, max: number, step: numb
   return h('label', { class: 'row slider-row' }, h('span', { class: 'lbl' }, label, hint ? h('small', null, hint) : null), inp, val);
 }
 
-function toggle(label: string, key: BoolKey, hint = '') {
+function toggle(label: string, key: BoolKey, hint = '', onChange?: () => void) {
   const inp = h('input', { class: 'switch', type: 'checkbox', checked: settings[key], 'data-stop': '' });
-  inp.addEventListener('change', () => updateSettings({ [key]: inp.checked } as Partial<Settings>));
+  inp.addEventListener('change', () => {
+    updateSettings({ [key]: inp.checked } as Partial<Settings>);
+    onChange?.();
+  });
   return h('label', { class: 'row toggle-row' }, h('span', { class: 'lbl' }, label, hint ? h('small', null, hint) : null), inp);
 }
 
