@@ -107,3 +107,21 @@ K:G
   assert.equal(minor.notes[1].p[0], 66);
   assert.ok(Math.abs(minor.notes[2].d - 2 / 3) < 1e-9);
 });
+
+test('every ABC tune quoted in a built-in song adds up, bar by bar', async () => {
+  const { readdirSync, readFileSync } = await import('node:fs');
+  const { abc } = await import('../src/starter/abc.ts');
+  const dir = new URL('../src/starter/songs/', import.meta.url).pathname;
+  let tunes = 0;
+  for (const f of readdirSync(dir, { withFileTypes: true })) {
+    const src = new TextDecoder().decode(readFileSync(dir + f.name));
+    for (const m of src.matchAll(/abc\(`([^`$]*)`/g)) {
+      const t = abc(m[1]);
+      // an upbeat and the bar that completes it may be short
+      const inner = t.bars.slice(1, -1);
+      inner.forEach((b, i) => assert.ok(Math.abs(b - t.bar) < 1e-6, `${f.name}: bar ${i + 1} lasts ${b} beats, not ${t.bar}`));
+      tunes++;
+    }
+  }
+  assert.ok(tunes >= 5);
+});

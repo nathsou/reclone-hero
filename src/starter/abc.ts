@@ -226,11 +226,16 @@ export function abc(text: string, opts: { transpose?: number; v?: number } = {})
   for (let k = 0; k < toks.length; k++) {
     const tk = toks[k];
     if (tk.t === 'bar') {
-      if (tk.ending === 1 && second) skipping = true;
+      if (tk.ending === 1 && second) {
+        // the bar line before a first ending still closes a bar
+        if (!skipping) flat.push({ t: 'bar', kind: '|', ending: 0 });
+        skipping = true;
+      }
       if (tk.ending >= 2) skipping = false;
       const endRepeat = tk.kind.startsWith(':');
       const startRepeat = tk.kind.endsWith(':');
       if (endRepeat && !second) {
+        flat.push({ t: 'bar', kind: '|', ending: 0 });
         second = true;
         k = start - 1;
         continue;
