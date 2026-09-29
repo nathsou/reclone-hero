@@ -161,6 +161,7 @@ export class GameScreen implements Screen {
     if (!this.req.bot && !this.req.practice) recordPlay(song.id);
     // Handy for debugging from the console.
     (globalThis as Record<string, unknown>).__game = this.game;
+    (globalThis as Record<string, unknown>).__audio = audio();
     this.game.start();
   }
 
