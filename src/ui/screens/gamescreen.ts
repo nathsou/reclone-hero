@@ -14,6 +14,7 @@ import type { App, Screen } from '../app.ts';
 import { fmtScore, h, setText } from '../dom.ts';
 import { formatTime } from '../../util/text.ts';
 import { Hud } from '../hud.ts';
+import { noteSkin, renderTheme } from '../theme.ts';
 import { Menu } from '../menu.ts';
 import type { MenuItem } from '../menu.ts';
 import { canFullscreen, isFullscreen, toggleFullscreen } from '../fullscreen.ts';
@@ -142,7 +143,7 @@ export class GameScreen implements Screen {
       }
     }
     if (this.destroyed) return;
-    this.game.renderer.warmUp(chart.beats);
+    this.game.renderer.warmUp(chart.beats, noteSkin(), renderTheme());
     // Give the browser an idle moment to collect loading garbage before the music starts.
     await new Promise<void>((resolve) =>
       'requestIdleCallback' in window ? requestIdleCallback(() => resolve(), { timeout: 300 }) : setTimeout(resolve, 100),
