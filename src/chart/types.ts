@@ -1,4 +1,4 @@
-export const INSTRUMENTS = ['guitar', 'bass', 'rhythm', 'keys', 'guitarcoop'] as const;
+export const INSTRUMENTS = ['guitar', 'bass', 'rhythm', 'keys', 'guitarcoop', 'touch'] as const;
 export type Instrument = (typeof INSTRUMENTS)[number];
 export const DIFFICULTIES = ['easy', 'medium', 'hard', 'expert'] as const;
 export type Difficulty = (typeof DIFFICULTIES)[number];
@@ -9,7 +9,11 @@ export const INSTRUMENT_LABEL: Record<Instrument, string> = {
   rhythm: 'Rhythm',
   keys: 'Keys',
   guitarcoop: 'Guitar Co-op',
+  touch: 'Touch',
 };
+
+/** The touch part has three frets, drawn on these lanes of the highway. */
+export const TOUCH_LANES = [0, 2, 4] as const;
 
 /** Note kinds. HOPOs may be hit by fretting if the previous note was hit; taps always. */
 export const STRUM = 0;

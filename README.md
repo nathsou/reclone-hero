@@ -54,6 +54,20 @@ song list the guitar's select button (or `Space`) opens the song options: play, 
 favourite, instrument and difficulty, sort, filters, view, search and settings. `*` stars a song.
 On the results screen `Enter` returns to the song list, `R` retries and `P` practises the weakest section.
 
+## Playing on a phone or tablet
+
+On a touch screen, pads across the bottom of the screen are the frets (Settings › Controls › Touch frets
+turns them on or off anywhere). There is no strum: touching a pad plays the note, several fingers make a
+chord, sliding onto another pad moves to that fret, and moving a held finger up and down is the whammy.
+Flick up, or press ★, for Star Power; the other button pauses. The highway ends above the pads, and on a
+phone held upright the score and Star Power meter sit in the top corners.
+
+Every song also has a **Touch** part, next to Guitar and Bass: three big frets (drawn on the green, yellow
+and orange lanes) at every difficulty. The built-in songs have it charted from their scores; other charts
+get theirs folded down from the guitar part, keeping the shape of each line. On a first visit from a touch
+screen the Touch part is picked. **Auto Star Power** (Settings › Gameplay) sets Star Power off by itself just
+before the next notes, which helps on a phone.
+
 ## What's in it
 
 - **Charts:** `.chart` and `.mid` for guitar, bass, rhythm, keys and guitar co-op on all four difficulties:
@@ -62,7 +76,8 @@ On the results screen `Enter` returns to the song list, `R` retries and `P` prac
   `eighthnote_hopo`, `sustain_cutoff_threshold`, `multiplier_note`, `delay`).
 - **Gameplay:** Clone Hero–style rules. ±90 ms window (adjustable), strum leniency, anchoring, HOPO/tap hammer-ons and
   pull-offs, overstrums, sustain drops, 1–4× multiplier, star power (tilt or select, whammy fills the bar),
-  solo bonuses, stars and best scores.
+  solo bonuses, stars and best scores. Each best score remembers what it was played with (guitar,
+  keyboard or touch), shown on the results screen and in the song list.
 - **Audio:** stems are decoded and the non-player parts are pre-mixed, so playback is sample-accurate. A
   smoothed audio clock drives both judgement and rendering, and input is judged at the device's own
   timestamp, not the frame's.

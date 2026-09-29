@@ -101,6 +101,7 @@ export class SettingsModal implements Screen {
       slider('Strum leniency', 'strumLeniencyMs', 0, 120, 5, (v) => `${v} ms`, 'How long a strum may come before its fret press.'),
       h('div', { class: 'sec-label' }, 'Feedback'),
       toggle('Timing bar', 'timingBar', 'Shows early/late ticks under the strike line.'),
+      toggle('Auto Star Power', 'autoStarPower', 'Star Power goes off by itself as soon as it can, just before the next notes. Handy on touch screens.'),
       select('When you miss', 'missFeedback', [
         ['auto', 'Mute my part (or muffle)'],
         ['mute', 'Mute my part'],
@@ -342,6 +343,12 @@ export class SettingsModal implements Screen {
       this.body,
       h('div', { class: 'sec-label' }, 'Controllers'),
       pads,
+      h('div', { class: 'sec-label' }, 'Touch screen'),
+      select('Touch frets', 'touchControls', [
+        ['auto', 'On touch screens'],
+        ['on', 'Always'],
+        ['off', 'Never'],
+      ]),
       h('div', { class: 'sec-label' }, 'Keyboard'),
       toggle('Fret keys strum', 'kbTapMode', 'Pressing a fret key plays the note, so no strum key is needed. Hold keys through sustains.'),
       keys,

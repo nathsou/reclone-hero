@@ -45,6 +45,7 @@ const DIFF_KEYS: Record<Instrument, string> = {
   rhythm: 'diff_rhythm',
   keys: 'diff_keys',
   guitarcoop: 'diff_guitar_coop',
+  touch: 'diff_guitar',
 };
 
 export function makeSongEntry(folder: RawSongFolder): SongEntry | null {

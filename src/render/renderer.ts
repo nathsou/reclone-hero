@@ -83,6 +83,8 @@ const SUSTAIN_W = 0.13;
 export interface RenderState {
   /** song time to draw (already video-calibrated) */
   time: number;
+  /** lanes in play (bit per lane, green first); the touch part leaves out red and blue. Default: all five. */
+  laneMask?: number;
   dt: number;
   /** world units per second */
   speed: number;
@@ -596,30 +598,39 @@ export class Renderer {
    * Draw a throwaway frame that exercises every program, blend mode and target, so drivers finish
    * compiling pipelines during loading instead of hitching on the first hit, open note or star power.
    */
-  warmUp(beats: BeatList): void {
+  warmUp(beats: BeatList, skin: NoteSkin = this.skin, theme: RenderTheme = DEFAULT_RENDER_THEME): void {
     const notes = noteListOf([
       { time: 0.1, mask: 1, type: 0, endTime: 0.6 },
       { time: 0.3, mask: 2, type: 1, sp: 0 },
       { time: 0.5, mask: 4, type: 2 },
       { time: 0.7, mask: 0, type: 0, endTime: 1.1 },
       { time: 0.9, mask: 8, type: 0, endTime: 1.5 },
+      { time: 1.1, mask: 17, type: 0 },
     ]);
     const state: RenderState = {
       time: 0.2, dt: 0.016, speed: 11, notes,
-      noteState: new Uint8Array([1, 0, 0, 2, 1]), spBroken: new Uint8Array(1),
-      sustainHeld: new Uint8Array([1, 0, 0, 0, 0]), sustainDrop: new Float32Array([NaN, NaN, NaN, NaN, 0.1]), sustainMask: 1,
+      noteState: new Uint8Array([1, 0, 0, 2, 1, 0]), spBroken: new Uint8Array(1),
+      sustainHeld: new Uint8Array([1, 0, 0, 0, 0, 0]), sustainDrop: new Float32Array([NaN, NaN, NaN, NaN, 0.1, NaN]), sustainMask: 1,
       beats, frets: 1, laneHit: new Float32Array(5).fill(1), laneWrong: new Float32Array(5).fill(1),
-      spActive: false, multiplier: 4, missPulse: 1, whammy: 0.5, lefty: false, solo: true, beatPulse: 1, theme: DEFAULT_RENDER_THEME, skin: this.skin,
+      spActive: false, multiplier: 4, missPulse: 1, whammy: 0.5, lefty: false, solo: true, beatPulse: 1, theme, skin,
     };
-    this.hitBurst(1, false);
+    // The song's own skin and theme first: their meshes, shader paths and (for Crystal) the frame
+    // copies it refracts are all made now, not on the first notes. Star Power and its sparks too.
+    this.hitBurst(31, false);
     this.render(state);
+    this.hitBurst(31, true);
     state.spActive = true;
     this.render(state);
-    // the inked look takes other branches of the same programs
     state.spActive = false;
+    state.solo = false;
+    this.render(state);
+    // the inked and board looks take other branches of the same programs
     state.theme = { ...DEFAULT_RENDER_THEME, light: true, ink: 1, board: 0, railColor: [0.01, 0.01, 0.01] };
     this.render(state);
     state.theme = { ...DEFAULT_RENDER_THEME, board: 1, railColor: [0.55, 0.53, 0.5] };
+    this.render(state);
+    // leave everything as the song will start: its theme, no sparks
+    state.theme = theme;
     this.render(state);
     this.particles.count = 0;
     this.gl.finish();
@@ -948,6 +959,7 @@ export class Renderer {
     inst.count = 0;
     const k = 1 - Math.exp(-s.dt * 40);
     for (let lane = 0; lane < 5; lane++) {
+      if (s.laneMask !== undefined && !(s.laneMask & (1 << lane))) continue;
       const pressed = s.frets & (1 << lane) ? 1 : 0;
       this.buttonPress[lane] += (pressed - this.buttonPress[lane]) * k;
       const holding = s.sustainMask & (1 << lane) ? 1 : 0;

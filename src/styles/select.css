@@ -718,6 +718,10 @@
   color: var(--text);
 }
 
+.covers-controls .best .with {
+  color: var(--dim);
+}
+
 .covers-controls .btn {
   --btn-h: 46px;
   font-size: 15px;

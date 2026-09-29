@@ -3,7 +3,8 @@ import type { Chart } from '../../chart/build.ts';
 import type { Difficulty, Instrument } from '../../chart/types.ts';
 import { DIFFICULTIES, INSTRUMENTS, INSTRUMENT_LABEL, trackKey } from '../../chart/types.ts';
 import { chartFor } from '../../game/charts.ts';
-import { getBest, scoreKey } from '../../game/scores.ts';
+import { getBest, PLAYED_WITH_LABEL, scoreKey } from '../../game/scores.ts';
+import { TouchFrets } from '../touchFrets.ts';
 import type { NavAction } from '../../input/input.ts';
 import type { SongEntry } from '../../library/song.ts';
 import { settings, updateSettings } from '../../settings.ts';
@@ -72,7 +73,7 @@ export class SongSelect implements Screen {
   private readonly genrePanel: GenrePanel;
   private chart: Chart | null = null;
   private chartFor: SongEntry | null = null;
-  private instrument: Instrument = settings.instrument;
+  private instrument: Instrument = initialInstrument();
   private difficulty: Difficulty = settings.difficulty;
   private detailTimer = 0;
   private previewTimer = 0;
@@ -571,13 +572,13 @@ export class SongSelect implements Screen {
             },
             h('span', { class: 'n' }, DIFF_LABEL[d]),
             h('span', { class: 'c' }, count ? `${count.toLocaleString('en-US')} notes` : '—'),
-            h('span', { class: 'b' }, ...(best ? [starsEl(best.stars), ` ${best.score.toLocaleString('en-US')}${best.fc ? ' · FC' : ''}`] : [])),
+            h('span', { class: 'b' }, ...(best ? [starsEl(best.stars), ` ${best.score.toLocaleString('en-US')}${best.fc ? ' · FC' : ''}${best.input ? ` · ${PLAYED_WITH_LABEL[best.input]}` : ''}`] : [])),
           ),
         );
       }
     }
     const canPlay = chartReady && this.chart!.tracks.has(trackKey(this.instrument, this.difficulty));
-    const stemNote = chartReady && !song.stems[this.instrument === 'guitarcoop' ? 'guitar' : this.instrument] ? h('div', { class: 'note' }, 'No separate instrument audio: misses muffle the whole mix instead of muting your part.') : null;
+    const stemNote = chartReady && !song.stems[this.instrument === 'guitarcoop' || this.instrument === 'touch' ? 'guitar' : this.instrument] ? h('div', { class: 'note' }, 'No separate instrument audio: misses muffle the whole mix instead of muting your part.') : null;
     replace(
       this.detail,
       h(
@@ -755,7 +756,7 @@ export class SongSelect implements Screen {
           h('span', { class: 'cur' }, `${INSTRUMENT_LABEL[this.instrument]} · ${DIFF_LABEL[this.difficulty]}`),
           next ? h('button', { onclick: () => go(next), title: 'Harder (orange)' }, h('i', { class: 'dot', style: 'background:var(--orange)' }), DIFF_LABEL[next]) : null,
         ),
-        best ? h('span', { class: 'best' }, starsEl(best.stars), best.score.toLocaleString('en-US'), best.fc ? h('span', { class: 'fc' }, 'FC') : null) : null,
+        best ? h('span', { class: 'best' }, starsEl(best.stars), best.score.toLocaleString('en-US'), best.fc ? h('span', { class: 'fc' }, 'FC') : null, best.input ? h('span', { class: 'with', title: `Played with ${PLAYED_WITH_LABEL[best.input].toLowerCase()}` }, PLAYED_WITH_LABEL[best.input]) : null) : null,
         h('button', { class: 'btn primary', disabled: !canPlay, onclick: () => this.play(false) }, h('i', { class: 'dot ring' }), 'Play'),
         h('button', { class: 'btn', disabled: !canPlay, onclick: () => this.practice() }, h('i', { class: 'dot sq' }), 'Practice'),
       );
@@ -1043,4 +1044,24 @@ function hint(k: string, label: string, sw = '') {
 export function starsEl(stars: number): HTMLSpanElement {
   const full = Math.floor(stars);
   return h('span', { class: `stars-inline ${full >= 6 ? 'gold' : ''}` }, ...Array.from({ length: 5 }, (_, i) => h('span', { class: i < full ? 'on' : '' }, '★')));
+}
+
+/**
+ * On a phone or tablet the three-fret touch part is the natural one to start on: pick it once, the
+ * first time the song list opens on a touch screen. Any later choice is kept as usual.
+ */
+function initialInstrument(): Instrument {
+  const KEY = 'chsq.touchDefault';
+  try {
+    if (TouchFrets.wanted() && !localStorage.getItem(KEY)) {
+      localStorage.setItem(KEY, '1');
+      if (settings.instrument === 'guitar') {
+        updateSettings({ instrument: 'touch' });
+        return 'touch';
+      }
+    }
+  } catch {
+    // storage unavailable
+  }
+  return settings.instrument;
 }
