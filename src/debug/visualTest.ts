@@ -13,6 +13,26 @@ const r = new Renderer(canvas);
 const params = new URLSearchParams(location.search);
 if (params.get('q')) r.setQuality(params.get('q') as 'high' | 'medium' | 'low');
 if (params.has('close')) r.camera = { height: 2.0, back: 1.2, lookZ: -3.5, fov: 0.6 };
+// ?btn: a close look at the fret buttons and the strike line
+if (params.has('btn')) r.camera = { height: 2.6, back: 3.4, lookZ: -0.4, fov: 0.7 };
+// ?cam=height,back,lookZ,fov: any camera
+const cam = params.get('cam')?.split(',').map(Number);
+if (cam && cam.length === 4 && cam.every(Number.isFinite)) r.camera = { height: cam[0], back: cam[1], lookZ: cam[2], fov: cam[3] };
+// ?art: a colourful stand-in for album art, to check how the highway lets it through
+if (params.has('art')) {
+  const art = document.createElement('canvas');
+  art.width = art.height = 256;
+  const g = art.getContext('2d')!;
+  const grad = g.createLinearGradient(0, 0, 256, 256);
+  grad.addColorStop(0, '#ff5a3c');
+  grad.addColorStop(0.5, '#3cb8ff');
+  grad.addColorStop(1, '#ffe14a');
+  g.fillStyle = grad;
+  g.fillRect(0, 0, 256, 256);
+  g.fillStyle = '#fff';
+  g.fillRect(90, 60, 80, 140);
+  r.setBackground(art);
+}
 
 type Spec = Parameters<typeof noteListOf>[0][number];
 function mk(time: number, mask: number, type: NoteType, len = 0, sp = -1): Spec {
@@ -66,13 +86,13 @@ const state: RenderState = {
   lefty: params.has('lefty'),
   solo: params.has('solo'),
   beatPulse: 0.2,
-  theme: THEMES[(params.get('theme') ?? 'neon') as ThemeId]?.render ?? THEMES.neon.render,
-  skin: SKINS[(params.get('skin') ?? THEMES[(params.get('theme') ?? 'neon') as ThemeId]?.skin ?? 'neon') as SkinId] ?? SKINS.neon,
+  theme: THEMES[(params.get('theme') ?? 'classic') as ThemeId]?.render ?? THEMES.classic.render,
+  skin: SKINS[(params.get('skin') ?? THEMES[(params.get('theme') ?? 'classic') as ThemeId]?.skin ?? 'dome') as SkinId] ?? SKINS.dome,
 };
 document.getElementById('legend')!.textContent =
   'near → far: missed blue · held green sustain · blue HOPO · green HOPO · yellow strum · orange tap · red strum\n' +
   'open strum · SP chord · SP HOPO · open HOPO · chord sustain · dropped yellow sustain   (blue button: wrong fret)\n' +
-  'query: ?sp ?solo ?lefty ?miss=1 ?mult=4 ?q=low';
+  'query: ?sp ?solo ?lefty ?miss=1 ?mult=4 ?q=low ?close ?btn ?art ?theme=ink ?skin=neon';
 const loop = () => {
   r.render(state);
   requestAnimationFrame(loop);

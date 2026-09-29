@@ -8,39 +8,56 @@ import type { Settings } from '../../settings.ts';
 import { shortPadName } from '../app.ts';
 import type { App, Screen } from '../app.ts';
 import { h, replace } from '../dom.ts';
-import { THEMES, THEME_IDS } from '../themes.ts';
-import { icon } from '../icons.ts';
+import { THEMES } from '../themes.ts';
+import type { ThemeId } from '../themes.ts';
 import { SKINS, SKIN_IDS } from '../../render/skins.ts';
 import { skinPreviewSvg } from '../skinPreview.ts';
-import { resolveTheme } from '../theme.ts';
+import { resolveSkin } from '../theme.ts';
 import { applyBackup, downloadBackup, makeBackup, parseBackup, summarize } from '../../game/backup.ts';
 
 type Tab = 'gameplay' | 'audio' | 'video' | 'controls' | 'data';
+
+const TAB_LABEL: Record<Tab, string> = { gameplay: 'Gameplay', audio: 'Audio', video: 'Display', controls: 'Controls', data: 'Data' };
+const TABS = Object.keys(TAB_LABEL) as Tab[];
+const FRETS = ['#3cf06a', '#ff3b4a', '#ffd23a', '#3a8bff', '#ff8a1f'];
 
 export class SettingsModal implements Screen {
   readonly el: HTMLElement;
   private readonly app: App;
   private readonly body: HTMLDivElement;
   private readonly tabs: HTMLDivElement;
+  private readonly aside: HTMLElement;
   private tab: Tab = 'gameplay';
   private padTimer = 0;
+  private stopPreview: (() => void) | null = null;
   private readonly inGame: boolean;
 
   constructor(app: App, inGame = false) {
     this.app = app;
     this.inGame = inGame;
     this.body = h('div', { class: 'settings-body' });
-    this.tabs = h('div', { class: 'tabs' });
+    this.tabs = h('div', { class: 'nav-tabs', role: 'tablist' });
+    this.aside = h('aside', { class: 'settings-preview' });
     this.el = h(
       'div',
-      { class: 'modal-backdrop', onclick: (e: Event) => e.target === this.el && this.close() },
-      h('div', { class: 'modal settings-modal' }, h('div', { class: 'modal-head' }, h('h2', null, 'Settings'), this.tabs, h('button', { class: 'btn ghost icon close', 'aria-label': 'Close settings', onclick: () => this.close() }, icon('close'))), this.body),
+      { class: 'settings-page', role: 'dialog', 'aria-label': 'Settings' },
+      h(
+        'nav',
+        { class: 'settings-nav' },
+        h('button', { class: 'settings-back', onclick: () => this.close() }, inGame ? '← Back' : '← Library', h('kbd', null, 'Esc')),
+        h('h2', null, 'Settings'),
+        this.tabs,
+        h('div', { class: 'nav-foot' }, h('div', null, '↑↓ move · ←→ adjust'), h('div', null, 'Changes save as you go.')),
+      ),
+      h('main', { class: 'settings-main' }, this.body),
+      this.aside,
     );
     this.render();
   }
 
   destroy(): void {
     clearInterval(this.padTimer);
+    this.stopPreview?.();
   }
 
   private close() {
@@ -48,15 +65,17 @@ export class SettingsModal implements Screen {
   }
 
   private render() {
-    const tabs: [Tab, string][] = [
-      ['gameplay', 'Gameplay'],
-      ['audio', 'Audio'],
-      ['video', 'Display'],
-      ['controls', 'Controls'],
-      ['data', 'Data'],
-    ];
-    replace(this.tabs, ...tabs.map(([t, label]) => h('button', { class: `tab ${t === this.tab ? 'on' : ''}`, onclick: () => ((this.tab = t), this.render()) }, label)));
+    replace(
+      this.tabs,
+      ...TABS.map((t) => h('button', { class: `nav-tab ${t === this.tab ? 'on' : ''}`, role: 'tab', 'aria-selected': String(t === this.tab), onclick: () => ((this.tab = t), this.render()) }, TAB_LABEL[t])),
+    );
     clearInterval(this.padTimer);
+    this.stopPreview?.();
+    this.stopPreview = null;
+    const preview = this.tab === 'gameplay';
+    this.el.dataset.preview = preview ? 'on' : 'off';
+    this.aside.replaceChildren();
+    this.body.scrollTop = 0;
     if (this.tab === 'gameplay') this.gameplay();
     else if (this.tab === 'audio') this.audioTab();
     else if (this.tab === 'video') this.video();
@@ -65,24 +84,25 @@ export class SettingsModal implements Screen {
   }
 
   private gameplay() {
+    const preview = timingPreview();
+    this.aside.append(h('div', { class: 'label' }, 'Preview'), preview.caption, preview.canvas);
+    this.stopPreview = preview.stop;
     replace(
       this.body,
-      slider('Note speed', 'noteSpeed', 0.5, 2.5, 0.05, (v) => `${v.toFixed(2)}×`),
-      slider('Hit window', 'hitWindowMs', 40, 150, 5, (v) => `±${v} ms`, 'How early or late a note still counts. Default ±90 ms.'),
+      h('div', { class: 'sec-label' }, 'Timing'),
+      slider('Note speed', 'noteSpeed', 0.5, 2.5, 0.05, (v) => `${v.toFixed(2)}×`, 'How fast notes travel toward you.', preview.redraw),
+      slider('Hit window', 'hitWindowMs', 40, 150, 5, (v) => `±${v} ms`, 'How early or late a note still counts. Default ±90 ms.', preview.redraw),
       slider('Strum leniency', 'strumLeniencyMs', 0, 120, 5, (v) => `${v} ms`, 'How long a strum may come before its fret press.'),
-      toggle('Lefty flip', 'lefty'),
+      h('div', { class: 'sec-label' }, 'Feedback'),
       toggle('Timing bar', 'timingBar', 'Shows early/late ticks under the strike line.'),
-      select(
-        'When you miss',
-        'missFeedback',
-        [
-          ['auto', 'Mute my part (or muffle)'],
-          ['mute', 'Mute my part'],
-          ['muffle', 'Muffle the mix'],
-          ['off', 'Nothing'],
-        ],
-      ),
+      select('When you miss', 'missFeedback', [
+        ['auto', 'Mute my part (or muffle)'],
+        ['mute', 'Mute my part'],
+        ['muffle', 'Muffle the mix'],
+        ['off', 'Nothing'],
+      ]),
       toggle('Miss / overstrum sounds', 'missSounds'),
+      toggle('Lefty flip', 'lefty'),
     );
   }
 
@@ -90,32 +110,44 @@ export class SettingsModal implements Screen {
     const apply = () => audio().applyVolumes();
     replace(
       this.body,
+      h('div', { class: 'sec-label' }, 'Volume'),
       slider('Master', 'volMaster', 0, 1, 0.05, pct, '', apply),
       slider('Your part', 'volInstrument', 0, 1, 0.05, pct, '', apply),
       slider('Band', 'volSong', 0, 1, 0.05, pct, '', apply),
       slider('Crowd', 'volCrowd', 0, 1, 0.05, pct, 'Mixed in when a song loads (saves memory), so changes apply to the next song.'),
       slider('Sound effects', 'volSfx', 0, 1, 0.05, pct, '', apply),
       slider('Song preview', 'volPreview', 0, 1, 0.05, pct),
+      h('div', { class: 'sec-label' }, 'Latency'),
       slider('Audio offset', 'audioOffsetMs', -200, 300, 1, (v) => `${v} ms`, 'Raise this if you consistently hit late (Bluetooth headphones need 150+).'),
-      this.inGame ? null : h('button', { class: 'btn', onclick: () => this.calibrate('audio') }, 'Calibrate audio offset…'),
+      this.inGame ? null : h('div', { class: 'actions' }, h('button', { class: 'btn', onclick: () => this.calibrate('audio') }, 'Calibrate audio offset…')),
     );
   }
 
   private video() {
+    const skinPanel = h('div', { class: 'skin-inline' });
+    const showSkin = () => {
+      const id = resolveSkin();
+      const box = h('div', { class: 'skin-preview' });
+      box.innerHTML = skinPreviewSvg(id);
+      replace(skinPanel, box, h('div', null, h('div', { class: 'skin-name' }, SKINS[id].name), h('div', { class: 'skin-desc' }, SKINS[id].description)));
+    };
+    showSkin();
+    const off = onSettingsChange(() => (this.el.isConnected ? showSkin() : off()));
     replace(
       this.body,
-      h('h3', null, 'Theme'),
+      h('div', { class: 'sec-label' }, 'Theme'),
       themePicker(),
-      h('h3', null, 'Note style'),
+      h('div', { class: 'sec-label' }, 'Note style'),
       skinPicker(),
-      h('h3', null, 'Graphics'),
+      skinPanel,
+      h('div', { class: 'sec-label' }, 'Graphics'),
       select('Quality', 'quality', [
         ['high', 'High'],
         ['medium', 'Medium'],
         ['low', 'Low (no glow)'],
       ]),
       slider('Video offset', 'videoOffsetMs', -150, 150, 1, (v) => `${v} ms`, 'Raise this if notes look late compared to what you hear.'),
-      this.inGame ? null : h('button', { class: 'btn', onclick: () => this.calibrate('video') }, 'Calibrate video offset…'),
+      this.inGame ? null : h('div', { class: 'actions' }, h('button', { class: 'btn', onclick: () => this.calibrate('video') }, 'Calibrate video offset…')),
       toggle('Show FPS', 'showFps'),
     );
   }
@@ -159,7 +191,7 @@ export class SettingsModal implements Screen {
     const scores = Object.keys(makeBackup().data.scores ?? {}).length;
     replace(
       this.body,
-      h('h3', null, 'Move to another computer'),
+      h('div', { class: 'sec-label' }, 'Move to another computer'),
       h(
         'p',
         { class: 'hint' },
@@ -298,11 +330,62 @@ export class SettingsModal implements Screen {
       );
     };
     renderKeys();
-    replace(this.body, h('h3', null, 'Controllers'), pads, h('h3', null, 'Keyboard'), keys);
+    replace(this.body, h('div', { class: 'sec-label' }, 'Controllers'), pads, h('div', { class: 'sec-label' }, 'Keyboard'), keys);
+  }
+
+  /** Rows the arrow keys move between: the primary control of each row. */
+  private stops(): HTMLElement[] {
+    return [...this.body.querySelectorAll<HTMLElement>('[data-stop]')];
+  }
+
+  private moveStop(dir: number) {
+    const stops = this.stops();
+    if (!stops.length) return;
+    const active = document.activeElement as HTMLElement | null;
+    const i = stops.findIndex((x) => x === active || x.contains(active));
+    const next = i < 0 ? (dir > 0 ? 0 : stops.length - 1) : Math.max(0, Math.min(stops.length - 1, i + dir));
+    stops[next].focus();
+    stops[next].scrollIntoView({ block: 'nearest' });
+  }
+
+  /** ←/→ on the focused row: nudge a slider, flip a switch, or pick the neighbouring chip. */
+  private adjust(dir: number): boolean {
+    const el = document.activeElement as HTMLElement | null;
+    if (!el) return false;
+    if (el instanceof HTMLInputElement && el.type === 'range') {
+      if (dir > 0) el.stepUp();
+      else el.stepDown();
+      el.dispatchEvent(new Event('input', { bubbles: true }));
+      return true;
+    }
+    if (el instanceof HTMLInputElement && el.type === 'checkbox') {
+      if (el.checked !== dir > 0) el.click();
+      return true;
+    }
+    if (el.dataset.items) {
+      const chips = [...el.querySelectorAll<HTMLButtonElement>(el.dataset.items)];
+      const on = chips.findIndex((c) => c.classList.contains('on'));
+      const next = chips[Math.max(0, Math.min(chips.length - 1, on + dir))];
+      if (next && next !== chips[on]) next.click();
+      el.focus();
+      return true;
+    }
+    return false;
+  }
+
+  private stepTab(dir: number) {
+    this.tab = TABS[(TABS.indexOf(this.tab) + dir + TABS.length) % TABS.length];
+    this.render();
   }
 
   nav(a: NavAction): void {
     if (a === 'back' || a === 'start') this.close();
+    else if (a === 'up') this.moveStop(-1);
+    else if (a === 'down') this.moveStop(1);
+    else if (a === 'left') this.adjust(-1);
+    else if (a === 'right') this.adjust(1);
+    else if (a === 'alt') this.stepTab(1);
+    else if (a === 'confirm') (document.activeElement as HTMLElement | null)?.click?.();
   }
 
   key(e: KeyboardEvent): boolean {
@@ -310,35 +393,55 @@ export class SettingsModal implements Screen {
       this.close();
       return true;
     }
-    return false;
+    if (e.target instanceof HTMLElement && (e.target.closest('select') || e.target.closest('.key-row button'))) return false;
+    if (e.key === 'ArrowDown') this.moveStop(1);
+    else if (e.key === 'ArrowUp') this.moveStop(-1);
+    else if (e.key === 'ArrowLeft') return this.adjust(-1);
+    else if (e.key === 'ArrowRight') return this.adjust(1);
+    else if (e.key === 'PageDown') this.stepTab(1);
+    else if (e.key === 'PageUp') this.stepTab(-1);
+    else return false;
+    return true;
   }
 }
 
-/** Theme cards with a miniature preview of each look. */
+const EXTRA_THEMES: ThemeId[] = ['swiss', 'baroque', 'synthwave', 'terminal', 'paper', 'midnight'];
+
+/** A miniature highway in a theme's colours, for the picker. */
+function themeThumb(kind: 'classic' | 'ink' | 'system'): string {
+  const hwy = (bg: string, board: string, edge: string, ink: string, ring: string, cx = 150) =>
+    `<rect width="300" height="132" fill="${bg}"/>` +
+    `<polygon points="${cx - 55},0 ${cx + 55},0 ${cx + 105},132 ${cx - 105},132" fill="${board}" stroke="${edge}" stroke-width="${ink === 'none' ? 0 : 3}"/>` +
+    `<circle cx="${cx}" cy="32" r="3.5" fill="#3cf06a" stroke="${ring}" stroke-width="1"/>` +
+    `<circle cx="${cx - 22}" cy="62" r="7" fill="#ff3b4a" stroke="${ring}" stroke-width="1.6"/>` +
+    `<circle cx="${cx + 18}" cy="94" r="10" fill="#3a8bff" stroke="${ring}" stroke-width="2"/>`;
+  if (kind === 'classic') return `<svg viewBox="0 0 300 132" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">${hwy('#040302', '#1c1512', '#3a3430', 'none', '#f2efe9')}</svg>`;
+  if (kind === 'ink') return `<svg viewBox="0 0 300 132" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">${hwy('#ece6db', '#faf7f1', '#1a1814', '', '#1a1814')}</svg>`;
+  return `<svg viewBox="0 0 300 132" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><rect width="150" height="132" fill="#040302"/><rect x="150" width="150" height="132" fill="#ece6db"/><text x="150" y="70" text-anchor="middle" font-family="ui-monospace,monospace" font-size="11" fill="#8f8a82" stroke="#ece6db" stroke-width="0.1">follows your OS</text></svg>`;
+}
+
+/** Theme cards (Classic dark, Daylight ink, Match system) plus chips for the extra themes. */
 function themePicker(): HTMLElement {
-  const grid = h('div', { class: 'theme-grid', role: 'radiogroup', 'aria-label': 'Theme' });
+  const wrap = h('div');
   const render = () => {
     const cards = [
-      { id: 'system' as const, name: 'Match system', description: 'Neon or Light, following your OS.', swatch: THEMES.neon.swatch, alt: THEMES.light.swatch },
-      ...THEME_IDS.map((id) => ({ ...THEMES[id], alt: null })),
+      { id: 'classic' as const, name: THEMES.classic.name, description: 'Textured board, domed gems, wheel frets.', thumb: themeThumb('classic') },
+      { id: 'ink' as const, name: THEMES.ink.name, description: 'Paper highway with inked outlines.', thumb: themeThumb('ink') },
+      { id: 'system' as const, name: 'Match system', description: 'Classic dark or Daylight ink, following your OS.', thumb: themeThumb('system') },
     ];
-    replace(
-      grid,
+    const grid = h(
+      'div',
+      { class: 'theme-grid', role: 'radiogroup', 'aria-label': 'Theme', 'data-stop': '', 'data-items': '.theme-card', tabindex: '0' },
       ...cards.map((c) => {
-        const [bg, panel, accent, text] = c.swatch;
-        const preview = h(
-          'div',
-          { class: 'theme-preview', style: `background:${bg}` },
-          h('div', { class: 'tp-panel', style: `background:${panel}` }, h('span', { class: 'tp-line', style: `background:${text}` }), h('span', { class: 'tp-line short', style: `background:${text}` })),
-          h('span', { class: 'tp-dot', style: `background:${accent}` }),
-        );
-        if (c.alt) preview.append(h('div', { class: 'tp-half', style: `background:${c.alt[0]}` }, h('span', { class: 'tp-dot', style: `background:${c.alt[2]}` })));
         const on = settings.theme === c.id;
+        const preview = h('div', { class: 'theme-preview' });
+        preview.innerHTML = c.thumb;
         return h(
           'button',
           {
             class: `theme-card ${on ? 'on' : ''}`,
             role: 'radio',
+            tabindex: '-1',
             'aria-checked': String(on),
             onclick: () => {
               updateSettings({ theme: c.id });
@@ -346,55 +449,158 @@ function themePicker(): HTMLElement {
             },
           },
           preview,
-          h('span', { class: 'tc-name' }, c.name),
+          h('span', { class: 'tc-row' }, h('span', { class: 'tc-name' }, c.name)),
           h('span', { class: 'tc-desc' }, c.description),
         );
       }),
     );
+    replace(
+      wrap,
+      grid,
+      h(
+        'div',
+        { class: 'row stack' },
+        h('span', { class: 'lbl' }, 'More themes', h('small', null, 'Colour schemes from earlier versions.')),
+        h(
+          'div',
+          { class: 'chips', role: 'radiogroup', 'aria-label': 'More themes', 'data-stop': '', 'data-items': '.chip', tabindex: '0' },
+          ...EXTRA_THEMES.map((id) =>
+            h(
+              'button',
+              {
+                class: `chip ${settings.theme === id ? 'on' : ''}`,
+                role: 'radio',
+                tabindex: '-1',
+                'aria-checked': String(settings.theme === id),
+                onclick: () => {
+                  updateSettings({ theme: id });
+                  render();
+                },
+              },
+              THEMES[id].name,
+            ),
+          ),
+        ),
+      ),
+    );
   };
   render();
-  return grid;
+  return wrap;
 }
 
-/** Note style cards: strum, HOPO and tap drawn in each style. */
+/** Note style chips: the style also shows in the preview panel. */
 function skinPicker(): HTMLElement {
-  const grid = h('div', { class: 'theme-grid skin-grid', role: 'radiogroup', 'aria-label': 'Note style' });
+  const chips = h('div', { class: 'chips', role: 'radiogroup', 'aria-label': 'Note style', 'data-stop': '', 'data-items': '.chip', tabindex: '0' });
   const render = () => {
-    const themeSkin = THEMES[resolveTheme()].skin;
-    const cards = [
-      { id: 'theme' as const, name: 'Match theme', description: `Uses ${SKINS[themeSkin].name} with the current theme.`, preview: themeSkin },
-      ...SKIN_IDS.map((id) => ({ id, name: SKINS[id].name, description: SKINS[id].description, preview: id })),
-    ];
+    const options = [{ id: 'theme' as const, name: 'Match theme' }, ...SKIN_IDS.map((id) => ({ id, name: SKINS[id].name }))];
     replace(
-      grid,
-      ...cards.map((c) => {
-        const on = settings.noteStyle === c.id;
-        const preview = h('div', { class: 'skin-preview' });
-        preview.innerHTML = skinPreviewSvg(c.preview);
-        return h(
-          'button',
-          {
-            class: `theme-card ${on ? 'on' : ''}`,
-            role: 'radio',
-            'aria-checked': String(on),
-            onclick: () => {
-              updateSettings({ noteStyle: c.id });
-              render();
-            },
-          },
-          preview,
-          h('span', { class: 'tc-name' }, c.name),
-          h('span', { class: 'tc-desc' }, c.description),
-        );
+      chips,
+      ...options.map((o) => {
+        const on = settings.noteStyle === o.id;
+        return h('button', { class: `chip ${on ? 'on' : ''}`, role: 'radio', tabindex: '-1', 'aria-checked': String(on), onclick: () => updateSettings({ noteStyle: o.id }) }, o.name);
       }),
     );
   };
   render();
   const off = onSettingsChange(() => {
-    if (grid.isConnected) render();
+    if (chips.isConnected) render();
     else off();
   });
-  return grid;
+  return chips;
+}
+
+/** A flattened highway: falling notes and the hit window as a dashed band, live with the sliders. */
+function timingPreview() {
+  const canvas = h('canvas', { class: 'preview-canvas' });
+  const caption = h('div', { class: 'cap' });
+  const NOTES: [number, number][] = [[0, 0.3], [2, 0.75], [1, 1.15], [3, 1.6], [4, 1.95], [2, 2.35], [0, 2.7], [1, 3.05]];
+  const LOOP = 3.6;
+  const reduced = typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches;
+  let raf = 0;
+  let stopped = false;
+  let colors = { accent: '#fd6a3a', text: '#f2efe9', line: 'rgba(255,255,255,.1)' };
+  const readColors = () => {
+    const cs = getComputedStyle(document.documentElement);
+    colors = { accent: cs.getPropertyValue('--accent').trim() || colors.accent, text: cs.getPropertyValue('--text').trim() || colors.text, line: cs.getPropertyValue('--line-soft').trim() || colors.line };
+  };
+  const redraw = () => {
+    caption.replaceChildren('Hit window ', h('b', null, `±${settings.hitWindowMs} ms`), ` at note speed ${settings.noteSpeed.toFixed(2)}×`);
+  };
+  const draw = (now: number) => {
+    if (stopped) return;
+    raf = requestAnimationFrame(draw);
+    const dpr = Math.min(2, window.devicePixelRatio || 1);
+    const w = canvas.clientWidth;
+    const hgt = canvas.clientHeight;
+    if (!w || !hgt) return;
+    if (canvas.width !== Math.round(w * dpr) || canvas.height !== Math.round(hgt * dpr)) {
+      canvas.width = Math.round(w * dpr);
+      canvas.height = Math.round(hgt * dpr);
+    }
+    const g = canvas.getContext('2d')!;
+    g.setTransform(dpr, 0, 0, dpr, 0, 0);
+    g.clearRect(0, 0, w, hgt);
+    const laneW = w / 5;
+    const strike = hgt * 0.8;
+    const pps = hgt * 0.34 * settings.noteSpeed;
+    g.strokeStyle = colors.line;
+    g.lineWidth = 1;
+    for (let i = 1; i < 5; i++) {
+      g.beginPath();
+      g.moveTo(Math.round(i * laneW) + 0.5, 0);
+      g.lineTo(Math.round(i * laneW) + 0.5, hgt);
+      g.stroke();
+    }
+    const half = (settings.hitWindowMs / 1000) * pps;
+    g.globalAlpha = 0.16;
+    g.fillStyle = colors.accent;
+    g.fillRect(0, strike - half, w, half * 2);
+    g.globalAlpha = 0.9;
+    g.strokeStyle = colors.accent;
+    g.setLineDash([3, 3]);
+    for (const y of [strike - half, strike + half]) {
+      g.beginPath();
+      g.moveTo(0, Math.round(y) + 0.5);
+      g.lineTo(w, Math.round(y) + 0.5);
+      g.stroke();
+    }
+    g.setLineDash([]);
+    g.font = '500 10px ui-monospace, "JetBrains Mono", monospace';
+    g.fillStyle = colors.accent;
+    g.textAlign = 'right';
+    g.fillText(`±${settings.hitWindowMs} ms`, w - 8, strike - half - 6);
+    g.globalAlpha = 1;
+    g.fillStyle = colors.text;
+    g.fillRect(0, Math.round(strike) - 1, w, 2);
+    const elapsed = reduced ? 1.1 : (now / 1000) % LOOP;
+    for (const [lane, at] of NOTES) {
+      const y = strike - (at - elapsed) * pps;
+      if (y < -20 || y > hgt + 20) continue;
+      g.fillStyle = FRETS[lane];
+      g.beginPath();
+      g.arc(lane * laneW + laneW / 2, y, 15, 0, Math.PI * 2);
+      g.fill();
+      g.strokeStyle = 'rgba(255,255,255,.9)';
+      g.lineWidth = 2;
+      g.setLineDash([2, 2]);
+      g.beginPath();
+      g.arc(lane * laneW + laneW / 2, y, 8, 0, Math.PI * 2);
+      g.stroke();
+      g.setLineDash([]);
+    }
+  };
+  readColors();
+  redraw();
+  raf = requestAnimationFrame(draw);
+  return {
+    canvas,
+    caption,
+    redraw,
+    stop: () => {
+      stopped = true;
+      cancelAnimationFrame(raf);
+    },
+  };
 }
 
 function pct(v: number) {
@@ -411,24 +617,48 @@ type BoolKey = { [K in keyof Settings]: Settings[K] extends boolean ? K : never 
 
 function slider(label: string, key: NumKey, min: number, max: number, step: number, fmt: (v: number) => string, hint = '', onChange?: () => void) {
   const val = h('span', { class: 'val' }, fmt(settings[key]));
-  const inp = h('input', { type: 'range', min: String(min), max: String(max), step: String(step), value: String(settings[key]) });
+  const inp = h('input', { class: 'slider', type: 'range', min: String(min), max: String(max), step: String(step), value: String(settings[key]), 'data-stop': '' });
+  const fill = () => inp.style.setProperty('--pct', `${((Number(inp.value) - min) / (max - min)) * 100}%`);
+  fill();
   inp.addEventListener('input', () => {
     const v = Number(inp.value);
     updateSettings({ [key]: v } as Partial<Settings>);
     val.textContent = fmt(v);
+    fill();
     onChange?.();
   });
-  return h('label', { class: 'row' }, h('span', { class: 'lbl' }, label, hint ? h('small', null, hint) : null), inp, val);
+  return h('label', { class: 'row slider-row' }, h('span', { class: 'lbl' }, label, hint ? h('small', null, hint) : null), inp, val);
 }
 
 function toggle(label: string, key: BoolKey, hint = '') {
-  const inp = h('input', { type: 'checkbox', checked: settings[key] });
+  const inp = h('input', { class: 'switch', type: 'checkbox', checked: settings[key], 'data-stop': '' });
   inp.addEventListener('change', () => updateSettings({ [key]: inp.checked } as Partial<Settings>));
-  return h('label', { class: 'row' }, h('span', { class: 'lbl' }, label, hint ? h('small', null, hint) : null), inp);
+  return h('label', { class: 'row toggle-row' }, h('span', { class: 'lbl' }, label, hint ? h('small', null, hint) : null), inp);
 }
 
+/** A row of chips (one per option) under the label. */
 function select<K extends keyof Settings>(label: string, key: K, options: [Settings[K], string][]) {
-  const sel = h('select', null, ...options.map(([v, l]) => h('option', { value: String(v), selected: settings[key] === v }, l)));
-  sel.addEventListener('change', () => updateSettings({ [key]: sel.value } as Partial<Settings>));
-  return h('label', { class: 'row' }, h('span', { class: 'lbl' }, label), sel);
+  const chips = h('div', { class: 'chips', role: 'radiogroup', 'aria-label': label, 'data-stop': '', 'data-items': '.chip', tabindex: '0' });
+  const render = () =>
+    replace(
+      chips,
+      ...options.map(([v, l]) =>
+        h(
+          'button',
+          {
+            class: `chip ${settings[key] === v ? 'on' : ''}`,
+            role: 'radio',
+            tabindex: '-1',
+            'aria-checked': String(settings[key] === v),
+            onclick: () => {
+              updateSettings({ [key]: v } as Partial<Settings>);
+              render();
+            },
+          },
+          l,
+        ),
+      ),
+    );
+  render();
+  return h('div', { class: 'row stack' }, h('span', { class: 'lbl' }, label), chips);
 }

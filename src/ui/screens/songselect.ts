@@ -7,21 +7,23 @@ import { getBest, scoreKey } from '../../game/scores.ts';
 import type { NavAction } from '../../input/input.ts';
 import type { SongEntry } from '../../library/song.ts';
 import { settings, updateSettings } from '../../settings.ts';
-import type { Settings } from '../../settings.ts';
+import type { Settings, SongView } from '../../settings.ts';
 import { formatTime } from '../../util/text.ts';
 import type { App, Screen } from '../app.ts';
-import { h, replace, setText } from '../dom.ts';
+import { append, h, replace, setText } from '../dom.ts';
 import { canFullscreen, toggleFullscreen } from '../fullscreen.ts';
 import { logo } from '../logo.ts';
-import { SORTS, SORT_DIRECTION, SORT_LABEL, sortAndGroup } from '../songlist.ts';
+import { SORTS, SORT_DIRECTION, SORT_LABEL, nameKey, sortAndGroup } from '../songlist.ts';
 import { GenrePanel, describeGenreFilter } from '../genrePanel.ts';
 import { icon } from '../icons.ts';
 import { passesGenreFilter } from '../../library/genres.ts';
 import { getPlays } from '../../game/plays.ts';
 import type { Group } from '../songlist.ts';
 
-const ROW_H = 60;
-const HEADER_H = 38;
+const ROW_H = 56;
+const HEADER_H = 44;
+/** covers kept in the DOM either side of the selected one */
+const COVER_SPAN = 8;
 /** Short enough to feel instant, long enough not to start a preview for every song while scrolling. */
 const PREVIEW_DELAY_MS = 160;
 const DIFF_LABEL: Record<Difficulty, string> = { easy: 'Easy', medium: 'Medium', hard: 'Hard', expert: 'Expert' };
@@ -46,7 +48,19 @@ export class SongSelect implements Screen {
   private readonly sticky: HTMLDivElement;
   private sel = 0;
   private readonly sortDir: HTMLButtonElement;
+  private readonly sortValue: HTMLSpanElement;
   private readonly genreBtn: HTMLButtonElement;
+  private readonly viewBtns: Record<SongView, HTMLButtonElement>;
+  private readonly footer: HTMLElement;
+  private readonly covers: HTMLDivElement;
+  private readonly coverLabel: HTMLDivElement;
+  private readonly coverStage: HTMLDivElement;
+  private readonly coverInfo: HTMLDivElement;
+  private readonly scrubTicks: HTMLDivElement;
+  private readonly scrubPos: HTMLDivElement;
+  private readonly coverEls = new Map<number, HTMLDivElement>();
+  private ticks: { label: string; idx: number }[] = [];
+  private view: SongView = settings.songView;
   private readonly genrePanel: GenrePanel;
   private chart: Chart | null = null;
   private chartFor: SongEntry | null = null;
@@ -63,29 +77,30 @@ export class SongSelect implements Screen {
     this.search.addEventListener('input', () => this.refilter());
     const sort = h(
       'select',
-      { class: 'sort', title: 'Sort and group by' },
-      ...SORTS.map((s) => h('option', { value: s, selected: settings.sort === s }, `By ${SORT_LABEL[s].toLowerCase()}`)),
+      { title: 'Sort and group by', 'aria-label': 'Sort by' },
+      ...SORTS.map((k) => h('option', { value: k, selected: settings.sort === k }, `By ${SORT_LABEL[k].toLowerCase()}`)),
     );
     sort.addEventListener('change', () => {
       updateSettings({ sort: sort.value as Settings['sort'], sortReverse: false });
       this.updateSortButton();
       this.refilter();
     });
+    this.sortValue = h('span', { class: 'v' });
     this.sortDir = h('button', {
-      class: 'btn ghost icon',
+      class: 'ctl-btn',
       onclick: () => {
         updateSettings({ sortReverse: !settings.sortReverse });
         this.updateSortButton();
         this.refilter();
       },
     });
-    this.updateSortButton();
-    this.genreBtn = h('button', { class: 'btn genre-btn', onclick: () => this.toggleGenres() });
+    this.genreBtn = h('button', { class: 'ctl-btn genre-btn', onclick: () => this.toggleGenres() });
     this.genrePanel = new GenrePanel(settings.genreFilter, (f) => {
       updateSettings({ genreFilter: f });
       this.updateGenreButton();
       this.refilter();
     });
+    this.updateSortButton();
     this.updateGenreButton();
     this.count = h('span', { class: 'count' });
     this.spacer = h('div', { class: 'spacer' });
@@ -94,53 +109,65 @@ export class SongSelect implements Screen {
     this.sticky = h('div', { class: 'group-sticky' });
     this.sticky.addEventListener('click', () => this.jumpGroup(0));
     this.detail = h('div', { class: 'song-detail' });
+    this.viewBtns = {
+      list: h('button', { class: 'seg', onclick: () => this.setView('list') }, 'List'),
+      covers: h('button', { class: 'seg', onclick: () => this.setView('covers') }, 'Covers'),
+    };
+    this.coverLabel = h('div', { class: 'covers-label' });
+    this.coverStage = h('div', { class: 'cover-stage' });
+    this.coverInfo = h('div', { class: 'covers-info' });
+    this.scrubTicks = h('div', { class: 'ticks' });
+    this.scrubPos = h('div', { class: 'pos' });
+    const scrubber = h('div', { class: 'scrubber', title: 'Jump to a letter' }, this.scrubTicks, h('div', { class: 'rail' }), this.scrubPos);
+    this.bindScrubber(scrubber);
+    this.covers = h('div', { class: 'covers' }, this.coverLabel, this.coverStage, this.coverInfo, scrubber);
+    this.footer = h('footer', { class: 'hints' });
     const lib = app.library;
     this.el = h(
       'div',
-      { class: 'screen select-screen' },
+      { class: 'screen select-screen', 'data-view': this.view },
       h(
         'header',
-        null,
+        { class: 'topbar' },
         logo('small'),
-        this.search,
-        h('div', { class: 'sort-group' }, sort, this.sortDir),
-        h('div', { class: 'genre-anchor' }, this.genreBtn),
-        this.count,
-        h('button', { class: 'btn ghost icon', title: 'Random song (R)', 'aria-label': 'Random song', onclick: () => this.random() }, icon('shuffle')),
-        h('div', { class: 'grow' }),
-        h('button', { class: 'btn ghost icon', title: 'Rescan library', 'aria-label': 'Rescan library', onclick: () => lib.source && app.openLibrary(lib.source, true) }, icon('refresh')),
+        h('div', { class: 'search-box' }, this.search, h('kbd', null, '/')),
+        h('div', { class: 'segmented view-toggle', role: 'group', 'aria-label': 'View' }, this.viewBtns.list, this.viewBtns.covers),
         h(
-          'button',
-          {
-            class: 'btn ghost icon',
-            title: 'Choose a different charts folder',
-            'aria-label': 'Choose charts folder',
-            onclick: async () => {
-              const { Library } = await import('../../library/library.ts');
-              const src = await Library.pickAny();
-              if (src) await app.openLibrary(src, true);
-            },
-          },
-          icon('folder'),
+          'div',
+          { class: 'ctl-group' },
+          h('span', { class: 'ctl' }, 'Sort', this.sortValue, sort),
+          this.sortDir,
+          h('span', { class: 'ctl genre-anchor' }, 'Genre', this.genreBtn),
         ),
-        canFullscreen() ? h('button', { class: 'btn ghost icon', title: 'Fullscreen (Shift+F)', 'aria-label': 'Fullscreen', onclick: () => void toggleFullscreen() }, icon('maximize')) : null,
-        h('button', { class: 'btn', onclick: () => this.openSettings() }, icon('settings'), 'Settings'),
+        this.count,
+        h('div', { class: 'grow' }),
+        h(
+          'div',
+          { class: 'tools' },
+          h('button', { class: 'btn ghost icon', title: 'Random song (R)', 'aria-label': 'Random song', onclick: () => this.random() }, icon('shuffle')),
+          h('button', { class: 'btn ghost icon', title: 'Rescan library', 'aria-label': 'Rescan library', onclick: () => lib.source && app.openLibrary(lib.source, true) }, icon('refresh')),
+          h(
+            'button',
+            {
+              class: 'btn ghost icon',
+              title: 'Choose a different charts folder',
+              'aria-label': 'Choose charts folder',
+              onclick: async () => {
+                const { Library } = await import('../../library/library.ts');
+                const src = await Library.pickAny();
+                if (src) await app.openLibrary(src, true);
+              },
+            },
+            icon('folder'),
+          ),
+          canFullscreen() ? h('button', { class: 'btn ghost icon', title: 'Fullscreen (Shift+F)', 'aria-label': 'Fullscreen', onclick: () => void toggleFullscreen() }, icon('maximize')) : null,
+          h('button', { class: 'btn', onclick: () => this.openSettings() }, icon('settings'), 'Settings'),
+        ),
       ),
-      h('main', null, h('div', { class: 'list-wrap' }, this.list, this.sticky), this.detail),
-      h(
-        'footer',
-        null,
-        hint('↑↓ / strum', 'browse'),
-        hint('PgUp/PgDn', 'jump group'),
-        hint('R', 'random'),
-        hint('Enter / green', 'play'),
-        hint('P / yellow', 'practice'),
-        hint('←→ / blue·orange', 'difficulty'),
-        hint('Tab', 'instrument'),
-        hint('B', 'watch bot'),
-        hint('Shift+F', 'fullscreen'),
-      ),
+      h('main', { class: 'select-main' }, h('div', { class: 'list-wrap' }, this.list, this.sticky), this.detail, this.covers),
+      this.footer,
     );
+    this.applyView();
     this.refilter();
   }
 
@@ -214,6 +241,7 @@ export class SongSelect implements Screen {
     this.count.title = `${groups.length} groups by ${label}`;
     this.spacer.style.height = `${y}px`;
     for (const r of this.rows) delete r.dataset.key;
+    this.buildScrubber();
     const idx = current ? songs.indexOf(current) : -1;
     this.select(idx >= 0 ? idx : 0, true);
   }
@@ -221,14 +249,15 @@ export class SongSelect implements Screen {
   private updateSortButton() {
     const [natural, reversed] = SORT_DIRECTION[settings.sort];
     const label = settings.sortReverse ? reversed : natural;
-    this.sortDir.replaceChildren(icon(settings.sortReverse ? 'sortDesc' : 'sortAsc'));
+    setText(this.sortValue, SORT_LABEL[settings.sort]);
+    setText(this.sortDir, label.replace(/ → /g, '→'));
     this.sortDir.title = `${label} (click to reverse)`;
     this.sortDir.setAttribute('aria-label', `Sort direction: ${label}`);
   }
 
   private updateGenreButton() {
     const f = settings.genreFilter;
-    this.genreBtn.replaceChildren(icon('filter'), describeGenreFilter(f));
+    setText(this.genreBtn, f.items.length ? describeGenreFilter(f) : 'All');
     this.genreBtn.classList.toggle('on', f.items.length > 0);
     this.genreBtn.title = 'Filter by genre';
   }
@@ -262,6 +291,7 @@ export class SongSelect implements Screen {
   }
 
   private renderRows() {
+    if (this.view === 'covers') return;
     const top = this.list.scrollTop;
     const h0 = this.list.clientHeight || 800;
     const first = Math.max(0, this.itemAt(top) - 3);
@@ -320,14 +350,11 @@ export class SongSelect implements Screen {
       const rating = s.diffs[settings.instrument];
       replace(
         row,
+        h('span', { class: 'idx' }, String(it + 1).padStart(2, '0')),
         art,
         h('div', { class: 'meta' }, h('div', { class: 'title' }, s.name), h('div', { class: 'artist' }, sub)),
-        h(
-          'div',
-          { class: 'side' },
-          best ? h('div', { class: 'best' }, starsEl(best.stars), best.fc ? h('span', { class: 'fc' }, 'FC') : null) : null,
-          h('div', { class: 'len' }, rating !== undefined && rating >= 0 && settings.sort !== 'difficulty' ? pips(rating) : null, s.lengthMs ? formatTime(s.lengthMs / 1000) : ''),
-        ),
+        h('div', { class: 'side' }, best ? starsEl(best.stars) : null, best?.fc ? h('span', { class: 'fc' }, 'FC') : null, rating !== undefined && rating >= 0 && settings.sort !== 'difficulty' ? pips(rating) : null),
+        h('div', { class: 'len' }, s.lengthMs ? formatTime(s.lengthMs / 1000) : ''),
       );
     }
     // Sticky label for the group at the top of the viewport.
@@ -360,6 +387,7 @@ export class SongSelect implements Screen {
   private random() {
     if (!this.filtered.length) return;
     this.select(Math.floor(Math.random() * this.filtered.length));
+    if (this.view === 'covers') return;
     const y = this.itemTop[this.songItem[this.sel]];
     this.list.scrollTop = y - this.list.clientHeight / 2 + ROW_H / 2;
   }
@@ -381,6 +409,10 @@ export class SongSelect implements Screen {
   private select(i: number, force = false) {
     if (!this.filtered.length) {
       this.detail.replaceChildren(h('div', { class: 'empty' }, 'No songs match.'));
+      this.coverInfo.replaceChildren(h('div', { class: 'empty' }, 'No songs match.'));
+      this.coverLabel.textContent = '';
+      this.coverStage.replaceChildren();
+      this.coverEls.clear();
       this.renderRows();
       return;
     }
@@ -389,6 +421,7 @@ export class SongSelect implements Screen {
     this.sel = i;
     this.renderRows();
     this.scrollToSel();
+    this.renderCovers();
     const song = this.filtered[i];
     // While scrolling quickly only the list moves; details, chart and preview follow once it settles.
     clearTimeout(this.detailTimer);
@@ -410,6 +443,7 @@ export class SongSelect implements Screen {
   }
 
   private scrollToSel() {
+    if (this.view === 'covers') return;
     const item = this.songItem[this.sel];
     if (item === undefined) return;
     // Keep the group header visible above the first song of a group.
@@ -462,15 +496,21 @@ export class SongSelect implements Screen {
   }
 
   private renderDetail(song: SongEntry, error?: string) {
+    if (this.view === 'covers') this.renderCoverInfo(song, error);
+    else this.renderHero(song, error);
+  }
+
+  private renderHero(song: SongEntry, error?: string) {
     const chartReady = this.chartFor === song && this.chart !== null;
     const art = h('div', { class: 'art' });
     if (song.albumArt) void this.art(song).then((u) => (art.style.backgroundImage = `url("${u}")`));
     else art.classList.add('none');
-    const meta = [song.album, song.year, song.genre].filter(Boolean).join(' · ');
+    const fact = (label: string, value: string, dim = false) => (value ? [h('span', { class: 'label' }, label), h('span', { class: `val${dim ? ' dim' : ''}` }, value)] : []);
     const parts = h('div', { class: 'parts' });
     const diffs = h('div', { class: 'diffs' });
     if (chartReady) {
-      for (const { inst, diffs: ds } of this.available()) {
+      const avail = this.available();
+      for (const { inst, diffs: ds } of avail) {
         const rating = song.diffs[inst];
         parts.append(
           h(
@@ -485,10 +525,11 @@ export class SongSelect implements Screen {
               },
             },
             INSTRUMENT_LABEL[inst],
-            rating !== undefined && rating >= 0 ? h('span', { class: 'dots' }, '●'.repeat(Math.min(6, rating)) + '○'.repeat(Math.max(0, 6 - rating))) : null,
+            rating !== undefined && rating >= 0 ? h('span', { class: 'd' }, `D${rating}`) : null,
           ),
         );
       }
+      if (avail.length > 1) parts.append(h('span', { class: 'grow' }), h('span', { class: 'tip' }, 'Tab to switch'));
       for (const d of DIFFICULTIES) {
         // Note counts come from the raw chart: browsing never builds a track.
         const count = this.chart!.noteCount(trackKey(this.instrument, d));
@@ -506,8 +547,8 @@ export class SongSelect implements Screen {
               },
             },
             h('span', { class: 'n' }, DIFF_LABEL[d]),
-            h('span', { class: 'c' }, count ? `${count} notes` : '—'),
-            best ? h('span', { class: 'b' }, starsEl(best.stars), ` ${best.score.toLocaleString('en-US')}${best.fc ? ' · FC' : ''}`) : null,
+            h('span', { class: 'c' }, count ? `${count.toLocaleString('en-US')} notes` : '—'),
+            h('span', { class: 'b' }, ...(best ? [starsEl(best.stars), ` ${best.score.toLocaleString('en-US')}${best.fc ? ' · FC' : ''}`] : [])),
           ),
         );
       }
@@ -516,17 +557,23 @@ export class SongSelect implements Screen {
     const stemNote = chartReady && !song.stems[this.instrument === 'guitarcoop' ? 'guitar' : this.instrument] ? h('div', { class: 'note' }, 'No separate instrument audio: misses muffle the whole mix instead of muting your part.') : null;
     replace(
       this.detail,
-      art,
-      h('div', { class: 'title' }, song.name),
-      h('div', { class: 'artist' }, song.artist),
-      meta ? h('div', { class: 'meta' }, meta) : null,
       h(
         'div',
-        { class: 'facts' },
-        song.charter ? h('span', null, `Charter: ${song.charter}`) : null,
-        song.lengthMs ? h('span', null, formatTime(song.lengthMs / 1000)) : null,
-        song.pack ? h('span', { class: 'pack' }, song.pack) : null,
+        { class: 'hero-top' },
+        art,
+        h(
+          'div',
+          { class: 'facts' },
+          ...fact('Album', song.album),
+          ...fact('Year', song.year),
+          ...fact('Genre', song.genre),
+          ...fact('Length', song.lengthMs ? formatTime(song.lengthMs / 1000) : ''),
+          ...fact('Charter', song.charter),
+          ...fact('Folder', song.pack, true),
+        ),
       ),
+      h('div', { class: 'title', 'data-len': song.name.length > 32 ? 'l' : song.name.length > 18 ? 'm' : 's' }, song.name),
+      h('div', { class: 'artist' }, song.artist),
       error ? h('div', { class: 'error' }, `Could not read chart: ${error}`) : null,
       chartReady ? parts : h('div', { class: 'loading-chart' }, error ? '' : 'Reading chart…'),
       chartReady ? diffs : null,
@@ -535,10 +582,187 @@ export class SongSelect implements Screen {
         'div',
         { class: 'actions' },
         h('button', { class: 'btn primary big', disabled: !canPlay, onclick: () => this.play(false) }, icon('play'), 'Play'),
-        h('button', { class: 'btn', disabled: !canPlay, onclick: () => this.practice() }, icon('practice'), 'Practice'),
-        h('button', { class: 'btn ghost', disabled: !canPlay, onclick: () => this.play(true) }, icon('bot'), 'Watch bot'),
+        h('button', { class: 'btn', disabled: !canPlay, onclick: () => this.practice() }, 'Practice', h('kbd', null, 'P')),
+        h('button', { class: 'btn ghost', disabled: !canPlay, onclick: () => this.play(true) }, 'Watch bot', h('kbd', null, 'B')),
       ),
     );
+  }
+
+  // ---------------------------------------------------------------- covers
+
+  private setView(v: SongView) {
+    if (v === this.view) return;
+    this.view = v;
+    updateSettings({ songView: v });
+    this.applyView();
+    const song = this.filtered[this.sel];
+    if (v === 'covers') this.renderCovers();
+    else {
+      this.renderRowsForce();
+      this.scrollToSel();
+    }
+    if (song) this.renderDetail(song);
+    (v === 'list' ? this.list : this.el).focus({ preventScroll: true });
+  }
+
+  private applyView() {
+    this.el.dataset.view = this.view;
+    for (const [k, b] of Object.entries(this.viewBtns)) b.classList.toggle('on', k === this.view);
+    const hints =
+      this.view === 'list'
+        ? [
+            hint('↑↓', 'browse'),
+            hint('PgUp/PgDn', 'group'),
+            hint('Enter', 'play', 'g'),
+            hint('P', 'practice', 'y'),
+            hint('←→', 'difficulty', 'bo'),
+            hint('Tab', 'instrument'),
+            hint('R', 'random'),
+            hint('V', 'list / covers'),
+          ]
+        : [
+            hint('←→ / strum', 'browse'),
+            hint('PgUp/PgDn', 'group'),
+            hint('Enter', 'play', 'g'),
+            hint('P', 'practice', 'y'),
+            hint('[ ]', 'difficulty', 'bo'),
+            hint('V', 'list / covers'),
+            hint('Tab', 'instrument'),
+            hint('R', 'random'),
+          ];
+    replace(this.footer, ...hints, h('span', { class: 'grow' }), hint('Shift+F', 'fullscreen'));
+  }
+
+  /** Cover flow: the selected cover faces forward, the ones around it fan out behind. */
+  private renderCovers() {
+    if (this.view !== 'covers' || !this.filtered.length) return;
+    const lo = Math.max(0, this.sel - COVER_SPAN);
+    const hi = Math.min(this.filtered.length - 1, this.sel + COVER_SPAN);
+    for (const [i, el] of this.coverEls) {
+      if (i < lo || i > hi) {
+        el.remove();
+        this.coverEls.delete(i);
+      }
+    }
+    for (let i = lo; i <= hi; i++) {
+      let el = this.coverEls.get(i);
+      const song = this.filtered[i];
+      if (!el) {
+        el = h('div', { class: 'cover' });
+        const idx = i;
+        el.addEventListener('click', () => (idx === this.sel ? void this.play(false) : this.select(idx)));
+        if (song.albumArt) {
+          const target = el;
+          void this.art(song).then((u) => (target.style.backgroundImage = `url("${u}")`));
+        } else {
+          el.classList.add('none');
+          el.append(h('span', { class: 'cap' }, [song.album, song.name].filter(Boolean).join(' · ')));
+        }
+        // Newly created covers start where their neighbour is, so they slide in rather than pop.
+        this.coverStage.append(el);
+        this.coverEls.set(i, el);
+      }
+      const d = i - this.sel;
+      el.style.setProperty('--s', String(Math.sign(d)));
+      el.style.setProperty('--a', String(Math.abs(d)));
+      el.style.zIndex = String(20 - Math.abs(d));
+      el.classList.toggle('center', d === 0);
+      el.classList.toggle('far', Math.abs(d) >= 3);
+    }
+    const g = this.groups[this.groupOfSong(this.sel)];
+    setText(this.coverLabel, g ? `${g.label} · ${this.sel - g.start + 1} of ${g.count}` : '');
+    this.updateScrubber();
+  }
+
+  private renderCoverInfo(song: SongEntry, error?: string) {
+    const chartReady = this.chartFor === song && this.chart !== null;
+    const meta = [song.artist, song.album, song.year, song.lengthMs ? formatTime(song.lengthMs / 1000) : ''].filter(Boolean).join(' · ');
+    const controls = h('div', { class: 'covers-controls' });
+    if (error) controls.append(h('span', { class: 'error' }, `Could not read chart: ${error}`));
+    else if (!chartReady) controls.append(h('span', { class: 'dim mono' }, 'Reading chart…'));
+    else {
+      const a = this.available().find((x) => x.inst === this.instrument);
+      const diffs = a?.diffs ?? [];
+      const i = diffs.indexOf(this.difficulty);
+      const prev = diffs[i - 1];
+      const next = diffs[i + 1];
+      const best = getBest(scoreKey(song.id, trackKey(this.instrument, this.difficulty)));
+      const go = (d: Difficulty) => {
+        this.difficulty = d;
+        this.renderDetail(song);
+        this.renderRowsForce();
+      };
+      const canPlay = this.chart!.tracks.has(trackKey(this.instrument, this.difficulty));
+      append(
+        controls,
+        h(
+          'span',
+          { class: 'diff-pick' },
+          prev ? h('button', { onclick: () => go(prev), title: 'Easier (blue)' }, h('i', { class: 'dot', style: 'background:var(--blue)' }), DIFF_LABEL[prev]) : null,
+          h('span', { class: 'cur' }, `${INSTRUMENT_LABEL[this.instrument]} · ${DIFF_LABEL[this.difficulty]}`),
+          next ? h('button', { onclick: () => go(next), title: 'Harder (orange)' }, h('i', { class: 'dot', style: 'background:var(--orange)' }), DIFF_LABEL[next]) : null,
+        ),
+        best ? h('span', { class: 'best' }, starsEl(best.stars), best.score.toLocaleString('en-US'), best.fc ? h('span', { class: 'fc' }, 'FC') : null) : null,
+        h('button', { class: 'btn primary', disabled: !canPlay, onclick: () => this.play(false) }, h('i', { class: 'dot ring' }), 'Play'),
+        h('button', { class: 'btn', disabled: !canPlay, onclick: () => this.practice() }, h('i', { class: 'dot sq' }), 'Practice'),
+      );
+    }
+    replace(this.coverInfo, h('div', { class: 'title' }, song.name), h('div', { class: 'sub' }, meta), controls);
+  }
+
+  /** Tick labels along the bottom: the first letter of each run (A–Z), or the group labels for other sorts. */
+  private buildScrubber() {
+    const ticks: { label: string; idx: number }[] = [];
+    const alpha = ['artist', 'name', 'charter', 'pack', 'genre'].includes(settings.sort);
+    if (alpha) {
+      const field = (s: SongEntry) => (settings.sort === 'artist' ? s.artist : settings.sort === 'name' ? s.name : settings.sort === 'charter' ? s.charter : settings.sort === 'pack' ? s.pack : s.genre);
+      let last = '';
+      this.filtered.forEach((s, i) => {
+        const c = nameKey(field(s)).charAt(0).toUpperCase();
+        const l = /[A-Z]/.test(c) ? c : '#';
+        if (l !== last) {
+          ticks.push({ label: l, idx: i });
+          last = l;
+        }
+      });
+    } else {
+      const step = Math.max(1, Math.ceil(this.groups.length / 14));
+      this.groups.forEach((g, gi) => {
+        if (gi % step === 0) ticks.push({ label: g.label.length > 8 ? `${g.label.slice(0, 7)}…` : g.label, idx: g.start });
+      });
+    }
+    this.ticks = ticks;
+    replace(this.scrubTicks, ...ticks.map((t) => h('span', null, t.label)));
+  }
+
+  private updateScrubber() {
+    const t = this.ticks;
+    if (!t.length) return;
+    let k = 0;
+    while (k + 1 < t.length && t[k + 1].idx <= this.sel) k++;
+    const next = t[k + 1];
+    const frac = next ? (this.sel - t[k].idx) / Math.max(1, next.idx - t[k].idx) : 0;
+    const pos = t.length > 1 ? (k + frac * 0.999) / (t.length - 1) : 0;
+    this.scrubPos.style.left = `${Math.min(1, pos) * 100}%`;
+    let i = 0;
+    for (const el of this.scrubTicks.children) el.classList.toggle('cur', i++ === k);
+  }
+
+  private bindScrubber(el: HTMLElement) {
+    const jump = (e: PointerEvent) => {
+      const r = el.getBoundingClientRect();
+      const f = Math.min(1, Math.max(0, (e.clientX - r.left) / Math.max(1, r.width)));
+      const k = Math.round(f * (this.ticks.length - 1));
+      const tick = this.ticks[k];
+      if (tick) this.select(tick.idx);
+    };
+    el.addEventListener('pointerdown', (e) => {
+      el.setPointerCapture(e.pointerId);
+      jump(e);
+    });
+    el.addEventListener('pointermove', (e) => {
+      if (el.hasPointerCapture(e.pointerId)) jump(e);
+    });
   }
 
   /** The player picked another instrument: difficulty pips and difficulty grouping follow it. */
@@ -607,6 +831,7 @@ export class SongSelect implements Screen {
 
   key(e: KeyboardEvent): boolean {
     const inSearch = document.activeElement === this.search;
+    const covers = this.view === 'covers';
     switch (e.key) {
       case 'ArrowUp':
         this.select(this.sel - 1);
@@ -642,16 +867,18 @@ export class SongSelect implements Screen {
     if (inSearch) return false;
     if (e.key === 'Home') this.select(0);
     else if (e.key === 'End') this.select(this.filtered.length - 1);
-    else if (e.key === 'ArrowLeft') this.cycleDifficulty(-1);
-    else if (e.key === 'ArrowRight') this.cycleDifficulty(1);
+    else if (e.key === 'ArrowLeft') covers ? this.select(this.sel - 1) : this.cycleDifficulty(-1);
+    else if (e.key === 'ArrowRight') covers ? this.select(this.sel + 1) : this.cycleDifficulty(1);
+    else if (e.key === '[') this.cycleDifficulty(-1);
+    else if (e.key === ']') this.cycleDifficulty(1);
+    else if (e.key === 'v' || e.key === 'V') this.setView(covers ? 'list' : 'covers');
     else if (e.key === 'p' || e.key === 'P') void this.practice();
     else if (e.key === 'b' || e.key === 'B') void this.play(true);
     else if (e.key === 'r' || e.key === 'R') this.random();
     else if (e.key === '/') {
       this.search.focus();
       this.search.select();
-    }
-    else if (e.key.length === 1 && !e.metaKey && !e.ctrlKey && !e.altKey) {
+    } else if (e.key.length === 1 && !e.metaKey && !e.ctrlKey && !e.altKey) {
       this.search.focus();
       return false;
     } else return false;
@@ -659,14 +886,15 @@ export class SongSelect implements Screen {
   }
 }
 
-/** Difficulty rating as six pips (Clone Hero's 0-6 scale; higher values fill all six). */
+/** Difficulty rating as six dash pips (Clone Hero's 0-6 scale; higher values fill all six). */
 function pips(r: number): HTMLSpanElement {
   const n = Math.max(0, Math.min(6, Math.round(r)));
-  return h('span', { class: 'pips', title: `Difficulty ${r}` }, '●'.repeat(n) + '○'.repeat(6 - n));
+  return h('span', { class: 'pips', title: `Difficulty ${r}` }, ...Array.from({ length: 6 }, (_, i) => h('i', { class: i < n ? 'on' : '' })));
 }
 
-function hint(k: string, label: string) {
-  return h('span', { class: 'hint' }, h('kbd', null, k), ' ', label);
+/** Footer hint: bright key, dim label, and coloured squares for the matching guitar buttons. */
+function hint(k: string, label: string, sw = '') {
+  return h('span', { class: 'hint' }, ...[...sw].map((c) => h('i', { class: `sw ${c}` })), sw ? ' ' : '', h('kbd', null, k), ' ', label);
 }
 
 /** Five stars, earned ones lit; six stars (gold) lights all five in gold. */

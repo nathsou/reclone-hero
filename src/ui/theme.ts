@@ -5,14 +5,14 @@ import { THEMES } from './themes.ts';
 import type { RenderTheme, ThemeId } from './themes.ts';
 
 const media = typeof matchMedia === 'function' ? matchMedia('(prefers-color-scheme: light)') : null;
-let current: ThemeId = 'neon';
-let skin: NoteSkin = SKINS.neon;
+let current: ThemeId = 'classic';
+let skin: NoteSkin = SKINS.dome;
 
-/** The theme in effect: "system" follows the OS between Neon and Light. */
+/** The theme in effect: "system" follows the OS between Classic dark and Daylight ink. */
 export function resolveTheme(): ThemeId {
   const t = settings.theme;
-  if (t === 'system') return media?.matches ? 'light' : 'neon';
-  return t in THEMES ? (t as ThemeId) : 'neon';
+  if (t === 'system') return media?.matches ? 'ink' : 'classic';
+  return t in THEMES ? (t as ThemeId) : 'classic';
 }
 
 /** The note style in effect: "theme" uses the theme's own style. */

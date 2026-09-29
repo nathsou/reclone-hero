@@ -3,9 +3,12 @@ import { HOPO, TAP, noteListOf } from '../chart/types.ts';
 import { HIT, MISSED } from '../engine/engine.ts';
 import type { Quality } from '../settings.ts';
 import {
+  OPEN_R,
   QUAD,
   blockMesh,
   discMesh,
+  domeBarMesh,
+  domeMesh,
   flatButtonMesh,
   fretButtonMesh,
   gemMesh,
@@ -16,6 +19,7 @@ import {
   softButtonMesh,
   squareButtonMesh,
   stripMesh,
+  wheelMesh,
 } from './geometry.ts';
 import { InstanceBuffer, deleteTarget, program, staticBuffer, target } from './gl.ts';
 import type { GL, Program, Target } from './gl.ts';
@@ -31,6 +35,7 @@ import type { NoteSkin } from './skins.ts';
 export const DEFAULT_RENDER_THEME: RenderTheme = {
   light: false, bgBottom: [0.03, 0.012, 0.05], bgTop: [0.012, 0.01, 0.03], art: 1, highwayTint: [1, 1, 1], grid: 0, scanlines: 0, pattern: 0, bloom: 0.55, vignette: 0.35,
   hwFar: [0.008, 0.008, 0.016], hwNear: [0.03, 0.028, 0.05], laneLine: [0.06, 0.06, 0.09], strike: [0.25, 0.25, 0.3], beat: [0.7, 0.7, 0.85], beatOver: 0,
+  railColor: null, board: 0, ink: 0, inkColor: [0.01, 0.009, 0.007],
 };
 
 /** How hit sparks behave per skin (all allocation-free at runtime). */
@@ -139,9 +144,11 @@ export class Renderer {
   private gems!: Mesh;
   private gemMeshes!: Record<NoteSkin['gem'], Mesh>;
   private buttonMeshes!: Record<NoteSkin['button'], Mesh>;
-  private skin: NoteSkin = SKINS.neon;
-  private colorsFlat = new Float32Array(SKINS.neon.colors.flat());
+  private skin: NoteSkin = SKINS.dome;
+  private colorsFlat = new Float32Array(SKINS.dome.colors.flat());
   private opens!: Mesh;
+  private opensStd!: Mesh;
+  private opensDome!: Mesh;
   private buttons!: Mesh;
   private sustains!: Mesh;
   private beatLines!: Mesh;
@@ -184,6 +191,9 @@ export class Renderer {
   private buttonPress = new Float32Array(5);
   private time = 0;
   private lefty = false;
+  /** 1 while the inked dome look is on (Daylight ink theme with the dome note style) */
+  private inkGems = 0;
+  private inkCol: RenderTheme['inkColor'] = [0.01, 0.009, 0.007];
 
   constructor(canvas: HTMLCanvasElement) {
     this.canvas = canvas;
@@ -235,6 +245,7 @@ export class Renderer {
     };
     // Every skin's meshes are small; build them all now so switching skins costs nothing.
     this.gemMeshes = {
+      dome: lit(domeMesh(), 1024, [4, 4]),
       puck: lit(gemMesh(), 1024, [4, 4]),
       disc: lit(discMesh(), 1024, [4, 4]),
       jewel: lit(jewelMesh(), 1024, [4, 4]),
@@ -242,15 +253,18 @@ export class Renderer {
       pill: lit(pillMesh(), 1024, [4, 4]),
     };
     this.buttonMeshes = {
+      wheel: lit(wheelMesh(), 5, [4, 4]),
       ring: lit(fretButtonMesh(), 5, [4, 4]),
       flat: lit(flatButtonMesh(), 5, [4, 4]),
       gold: lit(goldButtonMesh(), 5, [4, 4]),
       square: lit(squareButtonMesh(), 5, [4, 4]),
       soft: lit(softButtonMesh(), 5, [4, 4]),
     };
-    this.gems = this.gemMeshes.puck;
-    this.buttons = this.buttonMeshes.ring;
-    this.opens = lit(openBarMesh(HALF - 0.28), 128, [4, 4]);
+    this.gems = this.gemMeshes.dome;
+    this.buttons = this.buttonMeshes.wheel;
+    this.opensStd = lit(openBarMesh(HALF - 0.28), 128, [4, 4]);
+    this.opensDome = lit(domeBarMesh(HALF - 0.28), 128, [4, 4]);
+    this.opens = this.opensDome;
 
     const strip = stripMesh(64);
     this.stripVerts = strip.length / 2;
@@ -483,6 +497,7 @@ export class Renderer {
     this.colorsFlat = new Float32Array(skin.colors.flat());
     this.gems = this.gemMeshes[skin.gem];
     this.buttons = this.buttonMeshes[skin.button];
+    this.opens = skin.style === 5 ? this.opensDome : this.opensStd;
   }
 
   hitBurst(mask: number, sp: boolean): void {
@@ -602,6 +617,12 @@ export class Renderer {
     this.render(state);
     state.spActive = true;
     this.render(state);
+    // the inked look takes other branches of the same programs
+    state.spActive = false;
+    state.theme = { ...DEFAULT_RENDER_THEME, light: true, ink: 1, board: 0, railColor: [0.01, 0.01, 0.01] };
+    this.render(state);
+    state.theme = { ...DEFAULT_RENDER_THEME, board: 1, railColor: [0.55, 0.53, 0.5] };
+    this.render(state);
     this.particles.count = 0;
     this.gl.finish();
   }
@@ -613,6 +634,8 @@ export class Renderer {
     this.lefty = s.lefty;
     this.time = s.time;
     this.setSkin(s.skin);
+    this.inkGems = s.theme.ink > 0.5 && s.skin.style === 5 ? 1 : 0;
+    this.inkCol = s.theme.inkColor;
     this.resize();
     this.particles.update(s.dt);
 
@@ -650,6 +673,10 @@ export class Renderer {
     if (p.u.u_colors) gl.uniform3fv(p.u.u_colors, this.colorsFlat);
     if (p.u.u_style) gl.uniform1f(p.u.u_style, this.skin.style);
     if (p.u.u_half) gl.uniform1f(p.u.u_half, HALF);
+    if (p.u.u_ink) gl.uniform1f(p.u.u_ink, this.inkGems);
+    if (p.u.u_inkCol) gl.uniform3f(p.u.u_inkCol, this.inkCol[0], this.inkCol[1], this.inkCol[2]);
+    if (p.u.u_dpr) gl.uniform1f(p.u.u_dpr, this.width / Math.max(1, this.cssW));
+    if (p.u.u_openL) gl.uniform1f(p.u.u_openL, HALF - 0.28 - OPEN_R);
   }
 
   private drawBackground(s: RenderState) {
@@ -672,6 +699,7 @@ export class Renderer {
     gl.uniform1f(p.u.u_art, th.art);
     gl.uniform1f(p.u.u_grid, th.grid);
     gl.uniform1f(p.u.u_pattern, th.pattern);
+    gl.uniform1f(p.u.u_flat, th.ink);
     const screenAspect = this.cssW / Math.max(1, this.cssH);
     const r = screenAspect / this.bgAspect;
     gl.uniform2f(p.u.u_cover, r > 1 ? 1 : r, r > 1 ? 1 / r : 1);
@@ -689,11 +717,16 @@ export class Renderer {
     const p = this.pHighway;
     this.uniforms(p);
     gl.uniform1f(p.u.u_speed, s.speed);
-    gl.uniform3fv(p.u.u_rail, s.spActive ? RAIL_SP : RAIL_COLORS[Math.min(4, s.multiplier)]);
+    const th = s.theme;
+    // rails: steel or ink when the theme fixes their colour, otherwise coloured by multiplier
+    if (s.spActive) gl.uniform3fv(p.u.u_rail, RAIL_SP);
+    else if (th.railColor) gl.uniform3f(p.u.u_rail, th.railColor[0], th.railColor[1], th.railColor[2]);
+    else gl.uniform3fv(p.u.u_rail, RAIL_COLORS[Math.min(4, s.multiplier)]);
+    gl.uniform1f(p.u.u_railMode, railMode(th));
+    gl.uniform1f(p.u.u_board, th.board);
     gl.uniform1f(p.u.u_sp, s.spActive ? 1 : 0);
     gl.uniform1f(p.u.u_miss, s.missPulse);
     gl.uniform1f(p.u.u_solo, s.solo ? 1 : 0);
-    const th = s.theme;
     const tint = th.highwayTint;
     gl.uniform3f(p.u.u_tint, tint[0], tint[1], tint[2]);
     gl.uniform3f(p.u.u_hwFar, th.hwFar[0], th.hwFar[1], th.hwFar[2]);
@@ -740,9 +773,11 @@ export class Renderer {
     const p = this.pBeat;
     this.uniforms(p);
     const th = s.theme;
-    if (s.spActive) gl.uniform3fv(p.u.u_col, BEAT_SP);
+    const glowSp = s.spActive && th.ink < 0.5;
+    if (glowSp) gl.uniform3fv(p.u.u_col, BEAT_SP);
     else gl.uniform3f(p.u.u_col, th.beat[0], th.beat[1], th.beat[2]);
-    gl.uniform1f(p.u.u_over, s.spActive ? 0 : th.beatOver);
+    gl.uniform1f(p.u.u_over, glowSp ? 0 : th.beatOver);
+    gl.uniform1f(p.u.u_mode, railMode(th));
     gl.bindVertexArray(this.beatLines.vao);
     gl.drawArraysInstanced(gl.TRIANGLE_STRIP, 0, 4, inst.count);
   }
@@ -957,7 +992,9 @@ export class Renderer {
       this.fullscreen(this.pBright, scene.tex, B[0]);
       gl.uniform2f(this.pBright.u.u_texel, 1 / scene.w, 1 / scene.h);
       // A light background sits near 1.0 and must not bloom; the neon on the highway still does.
-      gl.uniform1f(this.pBright.u.u_threshold, s.theme.light ? (this.hdr ? 1.35 : 0.95) : this.hdr ? 1.0 : 0.75);
+      // The dome look is authored to sit at its design colours, so only real emission (pressed wheels, star power, held sustains) blooms.
+      const dome = s.skin.style === 5;
+      gl.uniform1f(this.pBright.u.u_threshold, s.theme.light ? (this.hdr ? 1.35 : 0.95) : dome ? (this.hdr ? 1.5 : 0.95) : this.hdr ? 1.0 : 0.75);
       gl.drawArrays(gl.TRIANGLES, 0, 3);
       for (let i = 1; i < B.length; i++) {
         this.fullscreen(this.pDown, B[i - 1].tex, B[i]);
@@ -980,10 +1017,12 @@ export class Renderer {
     gl.bindTexture(gl.TEXTURE_2D, B.length ? B[0].tex : scene.tex);
     gl.uniform1i(p.u.u_bloom, 1);
     gl.uniform1f(p.u.u_bloomAmt, B.length ? s.theme.bloom : 0);
-    gl.uniform1f(p.u.u_miss, s.missPulse);
-    gl.uniform1f(p.u.u_sp, s.spActive ? 1 : 0);
+    // the Classic board and the paper keep the page calm: their screen-edge flood and drain are toned down
+    gl.uniform1f(p.u.u_miss, s.missPulse * (s.theme.board > 0.5 || s.theme.ink > 0.5 ? 0.45 : 1));
+    gl.uniform1f(p.u.u_sp, s.spActive ? (s.theme.board > 0.5 || s.theme.ink > 0.5 ? 0.3 : 1) : 0);
     gl.uniform1f(p.u.u_vignette, s.theme.vignette);
     gl.uniform1f(p.u.u_scan, s.theme.scanlines);
+    gl.uniform1f(p.u.u_flat, s.theme.ink);
     gl.drawArrays(gl.TRIANGLES, 0, 3);
   }
 
@@ -992,6 +1031,11 @@ export class Renderer {
     window.removeEventListener('resize', this.markDirty);
     this.gl.getExtension('WEBGL_lose_context')?.loseContext();
   }
+}
+
+/** How the highway draws its rails, beat and strike lines: 0 glow, 1 steel, 2 ink. */
+function railMode(th: RenderTheme): number {
+  return th.railColor ? (th.ink > 0.5 ? 2 : 1) : 0;
 }
 
 /** Used for rare, fixed-value particles only (constants do not need boxing). */

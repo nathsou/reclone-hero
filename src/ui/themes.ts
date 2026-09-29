@@ -29,6 +29,13 @@ export interface RenderTheme {
   pattern: number;
   bloom: number;
   vignette: number;
+  /** side rails: a fixed colour (steel, ink), or null to colour them by multiplier */
+  railColor: Rgb | null;
+  /** 0 = plain board, 1 = the textured Classic board */
+  board: number;
+  /** 0 = shaded gems, 1 = flat "inked" gems with heavy outlines and a drop shadow (Daylight ink) */
+  ink: number;
+  inkColor: Rgb;
 }
 
 export interface ThemeDef {
@@ -42,7 +49,7 @@ export interface ThemeDef {
   render: RenderTheme;
 }
 
-export const THEME_IDS = ['neon', 'light', 'swiss', 'baroque', 'synthwave', 'terminal', 'paper', 'midnight'] as const;
+export const THEME_IDS = ['classic', 'ink', 'swiss', 'baroque', 'synthwave', 'terminal', 'paper', 'midnight'] as const;
 export type ThemeId = (typeof THEME_IDS)[number];
 
 const DARK_HIGHWAY = {
@@ -55,25 +62,55 @@ const DARK_HIGHWAY = {
 };
 
 function scene(r: Partial<RenderTheme> & Pick<RenderTheme, 'light' | 'bgBottom' | 'bgTop'>): RenderTheme {
-  return { art: 1, highwayTint: [1, 1, 1], grid: 0, scanlines: 0, pattern: 0, bloom: 0.55, vignette: 0.35, ...DARK_HIGHWAY, ...r };
+  return { art: 1, highwayTint: [1, 1, 1], grid: 0, scanlines: 0, pattern: 0, bloom: 0.55, vignette: 0.35, railColor: null, board: 0, ink: 0, inkColor: [0.01, 0.009, 0.007], ...DARK_HIGHWAY, ...r };
 }
 
 export const THEMES: Record<ThemeId, ThemeDef> = {
-  neon: {
-    id: 'neon',
-    name: 'Neon',
-    description: 'Glowing gems on a dark stage.',
-    swatch: ['#07060d', '#1a1630', '#36e0ff', '#ece9ff'],
-    skin: 'neon',
-    render: scene({ light: false, bgBottom: [0.03, 0.012, 0.05], bgTop: [0.012, 0.01, 0.03] }),
+  classic: {
+    id: 'classic',
+    name: 'Classic dark',
+    description: 'Textured board, domed gems, wheel frets.',
+    swatch: ['#0d0c0b', '#171614', '#ff7038', '#f2efe9'],
+    skin: 'dome',
+    render: scene({
+      light: false,
+      bgBottom: [0.004, 0.0035, 0.003],
+      bgTop: [0.002, 0.0018, 0.0016],
+      art: 0.45,
+      board: 1,
+      railColor: [0.55, 0.53, 0.5],
+      hwFar: [0.004, 0.003, 0.0026],
+      hwNear: [0.0095, 0.0068, 0.0056],
+      laneLine: [0.03, 0.028, 0.026],
+      strike: [0.55, 0.53, 0.5],
+      beat: [0.72, 0.7, 0.66],
+      bloom: 0.45,
+      vignette: 0.55,
+    }),
   },
-  light: {
-    id: 'light',
-    name: 'Light',
-    description: 'Bright and airy; the highway stays dark for contrast.',
-    swatch: ['#f3f1f9', '#ffffff', '#0788ad', '#1c1830'],
-    skin: 'neon',
-    render: scene({ light: true, bgBottom: [0.8, 0.82, 0.92], bgTop: [0.9, 0.88, 0.96], art: 0.35, bloom: 0.5, vignette: 0.08 }),
+  ink: {
+    id: 'ink',
+    name: 'Daylight ink',
+    description: 'Paper highway with inked outlines.',
+    swatch: ['#ece6db', '#faf7f1', '#ff7038', '#1a1814'],
+    skin: 'dome',
+    render: scene({
+      light: true,
+      bgBottom: [0.84, 0.8, 0.72],
+      bgTop: [0.84, 0.8, 0.72],
+      art: 0,
+      ink: 1,
+      inkColor: [0.011, 0.01, 0.008],
+      railColor: [0.011, 0.01, 0.008],
+      hwFar: [0.93, 0.9, 0.85],
+      hwNear: [0.955, 0.93, 0.885],
+      laneLine: [-0.16, -0.16, -0.16],
+      strike: [-0.9, -0.9, -0.9],
+      beat: [0.011, 0.01, 0.008],
+      beatOver: 0.9,
+      bloom: 0,
+      vignette: 0,
+    }),
   },
   swiss: {
     id: 'swiss',

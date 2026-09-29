@@ -1,0 +1,334 @@
+/* ------------------------------------------------------------------ design tokens
+   Classic dark is the default; [data-theme] on <html> switches (see src/ui/themes.ts).
+   Base tokens are set per theme; --dim/--faint/--fainter and friends are derived from them so the extra
+   themes only need to set a handful. Fret colours never change: gameplay must read the same. */
+:root {
+  --bg: #0d0c0b;
+  --stage: #070605;
+  --panel: #171614;
+  --panel-2: #1b1916;
+  --text: #f2efe9;
+  --dim: #8f8a82;
+  --faint: #6f6a63;
+  --fainter: #5d5953;
+  --line-soft: rgba(242, 239, 233, 0.08);
+  --line: rgba(242, 239, 233, 0.14);
+  --hover: rgba(242, 239, 233, 0.045);
+  --accent: #fd6a3a; /* vermilion, oklch(0.7 0.19 38) */
+  --on-accent: #170a05;
+  --sel-bg: #f2efe9;
+  --sel-text: #0d0c0b;
+  --good: #4ef08a;
+  --ok: #f5d34a;
+  --meh: #ff8a3d;
+  --bad: #ff4d5e;
+  --sp: #5fe6ff;
+  --star: #ffd23a;
+  --star-off: rgba(242, 239, 233, 0.16);
+  --gold: #ffe98a;
+  --green: #3cf06a;
+  --red: #ff3b4a;
+  --yellow: #ffd23a;
+  --blue: #3a8bff;
+  --orange: #ff8a1f;
+  --mult-1: #6f6a63;
+  --mult-2: #ffa53a;
+  --mult-3: #4ef08a;
+  --mult-4: #d45bff;
+  --toast: #ffd23a;
+  --toast-bg: transparent;
+  --toast-pad: 0;
+  --solo: #d67bff;
+  --overlay: rgba(7, 6, 5, 0.78);
+  --shadow-color: rgba(0, 0, 0, 0.6);
+  --hud-shadow: 0 2px 12px rgba(0, 0, 0, 0.8);
+  --hud-star: #ffd23a;
+  --hud-ghost: rgba(242, 239, 233, 0.03);
+  --gem-side: #5d5953;
+  --gem-top: #f2efe9;
+  --gem-ring: #0d0c0b;
+  --gem-core: var(--accent);
+  --font-ui: 'Inter Tight', 'Inter', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  --font-display: var(--font-ui);
+  --font-mono: 'JetBrains Mono', ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+  --radius: 8px;
+  --radius-sm: 6px;
+  --radius-art: 4px;
+  font-family: var(--font-ui);
+  color: var(--text);
+  background: var(--bg);
+  color-scheme: dark;
+}
+
+/* Daylight ink: paper, ink and the same vermilion */
+:root[data-theme='ink'] {
+  --bg: #ece6db;
+  --stage: #faf7f1;
+  --panel: #e3dccf;
+  --panel-2: #f4efe5;
+  --text: #1a1814;
+  --dim: #6b655c;
+  --faint: #8a8377;
+  --fainter: #a59e91;
+  --line-soft: rgba(26, 24, 20, 0.11);
+  --line: rgba(26, 24, 20, 0.22);
+  --hover: rgba(26, 24, 20, 0.05);
+  --on-accent: #170a05;
+  --sel-bg: #1a1814;
+  --sel-text: #ece6db;
+  --good: #15803d;
+  --ok: #a67c00;
+  --meh: #cc5a0a;
+  --bad: #c81e32;
+  --sp: #0e7490;
+  --star: #1a1814;
+  --star-off: rgba(26, 24, 20, 0.16);
+  --gold: #a67c00;
+  --mult-1: #8a8377;
+  --mult-2: #c26a00;
+  --mult-3: #15803d;
+  --mult-4: #7a1fc2;
+  --toast: #ffd23a;
+  --toast-bg: #1a1814;
+  --toast-pad: 2px 18px;
+  --solo: #7a1fc2;
+  --overlay: rgba(236, 230, 219, 0.82);
+  --shadow-color: rgba(26, 24, 20, 0.22);
+  --hud-shadow: none;
+  --hud-star: #1a1814;
+  --hud-ghost: rgba(26, 24, 20, 0.055);
+  --gem-side: #8a8377;
+  --gem-top: #1a1814;
+  --gem-ring: #ece6db;
+  color-scheme: light;
+}
+
+/* ---- extra themes: colours and, where they had one, a character font. Everything else derives. */
+:root[data-theme='swiss'] {
+  --bg: #ffffff;
+  --stage: #ffffff;
+  --panel: #f1f1f1;
+  --panel-2: #ffffff;
+  --text: #111111;
+  --dim: #5c5c5c;
+  --faint: #7a7a7a;
+  --fainter: #9a9a9a;
+  --line-soft: rgba(0, 0, 0, 0.12);
+  --line: #111111;
+  --hover: #f1f1f1;
+  --accent: #e30613;
+  --on-accent: #ffffff;
+  --sel-bg: #111111;
+  --sel-text: #ffffff;
+  --good: #008a3e;
+  --ok: #b98900;
+  --meh: #e05a00;
+  --bad: #e30613;
+  --sp: #0063c7;
+  --star: #e30613;
+  --star-off: rgba(0, 0, 0, 0.15);
+  --gold: #e30613;
+  --mult-1: #7a7a7a;
+  --mult-2: #e05a00;
+  --mult-3: #008a3e;
+  --mult-4: #0063c7;
+  --toast: #ffffff;
+  --toast-bg: #e30613;
+  --toast-pad: 2px 18px;
+  --overlay: rgba(255, 255, 255, 0.86);
+  --shadow-color: transparent;
+  --hud-shadow: none;
+  --hud-star: #e30613;
+  --hud-ghost: rgba(0, 0, 0, 0.05);
+  --gem-side: #111111;
+  --gem-top: #e30613;
+  --gem-ring: #ffffff;
+  --font-ui: 'Helvetica Neue', Helvetica, Arial, sans-serif;
+  --radius: 0px;
+  --radius-sm: 0px;
+  --radius-art: 0px;
+  color-scheme: light;
+}
+
+:root[data-theme='baroque'] {
+  --bg: #140a0b;
+  --stage: #0d0607;
+  --panel: #1f0f0f;
+  --panel-2: #2e1614;
+  --text: #f3e6c8;
+  --dim: #b89f78;
+  --faint: #8a7654;
+  --fainter: #6b5a3e;
+  --line-soft: rgba(107, 74, 31, 0.45);
+  --line: #6b4a1f;
+  --hover: rgba(212, 162, 76, 0.07);
+  --accent: #d4a24c;
+  --on-accent: #2a1606;
+  --sel-bg: #d4a24c;
+  --sel-text: #2a1606;
+  --good: #8fbf5a;
+  --ok: #e0b54a;
+  --meh: #e07b39;
+  --bad: #d4384a;
+  --sp: #9fd8ff;
+  --star: #e8c26a;
+  --hud-star: #e8c26a;
+  --overlay: rgba(20, 10, 11, 0.82);
+  --gem-side: #8a5a1c;
+  --gem-top: #d4a24c;
+  --gem-ring: #140a0b;
+  --font-ui: 'Iowan Old Style', 'Hoefler Text', Georgia, serif;
+  --font-display: Didot, 'Bodoni 72', 'Bodoni MT', 'Playfair Display', 'Iowan Old Style', Georgia, serif;
+  --radius: 3px;
+  --radius-sm: 2px;
+  --radius-art: 2px;
+}
+
+:root[data-theme='synthwave'] {
+  --bg: #13051f;
+  --stage: #0d0316;
+  --panel: #1f0a33;
+  --panel-2: #2c0f48;
+  --text: #ffe9fb;
+  --dim: #c79bd8;
+  --faint: #9a6fb0;
+  --fainter: #7a5590;
+  --line-soft: rgba(74, 29, 110, 0.6);
+  --line: #4a1d6e;
+  --hover: rgba(255, 79, 216, 0.08);
+  --accent: #ff4fd8;
+  --on-accent: #1a0420;
+  --sel-bg: #ff4fd8;
+  --sel-text: #1a0420;
+  --good: #3dffc8;
+  --bad: #ff3b6b;
+  --sp: #6ee7ff;
+  --overlay: rgba(19, 5, 31, 0.8);
+  --gem-side: #a3268e;
+  --gem-top: #ff4fd8;
+  --gem-ring: #13051f;
+  --font-display: 'Futura', 'Avenir Next', 'Trebuchet MS', var(--font-ui);
+  --radius: 12px;
+  --radius-sm: 8px;
+}
+
+:root[data-theme='terminal'] {
+  --bg: #030a04;
+  --stage: #020703;
+  --panel: #061208;
+  --panel-2: #0a1c0d;
+  --text: #b8ffc4;
+  --dim: #5fa46e;
+  --faint: #438253;
+  --fainter: #2f6040;
+  --line-soft: rgba(23, 74, 34, 0.7);
+  --line: #174a22;
+  --hover: rgba(57, 255, 106, 0.06);
+  --accent: #39ff6a;
+  --on-accent: #031a07;
+  --sel-bg: #39ff6a;
+  --sel-text: #031a07;
+  --good: #39ff6a;
+  --ok: #e6ff4d;
+  --meh: #ffb347;
+  --bad: #ff5555;
+  --sp: #7dfcff;
+  --star: #e6ff4d;
+  --hud-star: #e6ff4d;
+  --overlay: rgba(3, 10, 4, 0.84);
+  --gem-side: #1a7f35;
+  --gem-top: #39ff6a;
+  --gem-ring: #030a04;
+  --font-ui: ui-monospace, 'SF Mono', 'JetBrains Mono', Menlo, Consolas, monospace;
+  --radius: 0px;
+  --radius-sm: 0px;
+  --radius-art: 0px;
+}
+
+/* CRT scanlines over the whole UI for the Terminal theme */
+:root[data-theme='terminal'] body::after {
+  content: '';
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 1000;
+  background: repeating-linear-gradient(0deg, rgba(0, 0, 0, 0.18) 0 1px, transparent 1px 3px);
+}
+
+:root[data-theme='paper'] {
+  --bg: #f5efe3;
+  --stage: #fffaf0;
+  --panel: #efe6d4;
+  --panel-2: #fffaf0;
+  --text: #2a2118;
+  --dim: #7c6a55;
+  --faint: #9a8a75;
+  --fainter: #b5a892;
+  --line-soft: rgba(60, 40, 10, 0.11);
+  --line: rgba(60, 40, 10, 0.24);
+  --hover: rgba(60, 40, 10, 0.05);
+  --accent: #c2410c;
+  --on-accent: #fffaf0;
+  --sel-bg: #2a2118;
+  --sel-text: #f5efe3;
+  --good: #3f7d20;
+  --ok: #a16207;
+  --meh: #c2410c;
+  --bad: #b91c1c;
+  --sp: #0e7490;
+  --star: #b7791f;
+  --star-off: rgba(60, 40, 10, 0.18);
+  --toast: #ffd23a;
+  --toast-bg: #2a2118;
+  --toast-pad: 2px 18px;
+  --overlay: rgba(245, 239, 227, 0.84);
+  --shadow-color: rgba(60, 40, 10, 0.2);
+  --hud-shadow: none;
+  --hud-star: #b7791f;
+  --hud-ghost: rgba(60, 40, 10, 0.06);
+  --gem-side: #7c2d12;
+  --gem-top: #c2410c;
+  --gem-ring: #f5efe3;
+  --font-display: 'Iowan Old Style', 'Palatino Linotype', Palatino, ui-serif, Georgia, serif;
+  --radius: 4px;
+  --radius-sm: 3px;
+  --radius-art: 3px;
+  color-scheme: light;
+}
+
+:root[data-theme='midnight'] {
+  --bg: #050d1a;
+  --stage: #030811;
+  --panel: #0a1729;
+  --panel-2: #10223b;
+  --text: #e4efff;
+  --dim: #8aa3c7;
+  --faint: #667fa3;
+  --fainter: #4c6280;
+  --line-soft: rgba(29, 53, 87, 0.6);
+  --line: #1d3557;
+  --hover: rgba(76, 201, 240, 0.06);
+  --accent: #4cc9f0;
+  --on-accent: #031423;
+  --sel-bg: #4cc9f0;
+  --sel-text: #031423;
+  --sp: #7df9ff;
+  --overlay: rgba(5, 13, 26, 0.8);
+  --gem-side: #1c6f8f;
+  --gem-top: #4cc9f0;
+  --gem-ring: #050d1a;
+  --font-display: 'Avenir Next', 'Segoe UI', var(--font-ui);
+}
+
+/* streak/status toasts: glow on dark themes, an ink block on light ones (see hud rules in game.css) */
+:root {
+  --toast-glow: 0 0 24px rgba(255, 210, 58, 0.45);
+  --toast-info: var(--text);
+}
+
+:root[data-theme='ink'],
+:root[data-theme='swiss'],
+:root[data-theme='paper'] {
+  --toast-glow: none;
+  --toast-info: #f2efe9;
+}

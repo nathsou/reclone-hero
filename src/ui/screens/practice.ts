@@ -24,9 +24,12 @@ export class PracticeModal implements Screen {
     from.addEventListener('change', () => {
       if (Number(to.value) < Number(from.value)) to.value = from.value;
     });
-    const speed = h('input', { type: 'range', min: '40', max: '100', step: '5', value: '75' });
+    const speed = h('input', { class: 'slider', type: 'range', min: '40', max: '100', step: '5', value: '75', style: '--pct:58.3%' });
     const speedLabel = h('span', { class: 'val' }, '75%');
-    speed.addEventListener('input', () => (speedLabel.textContent = `${speed.value}%`));
+    speed.addEventListener('input', () => {
+      speedLabel.textContent = `${speed.value}%`;
+      speed.style.setProperty('--pct', `${((Number(speed.value) - 40) / 60) * 100}%`);
+    });
 
     const start = async () => {
       const a = Number(from.value);

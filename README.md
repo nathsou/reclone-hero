@@ -22,7 +22,7 @@ Open the printed URL in a Chromium-based browser (Chrome, Edge, Arc, Brave).
 
 ### Without any server
 
-`npm run build` produces a single self-contained file, `dist/index.html` (about 170 KB, all scripts and
+`npm run build` produces a single self-contained file, `dist/index.html` (about 330 KB, all scripts, fonts and
 styles inlined). Double-click it to play from disk (`file://`), or put it on any static host (GitHub Pages,
 Netlify, a USB stick). Pushing to `main` deploys it to GitHub Pages (`.github/workflows/pages.yml`). Nothing runs server-side: songs are read in the browser.
 
@@ -39,6 +39,7 @@ tilt/whammy axes, and the mapping is saved per device.
 
 Keyboard: `A S D F G` (or `1`–`5`) frets, `↑`/`↓`/`Enter` strum, `Space` Star Power, `W` whammy, `Esc` pause.
 In menus, strum moves, green confirms, red goes back, yellow opens practice, blue/orange change difficulty.
+On the results screen `Enter` returns to the song list, `R` retries and `P` practises the weakest section.
 
 ## What's in it
 
@@ -57,15 +58,17 @@ In menus, strum moves, green confirms, red goes back, yellow opens practice, blu
 - **Calibration:** tap along to clicks (audio offset) and flashes (video offset).
 - **Song list** grouped the way Clone Hero does it (by artist, title letter, difficulty, length, year,
   genre, charter, folder, most played or recently played), ascending or descending, with a sticky group
-  header, `PgUp`/`PgDn` to jump between groups, `R` for a random song and `/` to search.
+  header, `PgUp`/`PgDn` to jump between groups, `R` for a random song and `/` to search. `V` switches
+  between the list (with the song's details beside it) and a cover-flow view with an A–Z scrubber.
 - **Genre filter:** show only, or hide, whole genre families (hiding *Metal* also hides metalcore, djent,
   deathcore…) or exact genres.
-- **Themes:** Neon, Light, Swiss, Baroque, Synthwave, Terminal, Paper and Midnight, each with its own
-  palette, type, buttons and scene (Swiss has a pale highway, Baroque a damask backdrop, Synthwave a sunset
-  horizon grid, Terminal scanlines). "Match system" switches between Neon and Light.
-- **Note styles**, independent of the theme: Neon (glowing pucks), Swiss (flat geometric dots), Baroque
-  (faceted jewels in gold, pearls for HOPOs), Pixel (8-bit blocks) and Clay (soft pastel pebbles). Each
-  keeps the same strum / HOPO / tap language and has its own sustains, fret buttons and hit particles.
+- **Themes:** Classic dark (the default: a textured board, steel rails, domed gems and wheel frets) and
+  Daylight ink (a paper highway with inked outlines). "Match system" switches between the two. The earlier
+  colour schemes (Swiss, Baroque, Synthwave, Terminal, Paper, Midnight) are still there under Settings › Display.
+- **Note styles**, independent of the theme: Classic dome (the default), Neon (glowing pucks), Swiss (flat
+  geometric dots), Baroque (faceted jewels in gold, pearls for HOPOs), Pixel (8-bit blocks) and Clay (soft
+  pastel pebbles). Each keeps the same strum / HOPO / tap language and has its own sustains, fret buttons and
+  hit particles.
 - **Backups:** Settings › Data exports settings, key and controller mappings and best scores to a file,
   to import on another computer (scores merge, keeping the best).
 - **Controls:** remap any single guitar input (Settings › Controls › Change) without redoing the rest.

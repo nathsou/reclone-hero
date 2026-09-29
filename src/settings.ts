@@ -3,8 +3,9 @@ import type { GenreFilter } from './library/genres.ts';
 
 export type MissFeedback = 'auto' | 'mute' | 'muffle' | 'off';
 export type Quality = 'high' | 'medium' | 'low';
-export type Theme = 'system' | 'neon' | 'light' | 'swiss' | 'baroque' | 'synthwave' | 'terminal' | 'paper' | 'midnight';
-export type NoteStyle = 'theme' | 'neon' | 'swiss' | 'baroque' | 'pixel' | 'clay';
+export type Theme = 'system' | 'classic' | 'ink' | 'swiss' | 'baroque' | 'synthwave' | 'terminal' | 'paper' | 'midnight';
+export type NoteStyle = 'theme' | 'dome' | 'neon' | 'swiss' | 'baroque' | 'pixel' | 'clay';
+export type SongView = 'list' | 'covers';
 
 export interface Settings {
   noteSpeed: number;
@@ -27,6 +28,7 @@ export interface Settings {
   quality: Quality;
   theme: Theme;
   noteStyle: NoteStyle;
+  songView: SongView;
   showFps: boolean;
   instrument: Instrument;
   difficulty: Difficulty;
@@ -55,6 +57,7 @@ export const DEFAULT_SETTINGS: Settings = {
   quality: 'high',
   theme: 'system',
   noteStyle: 'theme',
+  songView: 'list',
   showFps: false,
   instrument: 'guitar',
   difficulty: 'expert',
@@ -80,7 +83,9 @@ function load(): Settings {
     if (raw) {
       const stored = JSON.parse(raw) as Record<string, unknown>;
       if (stored.v !== VERSION) for (const [k, v] of Object.entries(V1_DEFAULTS)) if (stored[k] === v) delete stored[k];
-      if (stored.theme === 'dark') stored.theme = 'neon';
+      // Neon and Light were replaced by Classic dark and Daylight ink.
+      if (stored.theme === 'dark' || stored.theme === 'neon') stored.theme = 'classic';
+      else if (stored.theme === 'light') stored.theme = 'ink';
       delete stored.v;
       return { ...DEFAULT_SETTINGS, ...(stored as Partial<Settings>) };
     }

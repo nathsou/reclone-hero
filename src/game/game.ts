@@ -1,7 +1,7 @@
 import { audio } from '../audio/audio.ts';
 import type { Chart } from '../chart/build.ts';
 import type { Instrument, Track } from '../chart/types.ts';
-import { GEM_COUNT, HOPO, TAP } from '../chart/types.ts';
+import { GEM_COUNT, HOPO, INSTRUMENT_LABEL, TAP } from '../chart/types.ts';
 import { applyAction, botActions } from '../engine/bot.ts';
 import type { Action as BotAction } from '../engine/bot.ts';
 import { Engine, HIT, baseScore, starProgress } from '../engine/engine.ts';
@@ -69,6 +69,12 @@ export interface GameResult {
   missByType: { strum: number; hopo: number; tap: number };
   wrongFret: number;
   lateMiss: number;
+  /** per-note outcome and timing (seconds, negative = early), parallel to setup.track.notes */
+  noteState: Uint8Array;
+  hitDelta: Float32Array;
+  /** song time the results timeline spans */
+  start: number;
+  end: number;
 }
 
 export class Game {
@@ -181,7 +187,9 @@ export class Game {
 
   start(): void {
     const { song, practice } = this.setup;
-    this.hud.setTitle(song.name, song.artist, song.charter);
+    const t = this.setup.track;
+    this.hud.setTitle(song.name, song.artist, `${INSTRUMENT_LABEL[t.instrument]} · ${t.difficulty}`);
+    this.hud.setSections(this.setup.chart.sections.map((s) => s.time), practice ? practice.start : this.startTime, this.endTime);
     if (practice) this.hud.toast(`PRACTICE · ${practice.label}`, 'info', `${Math.round(practice.speed * 100)}% speed`);
     input().gameMode = true;
     input().setPollRate(4);
@@ -217,6 +225,17 @@ export class Game {
   /** Song time the judge has reached. */
   get songPosition(): number {
     return Number.isFinite(this.engine.time) ? this.engine.time : this.startTime;
+  }
+
+  /** Snapshot for the pause screen. */
+  get pauseStats(): { score: number; accuracy: number; section: string; time: number; total: number } {
+    const secs = this.setup.chart.sections;
+    const t = this.songPosition;
+    let name = '';
+    for (const s of secs) if (s.time <= t) name = s.name;
+    const e = this.engine;
+    const judged = e.hits + e.misses;
+    return { score: e.score, accuracy: judged ? e.hits / judged : 1, section: name, time: Math.max(0, t), total: this.endTime };
   }
 
   get isPaused(): boolean {
@@ -280,7 +299,7 @@ export class Game {
   private readonly p1 = new Float64Array(2);
   private readonly p2 = new Float64Array(2);
   private readonly p3 = new Float64Array(2);
-  private readonly hs: HudState = { score: 0, multiplier: 1, streak: 0, spBar: 0, spActive: false, stars: 0, progress: 0, fps: 0, cpuMs: 0, worstMs: 0, showFps: false };
+  private readonly hs: HudState = { score: 0, multiplier: 1, streak: 0, spBar: 0, spActive: false, stars: 0, accuracy: 1, progress: 0, elapsed: 0, total: 0, spSeconds: 0, fps: 0, cpuMs: 0, worstMs: 0, showFps: false };
   private rs!: RenderState;
 
   private frame = (now: number) => {
@@ -394,7 +413,16 @@ export class Game {
     hs.spBar = engine.spBar;
     hs.spActive = engine.spActive;
     hs.stars = starProgress(engine.score, this.base);
-    hs.progress = practice ? (t - practice.start) / (practice.end - practice.start) : t / Math.max(1, this.endTime);
+    const spanStart = practice ? practice.start : 0;
+    const span = practice ? practice.end - practice.start : Math.max(1, this.endTime);
+    hs.progress = (t - spanStart) / span;
+    hs.elapsed = t - spanStart;
+    hs.total = span;
+    const judged = engine.hits + engine.misses;
+    hs.accuracy = judged ? engine.hits / judged : 1;
+    // Star Power drains one full bar over 32 beats: estimate the seconds left from the current beat length
+    const bi = Math.min(this.beatIdx, beats.length - 2);
+    hs.spSeconds = bi >= 0 ? engine.spBar * 32 * (beats.time[bi + 1] - beats.time[bi]) : 0;
     hs.fps = this.fps;
     hs.cpuMs = this.cpuMs;
     hs.worstMs = this.worstFrame * 1000;
@@ -642,6 +670,10 @@ export class Game {
       missByType,
       wrongFret: this.wrongFret,
       lateMiss: this.lateMiss,
+      noteState: e.noteState.slice(),
+      hitDelta: e.hitDelta.slice(),
+      start: Math.min(0, notes.length ? notes.time[0] : 0),
+      end: Math.max(this.endTime, notes.length ? notes.time[notes.length - 1] + 1 : 1),
     };
     setTimeout(() => this.onEnd?.(result), 600);
   }
