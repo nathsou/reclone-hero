@@ -10,6 +10,7 @@ import { forty } from './forty.ts';
 import { funeralMarch } from './funeralMarch.ts';
 import { furElise } from './furElise.ts';
 import { ignition } from './ignition.ts';
+import { littleFugue } from './littleFugue.ts';
 import { midnightDrive } from './midnightDrive.ts';
 import { minuet } from './minuet.ts';
 import { moonlight } from './moonlight.ts';
@@ -20,10 +21,11 @@ import { neonSkyline } from './neonSkyline.ts';
 import { odeToJoy } from './odeToJoy.ts';
 import { preludeInC } from './preludeInC.ts';
 import { redline } from './redline.ts';
+import { spring } from './spring.ts';
 import { swanLake } from './swanLake.ts';
 import { toccata } from './toccata.ts';
 import { valkyries } from './valkyries.ts';
 import { williamTell } from './williamTell.ts';
 
 /** The built-in songs, in the order they are listed. */
-export const STARTER_SONGS: SongDef[] = [odeToJoy, ignition, midnightDrive, neonSkyline, furElise, canon, mountainKing, redline, fifth, nachtmusik, forty, toccata, preludeInC, minuet, williamTell, swanLake, valkyries, blueDanube, morningMood, moonlight, funeralMarch, entertainer, carolOfTheBells, korobeiniki, drunkenSailor];
+export const STARTER_SONGS: SongDef[] = [odeToJoy, ignition, midnightDrive, neonSkyline, furElise, canon, mountainKing, redline, fifth, nachtmusik, forty, toccata, preludeInC, minuet, williamTell, swanLake, valkyries, blueDanube, morningMood, moonlight, funeralMarch, entertainer, carolOfTheBells, korobeiniki, drunkenSailor, spring, littleFugue];

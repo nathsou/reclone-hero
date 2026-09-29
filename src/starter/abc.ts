@@ -157,7 +157,8 @@ export function abc(text: string, opts: { transpose?: number; v?: number } = {})
     } else if (c === '[') {
       i++;
       const pitches: number[] = [];
-      let len = 1;
+      // a chord lasts as long as its first note
+      let len = 0;
       while (i < src.length && src[i] !== ']') {
         const p = noteAt(barAcc);
         if (p === null) {
@@ -166,10 +167,11 @@ export function abc(text: string, opts: { transpose?: number; v?: number } = {})
         }
         const l = lengthAt();
         pitches.push(p);
-        len = l;
+        if (!len) len = l;
         if (src[i] === '-') i++;
       }
       i++;
+      len ||= 1;
       const outer = lengthAt();
       let tie = false;
       if (src[i] === '-') {
