@@ -44,6 +44,11 @@ function keySignature(k: string): Record<string, number> {
   return sig;
 }
 
+/** K: fields can carry only a clef ("K:bass"), which leaves the key alone. */
+function isKey(v: string): boolean {
+  return /^\s*([A-G]|none)/i.test(v) && !/^\s*(bass|treble|alto|tenor)/i.test(v);
+}
+
 function fraction(s: string): number {
   const [a, b] = s.split('/');
   return Number(a) / Number(b);
@@ -81,6 +86,7 @@ export function abc(text: string, opts: { transpose?: number; v?: number } = {})
           if (!unitSet) unit = Number(mm[1]) / Number(mm[2]) < 0.75 ? 1 / 16 : 1 / 8;
         }
       } else if (f === 'K') {
+        if (!isKey(v)) continue; // a clef change only
         key = keySignature(v);
         if (body.length) body.push(`[K:${v}]`);
       } else if (f === 'w' || f === 'W') continue;
@@ -141,7 +147,7 @@ export function abc(text: string, opts: { transpose?: number; v?: number } = {})
     } else if (c === '[' && /^\[[A-Za-z]:/.test(src.slice(i))) {
       const end = src.indexOf(']', i);
       const field = src.slice(i + 1, end);
-      if (field[0] === 'K') {
+      if (field[0] === 'K' && isKey(field.slice(2))) {
         key = keySignature(field.slice(2));
         toks.push({ t: 'key', value: field.slice(2) });
       } else if (field[0] === 'L') unit = fraction(field.slice(2).trim());
@@ -150,7 +156,8 @@ export function abc(text: string, opts: { transpose?: number; v?: number } = {})
       toks.push({ t: 'bar', kind: '', ending: Number(src[i + 1]) });
       i += 2;
     } else if (c === '|' || c === ':' || (c === '[' && src[i + 1] === '|')) {
-      const m = /^(:*\|*\[?\|*\]?:*)(\d?)/.exec(src.slice(i))!;
+      // "|[" only opens an ending ("|[2"); otherwise the "[" starts a chord
+      const m = /^(:*\|*(?:\[(?=\d))?\|*\]?:*)(\d?)/.exec(src.slice(i))!;
       i += m[0].length || 1;
       toks.push({ t: 'bar', kind: m[1], ending: m[2] ? Number(m[2]) : 0 });
       barAcc = {};

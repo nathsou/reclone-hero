@@ -11,6 +11,7 @@ import { forty } from './forty.ts';
 import { funeralMarch } from './funeralMarch.ts';
 import { furElise } from './furElise.ts';
 import { greensleeves } from './greensleeves.ts';
+import { gymnopedie } from './gymnopedie.ts';
 import { havaNagila } from './havaNagila.ts';
 import { ignition } from './ignition.ts';
 import { littleFugue } from './littleFugue.ts';
@@ -34,4 +35,4 @@ import { washerwoman } from './washerwoman.ts';
 import { williamTell } from './williamTell.ts';
 
 /** The built-in songs, in the order they are listed. */
-export const STARTER_SONGS: SongDef[] = [odeToJoy, ignition, midnightDrive, neonSkyline, furElise, canon, mountainKing, redline, fifth, nachtmusik, forty, toccata, preludeInC, minuet, williamTell, swanLake, valkyries, blueDanube, morningMood, moonlight, funeralMarch, entertainer, carolOfTheBells, korobeiniki, drunkenSailor, spring, littleFugue, pompAndCircumstance, canCan, greensleeves, washerwoman, havaNagila, saints];
+export const STARTER_SONGS: SongDef[] = [odeToJoy, ignition, midnightDrive, neonSkyline, furElise, canon, mountainKing, redline, fifth, nachtmusik, forty, toccata, preludeInC, minuet, williamTell, swanLake, valkyries, blueDanube, morningMood, moonlight, funeralMarch, entertainer, carolOfTheBells, korobeiniki, drunkenSailor, spring, littleFugue, pompAndCircumstance, canCan, greensleeves, washerwoman, havaNagila, saints, gymnopedie];
