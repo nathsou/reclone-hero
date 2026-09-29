@@ -22,7 +22,7 @@ Open the printed URL in a Chromium-based browser (Chrome, Edge, Arc, Brave).
 
 ### Without any server
 
-`npm run build` produces a single self-contained file, `dist/index.html` (about 170 KB, all scripts and
+`npm run build` produces a single self-contained file, `dist/index.html` (about 330 KB, all scripts, fonts and
 styles inlined). Double-click it to play from disk (`file://`), or put it on any static host (GitHub Pages,
 Netlify, a USB stick). Pushing to `main` deploys it to GitHub Pages (`.github/workflows/pages.yml`). Nothing runs server-side: songs are read in the browser.
 
