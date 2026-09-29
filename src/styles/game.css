@@ -225,8 +225,7 @@
 .hud-left,
 .hud-right,
 .hud-timing,
-.hud-toasts,
-.hud-solo {
+.hud-toasts {
   position: absolute;
   left: 0;
   top: 0;
@@ -541,34 +540,77 @@
   }
 }
 
+/* solo progress: a small card in the column right of the highway */
 .hud-solo {
   display: none;
-  align-items: baseline;
-  gap: 10px;
-  padding: 6px 14px;
-  border-radius: var(--radius-sm);
-  background: var(--sel-bg);
-  color: var(--sel-text);
+  flex-direction: column;
+  gap: 4px;
+  width: 132px;
+  margin-bottom: 6px;
 }
 
 .hud-solo.on {
   display: flex;
 }
 
+.hud-solo .head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+}
+
 .hud-solo .lbl {
-  font: 600 11px var(--font-mono);
-  letter-spacing: 0.12em;
+  font: 600 10px var(--font-mono);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
   color: var(--solo);
   filter: brightness(1.3);
 }
 
 .hud-solo .pct {
-  font: 600 22px var(--font-mono);
+  font: 600 18px var(--font-mono);
+  text-shadow: var(--hud-shadow);
+}
+
+.hud-solo.perfect .pct {
+  color: var(--gold);
+}
+
+.hud-solo .bar {
+  position: relative;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--line);
+  overflow: hidden;
+}
+
+.hud-solo .bar i {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: 100%;
+  transform-origin: left;
+  transform: scaleX(0);
+  transition: transform 0.12s linear;
+}
+
+.hud-solo .bar .hit {
+  background: var(--solo);
+}
+
+.hud-solo .bar .miss {
+  background: var(--bad);
+  opacity: 0.8;
+}
+
+.hud-solo.done .bar {
+  display: none;
 }
 
 .hud-solo .cnt {
-  font: 500 12px var(--font-mono);
-  opacity: 0.6;
+  font: 500 11px var(--font-mono);
+  color: var(--dim);
 }
 
 .hud-solo.slipping .pct {
@@ -962,5 +1004,99 @@
   }
   .pause-hints {
     left: 32px;
+  }
+}
+
+/* full combo: the title drops in letter by letter, cycling through the fret colours */
+.hud-fc {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 24%;
+  z-index: 60;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  animation: fc-out 0.6s ease-in 4.4s forwards;
+}
+
+.hud-fc .t {
+  display: flex;
+  gap: 0.35em;
+  font: 800 clamp(48px, 9vw, 120px) / 1 var(--font-display);
+  letter-spacing: -0.03em;
+}
+
+.hud-fc .w {
+  display: flex;
+}
+
+.hud-fc .t span span {
+  display: inline-block;
+  color: #fff;
+  text-shadow:
+    0 0 24px currentColor,
+    0 6px 0 rgb(0 0 0 / 0.35);
+  opacity: 0;
+  transform: translateY(-120px) scale(0.4) rotate(-20deg);
+  animation:
+    fc-drop 0.55s cubic-bezier(0.2, 1.6, 0.4, 1) calc(var(--i) * 55ms) forwards,
+    fc-hue 1.2s steps(1) calc(var(--i) * 55ms + 0.5s) infinite;
+}
+
+.hud-fc .s {
+  font: 600 13px var(--font-mono);
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--gold);
+  text-shadow: var(--hud-shadow);
+  opacity: 0;
+  animation: fc-fade 0.5s ease-out 0.7s forwards;
+}
+
+@keyframes fc-drop {
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes fc-hue {
+  0% {
+    color: var(--green);
+  }
+  20% {
+    color: var(--red);
+  }
+  40% {
+    color: var(--yellow);
+  }
+  60% {
+    color: var(--blue);
+  }
+  80% {
+    color: var(--orange);
+  }
+}
+
+@keyframes fc-fade {
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes fc-out {
+  to {
+    opacity: 0;
+    transform: translateY(-20px) scale(1.05);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .hud-fc .t span span {
+    animation: fc-fade 0.3s forwards;
+    transform: none;
+    color: var(--gold);
   }
 }

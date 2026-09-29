@@ -80,6 +80,11 @@ export class Hud {
   private readonly solo: HTMLDivElement;
   private readonly soloPct: HTMLSpanElement;
   private readonly soloCount: HTMLSpanElement;
+  private readonly soloHit: HTMLElement;
+  private readonly soloMiss: HTMLElement;
+  private soloTimer = 0;
+  /** screen positions of the five lanes at the strike line, for the full-combo cannons */
+  private lanes: [number, number][] = [];
   private readonly timing: HTMLDivElement;
   private readonly timingTicks: HTMLDivElement[] = [];
   private readonly title: HTMLDivElement;
@@ -125,12 +130,21 @@ export class Hud {
     this.acc = h('div', { class: 'hud-acc' });
     this.stars = h('div', { class: 'hud-stars' });
     this.spText = h('div', { class: 'hud-sp-text' });
-    this.right = h('div', { class: 'hud-right' }, this.spMeter, h('div', { class: 'hud-info' }, this.acc, this.stars, this.spText));
-    this.toasts = h('div', { class: 'hud-toasts' });
-    this.section = h('span', { class: 'hud-section' });
+    // Solo progress lives beside the highway, above the accuracy, never on the track itself.
     this.soloPct = h('span', { class: 'pct' });
     this.soloCount = h('span', { class: 'cnt' });
-    this.solo = h('div', { class: 'hud-solo' }, h('span', { class: 'lbl' }, 'SOLO'), this.soloPct, this.soloCount);
+    this.soloHit = h('i', { class: 'hit' });
+    this.soloMiss = h('i', { class: 'miss' });
+    this.solo = h(
+      'div',
+      { class: 'hud-solo' },
+      h('div', { class: 'head' }, h('span', { class: 'lbl' }, 'Solo'), this.soloPct),
+      h('div', { class: 'bar' }, this.soloHit, this.soloMiss),
+      this.soloCount,
+    );
+    this.right = h('div', { class: 'hud-right' }, this.spMeter, h('div', { class: 'hud-info' }, this.solo, this.acc, this.stars, this.spText));
+    this.toasts = h('div', { class: 'hud-toasts' });
+    this.section = h('span', { class: 'hud-section' });
     this.marks = h('div', { class: 'hud-marks' });
     this.elapsed = h('span', null, '0:00');
     this.totalEl = h('span', null, '0:00');
@@ -168,7 +182,6 @@ export class Hud {
       this.left,
       this.right,
       this.toasts,
-      this.solo,
       this.timing,
       this.fps,
       this.countdown,
@@ -185,12 +198,12 @@ export class Hud {
     this.right.style.transform = `translate(${rightEdge[0]}px, ${rightEdge[1]}px) translate(0, -100%)`;
     this.timing.style.transform = `translate(${strikeCenter[0]}px, ${strikeCenter[1]}px) translate(-50%, 0)`;
     this.toasts.style.transform = `translate(${farCenter[0]}px, ${farCenter[1]}px) translate(-50%, -50%)`;
-    this.solo.style.transform = `translate(${farCenter[0]}px, ${farCenter[1] + 70}px) translate(-50%, 0)`;
   }
 
   /** Screen positions of the five lanes just in front of the strike line, green first. */
   layoutKeys(lanes: Float64Array[]): void {
     for (let i = 0; i < 5; i++) this.keyCaps[i].style.transform = `translate(${lanes[i][0]}px, ${lanes[i][1]}px) translate(-50%, 0)`;
+    this.lanes = lanes.map((l) => [l[0], l[1]]);
   }
 
   /** Keyboard labels under the frets; null hides them (e.g. when playing on a guitar). */
@@ -328,13 +341,50 @@ export class Hud {
     restartAnim(this.section, 'pop-a', 'pop-b');
   }
 
+  /** Solo progress: hits so far out of the notes played, and how far through the solo we are. */
   setSolo(active: boolean, hits = 0, total = 0, seen = 0): void {
-    this.solo.classList.toggle('on', active);
-    if (!active) return;
+    if (!active) {
+      if (!this.soloTimer) this.solo.classList.remove('on');
+      return;
+    }
+    clearTimeout(this.soloTimer);
+    this.soloTimer = 0;
+    this.solo.classList.add('on');
+    this.solo.classList.remove('done', 'perfect');
     const pct = seen ? Math.round((hits / seen) * 100) : 100;
     setText(this.soloPct, `${pct}%`);
-    setText(this.soloCount, `${hits}/${total}`);
+    setText(this.soloCount, `${hits} / ${total} notes`);
+    const n = Math.max(1, total);
+    this.soloHit.style.transform = `scaleX(${hits / n})`;
+    this.soloMiss.style.left = `${(hits / n) * 100}%`;
+    this.soloMiss.style.transform = `scaleX(${(seen - hits) / n})`;
     this.solo.classList.toggle('slipping', pct < 100);
+  }
+
+  /** The solo's result, shown in place of its progress for a moment. */
+  soloResult(hits: number, total: number, bonus: number): void {
+    const perfect = hits === total;
+    setText(this.soloPct, perfect ? 'Perfect' : `${Math.round((hits / Math.max(1, total)) * 100)}%`);
+    setText(this.soloCount, `+${bonus.toLocaleString('en-US')} bonus`);
+    this.solo.classList.add('on', 'done');
+    this.solo.classList.toggle('perfect', perfect);
+    restartAnim(this.solo, 'pop-a', 'pop-b');
+    clearTimeout(this.soloTimer);
+    this.soloTimer = window.setTimeout(() => {
+      this.soloTimer = 0;
+      this.solo.classList.remove('on', 'done', 'perfect');
+    }, 2500);
+  }
+
+  /** The last note is in and nothing was missed: a title, confetti from the frets and fireworks. */
+  fullCombo(): void {
+    const word = (text: string, from: number) => h('span', { class: 'w' }, ...[...text].map((c, i) => h('span', { style: `--i:${from + i}` }, c)));
+    const title = h('div', { class: 'hud-fc' }, h('div', { class: 't' }, word('FULL', 0), word('COMBO', 4)), h('div', { class: 's' }, 'Every note. Not one missed.'));
+    this.root.append(title);
+    setTimeout(() => title.remove(), 5200);
+    const box = this.root.getBoundingClientRect();
+    const cannons: [number, number][] = [[0, box.height], [box.width, box.height], ...this.lanes.filter((_, i) => i % 2 === 0)];
+    void import('./confetti.ts').then(({ celebrate }) => celebrate(this.root, { cannons, fireworks: 6, spread: 2.2 }));
   }
 
   /** Add a tick to the hit-timing bar. delta in seconds; negative is early. */

@@ -8,7 +8,7 @@ import type { Settings } from '../../settings.ts';
 import { shortPadName } from '../app.ts';
 import type { App, Screen } from '../app.ts';
 import { h, replace } from '../dom.ts';
-import { controls } from '../focusNav.ts';
+import { adjustFocused, canAdjust, controls } from '../focusNav.ts';
 import { THEMES } from '../themes.ts';
 import type { ThemeId } from '../themes.ts';
 import { SKINS, SKIN_IDS } from '../../render/skins.ts';
@@ -27,6 +27,7 @@ export class SettingsModal implements Screen {
   private readonly app: App;
   private readonly body: HTMLDivElement;
   private readonly tabs: HTMLDivElement;
+  private readonly navCol: HTMLElement;
   private readonly aside: HTMLElement;
   private tab: Tab = 'gameplay';
   private padTimer = 0;
@@ -42,18 +43,20 @@ export class SettingsModal implements Screen {
     this.el = h(
       'div',
       { class: 'settings-page', role: 'dialog', 'aria-label': 'Settings' },
-      h(
+      (this.navCol = h(
         'nav',
         { class: 'settings-nav' },
         h('button', { class: 'settings-back', onclick: () => this.close() }, inGame ? '← Back' : '← Library', h('kbd', null, 'Esc')),
         h('h2', null, 'Settings'),
         this.tabs,
-        h('div', { class: 'nav-foot' }, h('div', null, '↑↓ move · ←→ adjust'), h('div', null, 'Changes save as you go.')),
-      ),
+        h('div', { class: 'nav-foot' }, h('div', null, '↑↓ move · ←→ adjust'), h('div', null, '← or red: back to the tabs'), h('div', null, 'Changes save as you go.')),
+      )),
       h('main', { class: 'settings-main' }, this.body),
       this.aside,
     );
     this.render();
+    // Start on the tab list: up/down pick a tab, right or green goes into it.
+    queueMicrotask(() => this.focusTab());
   }
 
   destroy(): void {
@@ -68,7 +71,9 @@ export class SettingsModal implements Screen {
   private render() {
     replace(
       this.tabs,
-      ...TABS.map((t) => h('button', { class: `nav-tab ${t === this.tab ? 'on' : ''}`, role: 'tab', 'aria-selected': String(t === this.tab), onclick: () => ((this.tab = t), this.render()) }, TAB_LABEL[t])),
+      ...TABS.map((t) =>
+        h('button', { class: `nav-tab ${t === this.tab ? 'on' : ''}`, role: 'tab', 'aria-selected': String(t === this.tab), 'data-tab': t, onclick: () => this.openTab(t) }, TAB_LABEL[t]),
+      ),
     );
     clearInterval(this.padTimer);
     this.stopPreview?.();
@@ -358,42 +363,66 @@ export class SettingsModal implements Screen {
     stops[next].scrollIntoView({ block: 'nearest' });
   }
 
-  /** ←/→ on the focused row: nudge a slider, flip a switch, or pick the neighbouring chip. */
-  private adjust(dir: number): boolean {
-    const el = document.activeElement as HTMLElement | null;
-    if (!el) return false;
-    if (el instanceof HTMLInputElement && el.type === 'range') {
-      if (dir > 0) el.stepUp();
-      else el.stepDown();
-      el.dispatchEvent(new Event('input', { bubbles: true }));
-      return true;
+  /** Whether focus is in the left column (back button and tabs). */
+  private inNav(): boolean {
+    return this.navCol.contains(document.activeElement);
+  }
+
+  private focusTab() {
+    this.tabs.querySelector<HTMLElement>(`[data-tab="${this.tab}"]`)?.focus();
+  }
+
+  /** Show a tab; the tab keeps focus when it was chosen from the tab list. */
+  private openTab(t: Tab) {
+    const fromNav = this.inNav();
+    this.tab = t;
+    this.render();
+    if (fromNav) this.focusTab();
+  }
+
+  /** Up/down in the left column: the back button, then the tabs, which open as they are reached. */
+  private moveInNav(dir: number) {
+    const back = this.navCol.querySelector<HTMLElement>('.settings-back')!;
+    if (document.activeElement === back) {
+      if (dir > 0) this.focusTab();
+      return;
     }
-    if (el instanceof HTMLInputElement && el.type === 'checkbox') {
-      if (el.checked !== dir > 0) el.click();
-      return true;
+    const i = TABS.indexOf(this.tab) + dir;
+    if (i < 0) back.focus();
+    else if (i < TABS.length) this.openTab(TABS[i]);
+  }
+
+  private enterBody() {
+    const first = this.stops()[0];
+    if (first) {
+      first.focus();
+      first.scrollIntoView({ block: 'nearest' });
     }
-    if (el.dataset.items) {
-      const chips = [...el.querySelectorAll<HTMLButtonElement>(el.dataset.items)];
-      const on = chips.findIndex((c) => c.classList.contains('on'));
-      const next = chips[Math.max(0, Math.min(chips.length - 1, on + dir))];
-      if (next && next !== chips[on]) next.click();
-      el.focus();
-      return true;
-    }
-    return false;
   }
 
   private stepTab(dir: number) {
-    this.tab = TABS[(TABS.indexOf(this.tab) + dir + TABS.length) % TABS.length];
-    this.render();
+    this.openTab(TABS[(TABS.indexOf(this.tab) + dir + TABS.length) % TABS.length]);
   }
 
   nav(a: NavAction): void {
-    if (a === 'back' || a === 'start') this.close();
+    if (this.inNav()) {
+      const onBack = document.activeElement === this.navCol.querySelector('.settings-back');
+      if (a === 'back' || a === 'start') this.close();
+      else if (a === 'up' || a === 'down') this.moveInNav(a === 'up' ? -1 : 1);
+      else if (a === 'right' || (a === 'confirm' && !onBack)) this.enterBody();
+      else if (a === 'confirm') this.close();
+      else if (a === 'alt') this.stepTab(1);
+      return;
+    }
+    if (a === 'back') this.focusTab();
+    else if (a === 'start') this.close();
     else if (a === 'up') this.moveStop(-1);
     else if (a === 'down') this.moveStop(1);
-    else if (a === 'left') this.adjust(-1);
-    else if (a === 'right') this.adjust(1);
+    else if (a === 'left') {
+      // left past the end of a control goes back to the tabs
+      if (canAdjust(-1)) adjustFocused(-1);
+      else this.focusTab();
+    } else if (a === 'right') adjustFocused(1);
     else if (a === 'alt') this.stepTab(1);
     else if (a === 'confirm') (document.activeElement as HTMLElement | null)?.click?.();
   }
@@ -403,11 +432,20 @@ export class SettingsModal implements Screen {
       this.close();
       return true;
     }
+    if (this.inNav()) {
+      if (e.key === 'ArrowDown' || e.key === 'ArrowUp') this.moveInNav(e.key === 'ArrowUp' ? -1 : 1);
+      else if (e.key === 'ArrowRight' || (e.key === 'Enter' && document.activeElement !== this.navCol.querySelector('.settings-back'))) this.enterBody();
+      else if (e.key === 'PageDown' || e.key === 'PageUp') this.stepTab(e.key === 'PageUp' ? -1 : 1);
+      else return false;
+      return true;
+    }
     if (e.target instanceof HTMLElement && (e.target.closest('select') || e.target.closest('.key-row button'))) return false;
     if (e.key === 'ArrowDown') this.moveStop(1);
     else if (e.key === 'ArrowUp') this.moveStop(-1);
-    else if (e.key === 'ArrowLeft') return this.adjust(-1);
-    else if (e.key === 'ArrowRight') return this.adjust(1);
+    else if (e.key === 'ArrowLeft') {
+      if (canAdjust(-1)) adjustFocused(-1);
+      else this.focusTab();
+    } else if (e.key === 'ArrowRight') return adjustFocused(1);
     else if (e.key === 'PageDown') this.stepTab(1);
     else if (e.key === 'PageUp') this.stepTab(-1);
     else return false;
@@ -434,6 +472,9 @@ function themeThumb(kind: 'classic' | 'ink' | 'system'): string {
 function themePicker(): HTMLElement {
   const wrap = h('div');
   const render = () => {
+    // Picking a theme rebuilds the picker: keep the guitar/keyboard focus on the same group.
+    const had = wrap.contains(document.activeElement) ? document.activeElement?.closest('[aria-label]')?.getAttribute('aria-label') : null;
+    queueMicrotask(() => had && wrap.querySelector<HTMLElement>(`[aria-label="${had}"]`)?.focus());
     const cards = [
       { id: 'classic' as const, name: THEMES.classic.name, description: 'Textured board, domed gems, wheel frets.', thumb: themeThumb('classic') },
       { id: 'ink' as const, name: THEMES.ink.name, description: 'Paper highway with inked outlines.', thumb: themeThumb('ink') },

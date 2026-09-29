@@ -8,6 +8,7 @@ export type SfxName =
   | 'spActivate'
   | 'spEnd'
   | 'soloEnd'
+  | 'fullCombo'
   | 'click'
   | 'clickHi'
   | 'menuMove'
@@ -155,6 +156,40 @@ function blip(sr: number, freqs: number[], each: number, gain = 0.4): Float32Arr
   return out;
 }
 
+/** Full combo: a rising arpeggio into a held major chord, sparkles, and the crackle of fireworks. */
+function fanfare(sr: number): Float32Array {
+  const out = new Float32Array(Math.floor(sr * 2.6));
+  const brass: [number, number][] = [
+    [1, 1],
+    [2, 0.5],
+    [3, 0.3],
+    [4, 0.15],
+  ];
+  const run = [523.25, 659.25, 783.99, 1046.5, 1318.5];
+  run.forEach((f, i) => tone(out, sr, f, i * 0.06, 0.3, 0.32, brass, 0.12));
+  const t0 = run.length * 0.06 + 0.03;
+  for (const f of [261.63, 523.25, 659.25, 783.99, 1046.5]) tone(out, sr, f, t0, 2, 0.26, brass, 0.8);
+  const rnd = mulberry(42);
+  const sparkle = [2093, 2349.3, 2637, 3136, 3520];
+  for (let k = 0; k < 16; k++) {
+    tone(out, sr, sparkle[Math.floor(rnd() * sparkle.length)], t0 + 0.08 + k * 0.07 + rnd() * 0.03, 0.35, 0.07, [
+      [1, 1],
+      [2.76, 0.3],
+    ], 0.08);
+  }
+  // fireworks: short bursts of filtered crackle
+  for (const at of [0.7, 1.05, 1.4]) {
+    const s0 = Math.floor(at * sr);
+    let lp = 0;
+    for (let i = 0; i < sr * 0.35 && s0 + i < out.length; i++) {
+      const pop = rnd() < 0.004 ? rnd() * 2 - 1 : 0;
+      lp += 0.3 * (rnd() * 2 - 1 - lp);
+      out[s0 + i] += (lp * 0.25 + pop * 0.9) * Math.exp(-i / (sr * 0.09));
+    }
+  }
+  return normalize(out, 0.8);
+}
+
 export function synthesizeSfx(sr: number): Record<SfxName, Float32Array[]> {
   return {
     clank: [0, 1, 2, 3, 4, 5].map((s) => clank(sr, 101 + s * 17)),
@@ -164,6 +199,7 @@ export function synthesizeSfx(sr: number): Record<SfxName, Float32Array[]> {
     spActivate: [whoosh(sr, true)],
     spEnd: [whoosh(sr, false)],
     soloEnd: [blip(sr, [523.25, 659.25, 783.99, 1046.5], 0.07, 0.35)],
+    fullCombo: [fanfare(sr)],
     click: [blip(sr, [1000], 0.03, 0.8)],
     clickHi: [blip(sr, [1600], 0.03, 0.8)],
     menuMove: [blip(sr, [1800], 0.018, 0.12)],
