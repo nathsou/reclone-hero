@@ -42,7 +42,12 @@ export type InstrumentKind =
   | 'harpsichord'
   | 'strings'
   | 'bell'
-  | 'choir';
+  | 'choir'
+  | 'chip' // 8-bit pulse wave
+  | 'brass' // brassy saw with a filter swell
+  | 'accordion' // two detuned reeds
+  | 'fiddle' // bowed, with vibrato
+  | 'banjo'; // bright, fast-decaying pluck
 
 export interface Part {
   inst: InstrumentKind;

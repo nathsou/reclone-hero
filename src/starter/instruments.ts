@@ -476,6 +476,118 @@ class Bell implements Voice {
   process(): void {}
 }
 
+/**
+ * Oscillator voices built from one band-limited waveform through an envelope and a filter: chip pulse,
+ * brass, accordion reeds and a bowed fiddle. Mono.
+ */
+class Osc implements Voice {
+  readonly tail: number;
+  readonly stereo = false;
+  private readonly sr: number;
+  private readonly kind: 'chip' | 'brass' | 'accordion' | 'fiddle';
+  private readonly tone: number;
+  private readonly c: Biquad[];
+
+  constructor(sr: number, kind: 'chip' | 'brass' | 'accordion' | 'fiddle', tone = 0.5) {
+    this.sr = sr;
+    this.kind = kind;
+    this.tone = tone;
+    this.tail = kind === 'fiddle' ? 0.25 : 0.12;
+    this.c =
+      kind === 'fiddle'
+        ? [Biquad.make('peak', 700, sr, 1.2, 4), Biquad.make('peak', 2800, sr, 1.5, 5), Biquad.make('lp', 7000, sr, 0.7), Biquad.make('hp', 180, sr, 0.7)]
+        : kind === 'accordion'
+          ? [Biquad.make('peak', 1100, sr, 1, 3), Biquad.make('lp', 5000, sr, 0.7), Biquad.make('hp', 120, sr, 0.7)]
+          : [Biquad.make('hp', 60, sr, 0.7)];
+  }
+
+  note(n: Note, index: number, lenSec: number, L: Float32Array, _R: Float32Array | null, at: number): void {
+    const sr = this.sr;
+    const k = this.kind;
+    const rel = k === 'fiddle' ? 0.12 : k === 'accordion' ? 0.05 : 0.03;
+    const total = Math.min(L.length - at, Math.round((lenSec + rel * 5) * sr));
+    const amp = (n.v * (k === 'chip' ? 0.22 : k === 'brass' ? 0.36 : k === 'fiddle' ? 0.3 : 0.28)) / Math.sqrt(n.p.length);
+    const rand = rng(index * 131 + 9);
+    for (const p of n.p) {
+      const f = mtof(p);
+      const svf = new Svf();
+      const detunes = k === 'accordion' ? [0.9955, 1.0045] : [1];
+      const phases = detunes.map(() => rand());
+      // chip: duty cycle by tone; a short pitch drop on the attack for character
+      const duty = k === 'chip' ? 0.125 + this.tone * 0.375 : 0.42;
+      for (let i = 0; i < total; i++) {
+        const t = i / sr;
+        let vib = 1;
+        if (k === 'fiddle' || (k === 'brass' && lenSec > 0.4)) vib = 1 + (k === 'fiddle' ? 0.004 : 0.0025) * Math.sin(2 * Math.PI * 5.6 * t) * Math.min(1, Math.max(0, (t - 0.15) / 0.25));
+        if (k === 'accordion') vib = 1 + 0.0015 * Math.sin(2 * Math.PI * 4.5 * t);
+        if (k === 'chip' && n.bend) vib *= 2 ** ((-n.bend * Math.max(0, 1 - t / 0.06)) / 12);
+        let x = 0;
+        for (let d = 0; d < detunes.length; d++) {
+          const dt = (f * detunes[d] * vib) / sr;
+          let ph = phases[d] + dt;
+          if (ph >= 1) ph -= 1;
+          phases[d] = ph;
+          if (k === 'brass' || k === 'fiddle') x += 2 * ph - 1 - blep(ph, dt);
+          else {
+            // band-limited pulse: difference of two saws
+            let ph2 = ph + 1 - duty;
+            if (ph2 >= 1) ph2 -= 1;
+            x += (2 * ph - 1 - blep(ph, dt)) - (2 * ph2 - 1 - blep(ph2, dt));
+          }
+        }
+        x /= detunes.length;
+        if (k === 'brass' || k === 'fiddle') {
+          if ((i & 15) === 0) {
+            // brass opens up as it is blown; the fiddle is steadier
+            const swell = k === 'brass' ? Math.min(1, t / 0.06) * (0.75 + 0.25 * Math.exp(-t / 0.3)) : 0.9;
+            svf.set(f * 1.5 + (k === 'brass' ? 4200 : 3000) * swell * (0.5 + n.v * 0.6) * (0.6 + this.tone * 0.8), sr, 0.8);
+          }
+          x = svf.tick(x);
+        }
+        const a = k === 'fiddle' ? 0.05 : k === 'brass' ? 0.02 : k === 'accordion' ? 0.02 : 0.002;
+        let g = Math.min(1, t / a);
+        if (k === 'chip') g *= n.mute ? Math.exp(-t / 0.06) : 1;
+        if (t > lenSec) g *= Math.exp(-(t - lenSec) / rel);
+        if (k === 'fiddle') x += (rand() * 2 - 1) * 0.04 * Math.exp(-t / 0.08); // bow scratch
+        L[at + i] += x * g * amp;
+      }
+    }
+  }
+
+  process(L: Float32Array, _R: Float32Array | null, n: number): void {
+    const c = this.c;
+    for (let i = 0; i < n; i++) {
+      let x = L[i];
+      for (let j = 0; j < c.length; j++) x = c[j].tick(x);
+      L[i] = x;
+    }
+  }
+}
+
+/** Banjo: a bright pluck that dies fast, with the drum-head "plink". */
+class Banjo implements Voice {
+  readonly tail = 0.4;
+  readonly stereo = false;
+  private readonly sr: number;
+  private readonly c: Biquad[];
+
+  constructor(sr: number) {
+    this.sr = sr;
+    this.c = [Biquad.make('peak', 1800, sr, 1.4, 6), Biquad.make('hp', 200, sr, 0.7), Biquad.make('lp', 8000, sr, 0.7)];
+  }
+
+  note(n: Note, index: number, lenSec: number, L: Float32Array, _R: Float32Array | null, at: number): void {
+    const rand = rng(index * 53 + 1);
+    const amp = (n.v * 1.7) / Math.sqrt(n.p.length);
+    n.p.forEach((p, k) => pluck(L, at + k * 40, this.sr, mtof(p), { len: Math.min(lenSec, 0.9), decay: 0.7, bright: 0.98, amp, rand, release: 0.05 }));
+  }
+
+  process(L: Float32Array, _R: Float32Array | null, n: number): void {
+    const c = this.c;
+    for (let i = 0; i < n; i++) L[i] = c[2].tick(c[1].tick(c[0].tick(L[i])));
+  }
+}
+
 export function makeVoice(kind: InstrumentKind, sr: number, tone = 0.5): Voice {
   switch (kind) {
     case 'drive':
@@ -507,6 +619,13 @@ export function makeVoice(kind: InstrumentKind, sr: number, tone = 0.5): Voice {
       return new Harpsichord(sr);
     case 'bell':
       return new Bell(sr);
+    case 'chip':
+    case 'brass':
+    case 'accordion':
+    case 'fiddle':
+      return new Osc(sr, kind, tone);
+    case 'banjo':
+      return new Banjo(sr);
   }
 }
 
