@@ -524,6 +524,11 @@ export class Game {
         for (let i = 0; i < 5; i++) if (mask & (1 << i) || mask === 0) this.laneHit[i] = 1;
         this.renderer.hitBurst(mask, engine.spActive || (sp >= 0 && !engine.spBroken[sp]));
         if (!ev.auto) this.hud.timingTick(ev.delta);
+        // The final note of a flawless run: celebrate straight away rather than on the results screen.
+        if (engine.hits === notes.length && engine.overstrums === 0 && !this.setup.bot && !this.setup.practice) {
+          a.playSfx('fullCombo', 0.9);
+          this.hud.fullCombo();
+        }
         if (engine.activeSolo >= 0 && notes.solo[ev.note] === engine.activeSolo) {
           this.soloHits++;
           this.soloSeen++;
@@ -604,16 +609,11 @@ export class Game {
         break;
       case 'soloStart':
         this.soloHits = this.soloSeen = 0;
-        this.hud.toast('SOLO!', 'solo');
         this.updateSolo();
         break;
       case 'soloEnd': {
-        this.hud.setSolo(false);
-        const pct = Math.round((ev.hits / Math.max(1, ev.total)) * 100);
-        if (ev.hits === ev.total) {
-          a.playSfx('soloEnd', 0.8);
-          this.hud.toast('PERFECT SOLO!', 'solo', `+${ev.bonus.toLocaleString('en-US')}`);
-        } else this.hud.toast(`${pct}% SOLO`, pct >= 80 ? 'solo' : 'info', `+${ev.bonus.toLocaleString('en-US')}`);
+        if (ev.hits === ev.total) a.playSfx('soloEnd', 0.8);
+        this.hud.soloResult(ev.hits, ev.total, ev.bonus);
         break;
       }
       default:

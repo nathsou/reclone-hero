@@ -21,6 +21,8 @@ export class ResultsScreen implements Screen {
   private readonly req: GameRequest;
   private readonly r: GameResult;
   private readonly weakest: SectionResult | null;
+  private readonly fc: boolean;
+  private stopConfetti: (() => void) | null = null;
   private readonly plot: HTMLCanvasElement;
   private readonly drift: HTMLCanvasElement;
   private readonly hist: HTMLCanvasElement;
@@ -35,7 +37,7 @@ export class ResultsScreen implements Screen {
     const { song } = req;
     const t = r.setup.track;
     const acc = r.total ? r.hits / r.total : 0;
-    const fc = r.misses === 0 && r.overstrums === 0;
+    const fc = (this.fc = r.misses === 0 && r.overstrums === 0 && r.total > 0);
     let newBest = false;
     if (!req.bot && !req.practice) {
       const prev = getBest(scoreKey(song.id, trackKey(t.instrument, t.difficulty)));
@@ -103,7 +105,7 @@ export class ResultsScreen implements Screen {
           'div',
           { class: 'res-nums' },
           h('div', { class: 'res-num' }, h('div', { class: 'label' }, 'Score'), h('div', { class: 'v' }, r.score.toLocaleString('en-US')), newBest ? h('span', { class: 'tag best' }, 'NEW BEST') : null),
-          h('div', { class: 'res-num' }, h('div', { class: 'label' }, 'Accuracy'), h('div', { class: 'v' }, `${(acc * 100).toFixed(1)}%`), fc ? h('span', { class: 'tag' }, 'FULL COMBO') : null),
+          h('div', { class: 'res-num' }, h('div', { class: 'label' }, 'Accuracy'), h('div', { class: 'v' }, `${(acc * 100).toFixed(1)}%`), fc ? h('span', { class: 'tag fc' }, 'FULL COMBO') : null),
           h('div', { class: 'res-num' }, h('div', { class: 'label' }, 'Stars'), h('div', { class: 'res-stars' }, starsEl(r.stars))),
         ),
       ),
@@ -133,11 +135,19 @@ export class ResultsScreen implements Screen {
 
   shown(): void {
     this.draw();
+    // The game already celebrated the last note; a shower of confetti welcomes the results too.
+    if (this.fc && !this.req.bot && !this.req.practice) {
+      void import('../confetti.ts').then(({ celebrate }) => {
+        if (!this.el.isConnected) return;
+        this.stopConfetti = celebrate(document.body, { fixed: true, rain: 160, cannons: [[0, innerHeight], [innerWidth, innerHeight]], spread: 1.8 });
+      });
+    }
     this.resizeObserver = new ResizeObserver(() => this.draw());
     this.resizeObserver.observe(this.timeline);
   }
 
   destroy(): void {
+    this.stopConfetti?.();
     this.resizeObserver?.disconnect();
     if (this.artUrl) void this.artUrl.then((u) => this.app.library.release(u));
   }

@@ -79,6 +79,19 @@
   margin-right: 6px;
 }
 
+.res-num .tag.fc {
+  color: #fff;
+  background: linear-gradient(90deg, var(--green), var(--red), var(--yellow), var(--blue), var(--orange), var(--green)) 0 0 / 300% 100%;
+  text-shadow: 0 1px 1px rgb(0 0 0 / 0.45);
+  animation: fc-tag 3s linear infinite;
+}
+
+@keyframes fc-tag {
+  to {
+    background-position: 150% 0;
+  }
+}
+
 .res-num .tag.best {
   background: var(--yellow);
   color: #1a1400;
