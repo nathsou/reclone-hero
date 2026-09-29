@@ -45,7 +45,7 @@ tilt/whammy axes, and the mapping is saved per device.
 `A S D F G` (or `1`–`5`) are the frets and, by default, **pressing a fret key plays the note**: no separate
 strum key is needed, and keys pressed together within 40 ms count as one chord. Hold keys through sustains.
 Turn **Settings › Controls › Fret keys strum** off to strum with `↑`/`↓`/`Enter` instead, like a guitar.
-`Space` is Star Power, `W` whammy, `Esc` pause. While you play on the keyboard, the key for each fret is shown
+`Space` is Star Power, `W` whammy, `Esc` pause (the pause menu can also switch difficulty). While you play on the keyboard, the key for each fret is shown
 under it. All keys can be remapped in Settings › Controls. Easy (three frets) and Medium (four) are good places
 to start.
 In menus, strum moves, green confirms, red goes back, yellow opens practice, blue/orange change difficulty.
@@ -78,9 +78,8 @@ On the results screen `Enter` returns to the song list, `R` retries and `P` prac
   colour schemes (Swiss, Baroque, Synthwave, Terminal, Paper, Midnight) are still there under Settings › Display.
 - **Note styles**, independent of the theme: Classic dome (the default), Studio (glass lenses in chrome
   bezels on a lacquered board, with ray-traced reflections), Crystal (glass beads, tubes and a flowing glass
-  highway that refract what is behind them; see [Graphics](#graphics)), Neon (glowing pucks), Swiss (flat
-  geometric dots), Baroque (faceted jewels in gold, pearls for HOPOs), Pixel (8-bit blocks) and Clay (soft
-  pastel pebbles). Each keeps the same strum / HOPO / tap language and has its own sustains, fret buttons and
+  highway that refract what is behind them; see [Graphics](#graphics)), Neon (glowing pucks), Baroque (faceted
+  jewels in gold, pearls for HOPOs) and Pixel (8-bit blocks). Each keeps the same strum / HOPO / tap language and has its own sustains, fret buttons and
   hit particles.
 - **Backups:** Settings › Data exports settings, key and controller mappings and best scores to a file,
   to import on another computer (scores merge, keeping the best).

@@ -7,24 +7,23 @@ import type { Hit, SongDef } from '../score.ts';
 const BAR = 3;
 const bar = (n: number) => n * BAR;
 
-// Twelve sixteenths to the bar; each line is four bars.
+// Twelve sixteenths to the bar. The theme as Strauss wrote it: a rising triad, then each note
+// answered an octave up with a rest between, the waltz's famous "breathing" (after the transcription
+// in Kerr's Merry Melodies, moved from G to D). Four lines of eight bars.
 const WALTZ = [
-  'D4:4 D4 F#4 | A4:12 | .:4 A5 A5 | .:4 F#5 F#5',
-  'D4:4 D4 F#4 | A4:12 | .:4 A5 A5 | .:4 G5 G5',
-  'C#4:4 C#4 E4 | B4:12 | .:4 B5 B5 | .:4 G5 G5',
-  'C#4:4 C#4 E4 | B4:12 | .:4 B5 B5 | .:4 F#5 F#5',
-  'D4:4 D4 F#4 | A4:4 D5:8 | .:4 D5 D5 | .:4 A4 A4',
-  'D4:4 D4 F#4 | A4:4 D5:8 | .:4 D5 D5 | .:4 B4 B4',
-  'E4:4 E4 G4 | B4:12 | .:4 G#4 A4 | F#5:8 D5:4',
-  'F#4:8 E4:4 | B4:8 A4:4 | D4:12 | .:12',
+  'D4:4 F#4 A4 | A4:4 .:4 A5:4 | A5:4 .:4 F#5:4 | F#5:4 .:4 D4:4 | D4:4 F#4 A4 | A4:4 .:4 A5:4 | A5:4 .:4 G5:4 | G5:4 .:4 C#5:4',
+  'C#5:4 E5 G5 | G5:4 .:4 B5:4 | B5:4 .:4 G5:4 | G5:4 .:4 C#5:4 | C#5:4 E5 G5 | G5:4 .:4 B5:4 | B5:4 .:4 F#5:4 | F#5:4 .:4 D4:4',
+  'D4:4 F#4 A4 | D5:4 .:4 D6:4 | D6:4 .:4 A5:4 | A5:4 .:4 D4:4 | D4:4 F#4 A4 | D5:4 .:4 D6:4 | D6:4 .:4 B5:4 | B5:4 .:4 E5:4',
+  'E5:4 G5 B5 | B5:12 | ~:4 G#5:4 A5 | F#6:12 | ~:4 D6:4 F#5 | F#5:8 E5:4 | B5:8 A5:4 | D5:4 .:2 D5:2 D5:4',
 ].join(' | ');
-const WALTZ_H = prog('D D D D | D D A7 A7 | A7 A7 A7 A7 | A7 A7 D D | D D D D | D D G G | Em Em A7 D | D A7 D D');
+const WALTZ_H = prog('D D D D D D A7 A7 | A7 A7 A7 A7 A7 A7 D D | D D D D D D G G | Em Em E7 D D A7 A7 D');
 const SECOND_H = prog('D D A7 A7 A7 A7 D D G G D D A7 A7 D D');
 const CODA = 'D4:4 F#4 A4 | D5:12 | D5+F#5+A5:12 | D4+A4+D5:12';
 
 const oomPahPah = (h: string[], from: number, v = 0.55) => comp(h, BAR, bar(from), '....x...x...', (c) => voicing(c, 'A3'), { v });
 const bass = (h: string[], from: number) => comp(h, BAR, bar(from), 'x-----------', (c) => [bassOf(c, 'D2')], { v: 0.8 });
-const arps = (h: string[], from: number, v = 0.72) => comp(h, BAR, bar(from), 'x.x.x.x.x.x.', (c) => nearVoicing(c, 'D5'), { arp: [0, 1, 2, 3, 2, 1], v });
+// one arpeggio note per beat
+const arps = (h: string[], from: number, v = 0.72) => comp(h, BAR, bar(from), 'x...x...x...', (c) => nearVoicing(c, 'D5'), { arp: [0, 1, 2, 3, 2, 1], v });
 const WALTZ_BEAT = { kick: 'x...........', clap: '....x...x...', hat: 'x.x.x.x.x.x.' };
 
 // Bar map: intro 0, waltz 4, second waltz 36, waltz 52, coda 84, end 88.
@@ -59,7 +58,7 @@ export const blueDanube: SongDef = {
   player: [
     { inst: 'piano', gain: 1.2, verb: 0.35, notes: seq(WALTZ, bar(4)) },
     { inst: 'pluck', tone: 0.55, gain: 1, verb: 0.25, echo: 0.25, notes: arps(SECOND_H, 36) },
-    { inst: 'supersaw', tone: 0.5, gain: 1, verb: 0.3, echo: 0.2, notes: [...seq(WALTZ, bar(52), { v: 0.85 }), ...seq(CODA, bar(84))] },
+    { inst: 'supersaw', tone: 0.5, gain: 1, verb: 0.3, echo: 0.2, notes: [...seq(WALTZ, bar(52), { transpose: -12, v: 0.85 }), ...seq(CODA, bar(84))] },
   ],
   backing: [
     { inst: 'strings', gain: 0.8, pan: -0.2, verb: 0.5, notes: [...comp(prog('D A7 D D'), BAR, bar(0), 'xxxxxxxxxxxx', (c) => voicing(c, 'A3'), { v: 0.35 }), ...comp([...WALTZ_H], BAR, bar(52), 'x-----------', (c) => voicing(c, 'A3'), { v: 0.55 })] },
