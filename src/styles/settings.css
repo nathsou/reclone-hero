@@ -2,6 +2,8 @@
 .settings-page {
   position: fixed;
   inset: 0;
+  /* clear notches and the home indicator (the page is edge to edge with viewport-fit=cover) */
+  padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
   z-index: 50;
   display: grid;
   grid-template-columns: 300px minmax(0, 1fr);

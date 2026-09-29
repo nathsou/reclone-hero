@@ -15,6 +15,7 @@ import type { SongEntry } from '../library/song.ts';
 import { Renderer } from '../render/renderer.ts';
 import type { RenderState } from '../render/renderer.ts';
 import { settings } from '../settings.ts';
+import type { Quality } from '../settings.ts';
 import { Hud } from '../ui/hud.ts';
 import type { HudState } from '../ui/hud.ts';
 import { noteSkin, renderTheme } from '../ui/theme.ts';
@@ -52,8 +53,40 @@ export interface SectionResult {
   total: number;
 }
 
+const QUALITY_STEPS: Quality[] = ['high', 'medium', 'low'];
+/** Quality lowered this session because frames could not keep up; applies to later songs too. */
+let qualityCap: Quality | null = null;
+const capped = (q: Quality): Quality => (qualityCap && QUALITY_STEPS.indexOf(qualityCap) > QUALITY_STEPS.indexOf(q) ? qualityCap : q);
+
+/** Keep the screen awake while a song plays (released on pause and when the song ends). */
+class ScreenAwake {
+  private lock: { release(): Promise<void> } | null = null;
+  private wanted = false;
+
+  on(): void {
+    this.wanted = true;
+    const wl = (navigator as Navigator & { wakeLock?: { request(type: 'screen'): Promise<{ release(): Promise<void> }> } }).wakeLock;
+    if (!wl || this.lock) return;
+    wl.request('screen').then(
+      (lock) => {
+        if (this.wanted) this.lock = lock;
+        else void lock.release();
+      },
+      () => {},
+    );
+  }
+
+  off(): void {
+    this.wanted = false;
+    void this.lock?.release().catch(() => {});
+    this.lock = null;
+  }
+}
+
 export interface GameResult {
   setup: GameSetup;
+  /** every note hit and no overstrum before the last one (for practice: the range, with no overstrum at all) */
+  fullCombo: boolean;
   /** what the run was mostly played with */
   input: PlayedWith;
   score: number;
@@ -129,7 +162,18 @@ export class Game {
   constructor(setup: GameSetup, canvas: HTMLCanvasElement, hud: Hud) {
     this.setup = setup;
     this.renderer = new Renderer(canvas);
-    this.renderer.setQuality(settings.quality);
+    this.renderer.setQuality(capped(settings.quality));
+    // A lost GPU context (phones do this when backgrounded) pauses the song; once it is back the
+    // renderer has rebuilt itself, so warm it up again and draw the paused frame.
+    this.renderer.onContextChange = (available) => {
+      if (!available) {
+        this.pause();
+        return;
+      }
+      this.hudCameraKey = '';
+      this.renderer.warmUp(this.setup.chart.beats, noteSkin(), renderTheme());
+      this.pausedDrawn = false;
+    };
     this.hud = hud;
     this.rs = {
       time: 0,
@@ -161,6 +205,8 @@ export class Game {
   }
 
   private autoIdx = 0;
+  /** every note hit with no overstrum, settled when the last note is hit */
+  private fullCombo = false;
   private prepared = false;
 
   /** Auto Star Power: once the bar is half full, set it off just before the next notes arrive. */
@@ -180,10 +226,32 @@ export class Game {
     return 'guitar';
   }
 
+  /**
+   * Frames that cannot keep up with the display for ~3 s of play lower the graphics quality one step
+   * (for the rest of the session), so a phone running Crystal or Studio stays smooth.
+   */
+  private checkFrameRate() {
+    this.playedFor += 0.5;
+    if (this.playedFor < 3 || !Number.isFinite(this.minDt)) return;
+    const slow = this.fps < (1 / this.minDt) * 0.72;
+    this.slowWindows = slow ? this.slowWindows + 1 : 0;
+    if (this.slowWindows < 6) return;
+    this.slowWindows = 0;
+    const current = capped(settings.quality);
+    const next = QUALITY_STEPS[QUALITY_STEPS.indexOf(current) + 1];
+    if (!next) return;
+    qualityCap = next;
+    this.renderer.setQuality(next);
+    this.hudCameraKey = '';
+    this.hud.toast(`Graphics quality lowered to ${next}`, 'info', 'to keep the song smooth');
+  }
+
   private reset() {
     this.prepared = false;
     this.presses = { kb: 0, pad: 0, touch: 0 };
     this.autoIdx = 0;
+    this.playedFor = 0;
+    this.slowWindows = 0;
     const { track, chart, practice } = this.setup;
     const n = track.notes.length;
     this.engine = new Engine(
@@ -204,7 +272,8 @@ export class Game {
     this.soloHits = this.soloSeen = 0;
     this.sectionIdx = -1;
     this.beatIdx = 0;
-    this.hud.setSolo(false);
+    this.hud.resetRun();
+    this.fullCombo = false;
     if (practice) {
       this.startTime = practice.start - 2 * practice.speed;
       this.endTime = practice.end + 1;
@@ -241,6 +310,7 @@ export class Game {
     input().clear();
     this.srcMask = { kb: 0, pad: input().padFretMask(), touch: 0 };
     audio().play(this.startTime, practice?.speed ?? 1);
+    this.awake.on();
     this.lastFrame = performance.now();
     cancelAnimationFrame(this.raf);
     this.raf = requestAnimationFrame(this.frame);
@@ -290,6 +360,7 @@ export class Game {
   pause(): void {
     if (this.paused || this.ended) return;
     this.paused = true;
+    this.awake.off();
     audio().stop();
     input().gameMode = false;
     input().setPollRate(16);
@@ -305,6 +376,9 @@ export class Game {
     // Rewind a little so notes approach again; judged notes stay judged.
     this.resumeAt = Number.isFinite(at) ? at : this.startTime;
     audio().play(Math.max(this.startTime, this.resumeAt - 2 * rate), rate);
+    this.awake.on();
+    // the audio rewinds: let the beat pulse find its place again
+    this.beatIdx = 0;
     input().gameMode = true;
     input().setPollRate(4);
     input().clear();
@@ -329,6 +403,7 @@ export class Game {
 
   stop(): void {
     cancelAnimationFrame(this.raf);
+    this.awake.off();
     if (this.video) {
       this.video.pause();
       this.video.removeAttribute('src');
@@ -342,6 +417,11 @@ export class Game {
 
   // ---------------------------------------------------------------- frame
 
+  private readonly awake = new ScreenAwake();
+  /** shortest frame interval seen: the display's own refresh */
+  private minDt = Infinity;
+  private slowWindows = 0;
+  private playedFor = 0;
   private cpuMs = 0;
   private worstAcc = 0;
   private worstFrame = 0;
@@ -368,10 +448,12 @@ export class Game {
     this.fpsAcc += dt;
     this.fpsFrames++;
     if (dt > this.worstAcc) this.worstAcc = dt;
+    if (dt > 0.004) this.minDt = Math.min(this.minDt, dt);
     if (this.fpsAcc >= 0.5) {
       this.fps = this.fpsFrames / this.fpsAcc;
       this.worstFrame = this.worstAcc;
       this.fpsAcc = this.fpsFrames = this.worstAcc = 0;
+      if (!this.paused) this.checkFrameRate();
     }
 
     const a = audio();
@@ -568,10 +650,14 @@ export class Game {
         for (let i = 0; i < 5; i++) if (mask & (1 << i) || mask === 0) this.laneHit[i] = 1;
         this.renderer.hitBurst(mask, engine.spActive || (sp >= 0 && !engine.spBroken[sp]));
         if (!ev.auto) this.hud.timingTick(ev.delta);
-        // The final note of a flawless run: celebrate straight away rather than on the results screen.
-        if (engine.hits === notes.length && engine.overstrums === 0 && !this.setup.bot && !this.setup.practice) {
-          a.playSfx('fullCombo', 0.9);
-          this.hud.fullCombo();
+        // The final note of a flawless run: that settles the full combo (a stray strum once the notes
+        // are over does not take it back), and it is celebrated straight away.
+        if (engine.hits === notes.length && engine.overstrums === 0 && !this.setup.practice) {
+          this.fullCombo = true;
+          if (!this.setup.bot) {
+            a.playSfx('fullCombo', 0.9);
+            this.hud.fullCombo();
+          }
         }
         if (engine.activeSolo >= 0 && notes.solo[ev.note] === engine.activeSolo) {
           this.soloHits++;
@@ -748,6 +834,7 @@ export class Game {
       wrongFret: this.wrongFret,
       lateMiss: this.lateMiss,
       input: this.playedWith(),
+      fullCombo: this.setup.practice ? e.misses === 0 && e.overstrums === 0 && notes.length > 0 : this.fullCombo,
       noteState: e.noteState.slice(),
       hitDelta: e.hitDelta.slice(),
       start: Math.min(0, notes.length ? notes.time[0] : 0),

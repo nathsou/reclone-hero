@@ -40,9 +40,11 @@ export class AudioEngine {
   private readonly backingVol: GainNode;
   private readonly sfxVol: GainNode;
   private readonly sfx: Record<SfxName, AudioBuffer[]>;
-  /** Reused per-sound gain nodes, so a sound effect only creates its (one-shot) source node. */
-  private readonly sfxGains: GainNode[] = [];
-  private sfxGainIdx = 0;
+  /**
+   * Reused per-sound gain nodes, so a sound effect only creates its (one-shot) source node. A node is
+   * reused only once its last sound has finished, so a long one (the full-combo fanfare) keeps its level.
+   */
+  private readonly sfxGains: { node: GainNode; busyUntil: number }[] = [];
 
   private player: AudioBuffer | null = null;
   private backing: AudioBuffer | null = null;
@@ -61,6 +63,9 @@ export class AudioEngine {
   private playerAudible = true;
 
   constructor() {
+    // iPhones mute Web Audio with the ring/silent switch unless the page says it plays media.
+    const session = (navigator as Navigator & { audioSession?: { type: string } }).audioSession;
+    if (session) session.type = 'playback';
     this.ctx = new AudioContext({ latencyHint: 'interactive' });
     const c = this.ctx;
     this.master = c.createGain();
@@ -79,11 +84,7 @@ export class AudioEngine {
     this.sfxVol.connect(this.master);
     this.master.connect(c.destination);
     this.applyVolumes();
-    for (let i = 0; i < 12; i++) {
-      const g = c.createGain();
-      g.connect(this.sfxVol);
-      this.sfxGains.push(g);
-    }
+    for (let i = 0; i < 12; i++) this.addSfxGain();
 
     const raw = synthesizeSfx(c.sampleRate);
     this.sfx = {} as Record<SfxName, AudioBuffer[]>;
@@ -329,10 +330,20 @@ export class AudioEngine {
     const src = this.ctx.createBufferSource();
     src.buffer = buf;
     src.detune.value = detuneCents;
-    const g = this.sfxGains[this.sfxGainIdx++ % this.sfxGains.length];
-    g.gain.value = gain;
-    src.connect(g);
+    const now = this.ctx.currentTime;
+    const slot = this.sfxGains.find((s) => s.busyUntil <= now) ?? this.addSfxGain();
+    slot.busyUntil = now + buf.duration / 2 ** (Math.min(0, detuneCents) / 1200) + 0.05;
+    slot.node.gain.value = gain;
+    src.connect(slot.node);
     src.start();
+  }
+
+  private addSfxGain(): { node: GainNode; busyUntil: number } {
+    const node = this.ctx.createGain();
+    node.connect(this.sfxVol);
+    const slot = { node, busyUntil: 0 };
+    this.sfxGains.push(slot);
+    return slot;
   }
 
   /** Schedule a sound at an absolute AudioContext time (metronome). */

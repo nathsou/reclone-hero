@@ -38,7 +38,7 @@ export class ResultsScreen implements Screen {
     const { song } = req;
     const t = r.setup.track;
     const acc = r.total ? r.hits / r.total : 0;
-    const fc = (this.fc = r.misses === 0 && r.overstrums === 0 && r.total > 0);
+    const fc = (this.fc = r.fullCombo);
     let newBest = false;
     const key = scoreKey(song.id, trackKey(t.instrument, t.difficulty));
     if (!req.bot && !req.practice) {
