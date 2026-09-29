@@ -47,6 +47,7 @@ const HOLDS: Record<InstrumentKind, boolean> = {
   accordion: true,
   fiddle: true,
   banjo: false,
+  timpani: false,
 };
 
 export interface Placed {

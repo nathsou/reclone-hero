@@ -564,6 +564,51 @@ class Osc implements Voice {
   }
 }
 
+/** Timpani: a tuned drum head (a few inharmonic modes) with a felt-mallet thump. Rolls are fast repeats. */
+class Timpani implements Voice {
+  readonly tail = 2.5;
+  readonly stereo = false;
+  private readonly sr: number;
+
+  constructor(sr: number) {
+    this.sr = sr;
+  }
+
+  note(n: Note, index: number, lenSec: number, L: Float32Array, _R: Float32Array | null, at: number): void {
+    const sr = this.sr;
+    const rand = rng(index * 31 + 7);
+    const total = Math.min(L.length - at, Math.round((Math.min(lenSec, 1) + 2) * sr));
+    const amp = (n.v * 0.32) / Math.sqrt(n.p.length);
+    const modes = [
+      [1, 1, 1.4],
+      [1.5, 0.5, 0.9],
+      [1.99, 0.28, 0.6],
+      [2.44, 0.16, 0.4],
+    ];
+    for (const p of n.p) {
+      const f = mtof(p);
+      for (const [ratio, g, decay] of modes) {
+        let ph = 0;
+        for (let i = 0; i < total; i++) {
+          const t = i / sr;
+          // the head starts a touch sharp and settles
+          ph += (TWO_PI * f * ratio * (1 + 0.02 * Math.exp(-t / 0.04))) / sr;
+          L[at + i] += Math.sin(ph) * Math.exp(-t / decay) * g * amp * Math.min(1, i / 30);
+        }
+      }
+    }
+    // felt mallet: a short low noise thump
+    let lp = 0;
+    const thump = Math.min(total, Math.round(0.05 * sr));
+    for (let i = 0; i < thump; i++) {
+      lp += 0.08 * (rand() * 2 - 1 - lp);
+      L[at + i] += lp * amp * 2.2 * (1 - i / thump);
+    }
+  }
+
+  process(): void {}
+}
+
 /** Banjo: a bright pluck that dies fast, with the drum-head "plink". */
 class Banjo implements Voice {
   readonly tail = 0.4;
@@ -626,6 +671,8 @@ export function makeVoice(kind: InstrumentKind, sr: number, tone = 0.5): Voice {
       return new Osc(sr, kind, tone);
     case 'banjo':
       return new Banjo(sr);
+    case 'timpani':
+      return new Timpani(sr);
   }
 }
 
