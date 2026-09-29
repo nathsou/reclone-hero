@@ -18,6 +18,10 @@ export interface Settings {
   lefty: boolean;
   /** keyboard: a fret key press also strums (no separate strum key needed) */
   kbTapMode: boolean;
+  /** on-screen frets: shown on touch screens ('auto'), always, or never */
+  touchControls: 'auto' | 'on' | 'off';
+  /** Star Power goes off by itself as soon as it can, just before the next notes */
+  autoStarPower: boolean;
   /** list the songs that ship with the game */
   builtinSongs: boolean;
   /** song list: only starred songs */
@@ -52,6 +56,8 @@ export const DEFAULT_SETTINGS: Settings = {
   strumLeniencyMs: 70,
   lefty: false,
   kbTapMode: true,
+  touchControls: 'auto',
+  autoStarPower: false,
   builtinSongs: true,
   favouritesOnly: false,
   timingBar: true,

@@ -1,3 +1,4 @@
+import { TouchFrets } from './touchFrets.ts';
 import { formatTime } from '../util/text.ts';
 import { h, setText } from './dom.ts';
 
@@ -57,6 +58,9 @@ export interface HudState {
 /** DOM overlay for score, multiplier, star power, streak, toasts and the timing bar. */
 export class Hud {
   readonly root: HTMLDivElement;
+  /** on-screen frets for touch screens */
+  readonly touch: TouchFrets;
+  onTouchPause: (() => void) | null = null;
   private readonly left: HTMLDivElement;
   private readonly right: HTMLDivElement;
   private readonly score: HTMLDivElement;
@@ -187,6 +191,8 @@ export class Hud {
       this.countdown,
       this.keys,
     );
+    this.touch = new TouchFrets(() => this.onTouchPause?.());
+    this.root.append(this.touch.el);
   }
 
   /**
@@ -194,8 +200,16 @@ export class Hud {
    * line centre and a point far down the highway. Call only when the camera changes.
    */
   layout(leftEdge: Float64Array, rightEdge: Float64Array, strikeCenter: Float64Array, farCenter: Float64Array): void {
-    this.left.style.transform = `translate(${leftEdge[0]}px, ${leftEdge[1]}px) translate(-100%, -100%)`;
-    this.right.style.transform = `translate(${rightEdge[0]}px, ${rightEdge[1]}px) translate(0, -100%)`;
+    // On narrow (portrait) screens the highway fills the width: dock the panels in the top corners.
+    const narrow = leftEdge[0] < 170 || this.root.clientWidth - rightEdge[0] < 170;
+    this.root.classList.toggle('narrow', narrow);
+    if (narrow) {
+      this.left.style.transform = 'translate(12px, 96px)';
+      this.right.style.transform = `translate(${this.root.clientWidth - 12}px, 96px) translate(-100%, 0)`;
+    } else {
+      this.left.style.transform = `translate(${leftEdge[0]}px, ${leftEdge[1]}px) translate(-100%, -100%)`;
+      this.right.style.transform = `translate(${rightEdge[0]}px, ${rightEdge[1]}px) translate(0, -100%)`;
+    }
     this.timing.style.transform = `translate(${strikeCenter[0]}px, ${strikeCenter[1]}px) translate(-50%, 0)`;
     this.toasts.style.transform = `translate(${farCenter[0]}px, ${farCenter[1]}px) translate(-50%, -50%)`;
   }
@@ -280,7 +294,7 @@ export class Hud {
         this.spFills[i].style.transform = `scaleY(${f})`;
       }
     }
-    const spText = s.spActive ? `Star Power active · ${Math.max(0, Math.round(s.spSeconds))}s` : s.spBar >= 0.5 ? 'Star Power ready · tilt' : '';
+    const spText = s.spActive ? `Star Power active · ${Math.max(0, Math.round(s.spSeconds))}s` : s.spBar >= 0.5 ? (this.touch.el.classList.contains('on') ? 'Star Power ready · ★ or flick up' : 'Star Power ready · tilt') : '';
     if (spText !== this.lastSpText) {
       this.lastSpText = spText;
       setText(this.spText, spText);
@@ -294,9 +308,11 @@ export class Hud {
     if (ready !== this.lastSpReady) {
       this.lastSpReady = ready;
       this.spMeter.classList.toggle('ready', ready);
+      this.touch.setStarPower(ready, s.spActive);
     }
     if (s.spActive !== this.lastSpActive) {
       this.lastSpActive = s.spActive;
+      this.touch.setStarPower(ready, s.spActive);
       this.spMeter.classList.toggle('active', s.spActive);
     }
     const full = Math.floor(s.stars);

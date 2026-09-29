@@ -147,7 +147,9 @@ test('bots with and without timing jitter full-combo every chart in the library'
     const chart = loadChart(entry.chartFile, readFileSync(`${folder.abs}/${entry.chartFile}`), entry.chartOptions);
     for (const [key, track] of chart.tracks) {
       tracks++;
-      for (const jitter of [0, 0.035]) {
+      // Touch parts are folded from the guitar part: check a perfect run can full-combo them (the
+      // jittered bot stays on the parts as charted, drawing the same random numbers as before).
+      for (const jitter of track.instrument === 'touch' ? [0] : [0, 0.035]) {
         const engine = new Engine(track, chart.tempo);
         for (const a of botActions(track, { jitter, random })) applyAction(engine, a);
         engine.advance(chart.lastNoteTime + 5);

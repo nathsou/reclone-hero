@@ -3,7 +3,7 @@ import { INSTRUMENT_LABEL, trackKey } from '../../chart/types.ts';
 import { HIT } from '../../engine/engine.ts';
 import { formatTime } from '../../util/text.ts';
 import type { GameResult, SectionResult } from '../../game/game.ts';
-import { getBest, recordScore, scoreKey } from '../../game/scores.ts';
+import { getBest, PLAYED_WITH_LABEL, recordScore, scoreKey } from '../../game/scores.ts';
 import type { NavAction } from '../../input/input.ts';
 import { skinHex } from '../../render/skins.ts';
 import { noteSkin } from '../theme.ts';
@@ -41,7 +41,7 @@ export class ResultsScreen implements Screen {
     let newBest = false;
     if (!req.bot && !req.practice) {
       const prev = getBest(scoreKey(song.id, trackKey(t.instrument, t.difficulty)));
-      newBest = recordScore(scoreKey(song.id, trackKey(t.instrument, t.difficulty)), { score: r.score, stars: r.stars, accuracy: acc, fc, date: Date.now() }) && !!prev;
+      newBest = recordScore(scoreKey(song.id, trackKey(t.instrument, t.difficulty)), { score: r.score, stars: r.stars, accuracy: acc, fc, date: Date.now(), input: r.input }) && !!prev;
     }
     const weakest = (this.weakest = req.practice ? null : weakestSection(r.sections));
     const mean = r.deltas.length ? r.deltas.reduce((a, b) => a + b, 0) / r.deltas.length : 0;
@@ -100,7 +100,7 @@ export class ResultsScreen implements Screen {
         'div',
         { class: 'res-head' },
         art,
-        h('div', { class: 'res-song' }, h('div', { class: 'title' }, song.name), h('div', { class: 'artist' }, `${song.artist} · ${INSTRUMENT_LABEL[t.instrument]} ${t.difficulty}${req.bot ? ' · bot' : ''}${req.practice ? ' · practice' : ''}`)),
+        h('div', { class: 'res-song' }, h('div', { class: 'title' }, song.name), h('div', { class: 'artist' }, `${song.artist} · ${INSTRUMENT_LABEL[t.instrument]} ${t.difficulty}${req.bot ? ' · bot' : ` · played with ${PLAYED_WITH_LABEL[r.input].toLowerCase()}`}${req.practice ? ' · practice' : ''}`)),
         h(
           'div',
           { class: 'res-nums' },

@@ -83,6 +83,8 @@ const SUSTAIN_W = 0.13;
 export interface RenderState {
   /** song time to draw (already video-calibrated) */
   time: number;
+  /** lanes in play (bit per lane, green first); the touch part leaves out red and blue. Default: all five. */
+  laneMask?: number;
   dt: number;
   /** world units per second */
   speed: number;
@@ -948,6 +950,7 @@ export class Renderer {
     inst.count = 0;
     const k = 1 - Math.exp(-s.dt * 40);
     for (let lane = 0; lane < 5; lane++) {
+      if (s.laneMask !== undefined && !(s.laneMask & (1 << lane))) continue;
       const pressed = s.frets & (1 << lane) ? 1 : 0;
       this.buttonPress[lane] += (pressed - this.buttonPress[lane]) * k;
       const holding = s.sustainMask & (1 << lane) ? 1 : 0;

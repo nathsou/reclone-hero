@@ -70,6 +70,14 @@ const SETTINGS: Record<Diff, { lanes: number; chord: number; minGap: number; gri
   expert: { lanes: 5, chord: 3, minGap: 0, grid: 0, cap: Infinity, budget: 1 },
 };
 
+/** The touch-screen part: three big frets (drawn on the green, yellow and orange lanes), two-note chords at most. */
+const TOUCH: Record<Diff, { lanes: number; chord: number }> = {
+  easy: { lanes: 3, chord: 1 },
+  medium: { lanes: 3, chord: 1 },
+  hard: { lanes: 3, chord: 2 },
+  expert: { lanes: 3, chord: 2 },
+};
+
 /** Beats in the bar containing `b`, and the beat position within it. */
 function barInfo(def: SongDef, b: number): { pos: number; len: number } {
   const sigs = [...def.timeSigs].sort((a, c) => a.beat - c.beat);
@@ -168,8 +176,8 @@ function thin(def: SongDef, notes: ChartNote[], diff: Diff, tempo: Tempo): Chart
 }
 
 /** Chord shape: lane offsets from the root lane. */
-function shape(n: ChartNote, diff: Diff): number[] {
-  const cfg = SETTINGS[diff];
+function shape(n: ChartNote, diff: Diff, touch = false): number[] {
+  const cfg = touch ? TOUCH[diff] : SETTINGS[diff];
   if (n.p.length === 1 || cfg.chord === 1) return [0];
   // Medium only keeps chords that are held or accented.
   if (diff === 'medium' && n.d < 1 && n.v < 0.95) return [0];
@@ -196,11 +204,11 @@ function stepCost(pa: number, pb: number, a: number, b: number, same: boolean): 
   return 4 + Math.abs(dl);
 }
 
-function assignLanes(notes: ChartNote[], diff: Diff, tempo: Tempo, range: [number, number]): Placed[] {
-  const K = SETTINGS[diff].lanes;
+function assignLanes(notes: ChartNote[], diff: Diff, tempo: Tempo, range: [number, number], touch = false): Placed[] {
+  const K = (touch ? TOUCH : SETTINGS)[diff].lanes;
   const N = notes.length;
   if (!N) return [];
-  const shapes = notes.map((n) => shape(n, diff));
+  const shapes = notes.map((n) => shape(n, diff, touch));
   const widths = shapes.map((sh) => sh[sh.length - 1]);
   const secs = notes.map((n) => tempo.toSec(n.b));
   const pitch = notes.map((n) => n.p[0]);
@@ -293,6 +301,8 @@ export interface GeneratedChart {
   text: string;
   /** notes per difficulty, for tests and song.ini */
   placed: Record<Diff, Placed[]>;
+  /** the three-fret touch part, on lanes 0, 2 and 4 */
+  touch: Record<Diff, Placed[]>;
   starPower: [number, number][];
 }
 
@@ -306,7 +316,13 @@ export function generateChart(def: SongDef): GeneratedChart {
     pmax = Math.max(pmax, n.p[0]);
   }
   const placed = {} as Record<Diff, Placed[]>;
-  for (const d of DIFFS) placed[d] = assignLanes(thin(def, base, d, tempo), d, tempo, [pmin, pmax]);
+  const touch = {} as Record<Diff, Placed[]>;
+  for (const d of DIFFS) {
+    const kept = thin(def, base, d, tempo);
+    placed[d] = assignLanes(kept, d, tempo, [pmin, pmax]);
+    // three frets spread over the highway: green, yellow, orange
+    touch[d] = assignLanes(kept, d, tempo, [pmin, pmax], true).map((p) => ({ ...p, lanes: p.lanes.map((l) => l * 2), forceStrum: false }));
+  }
   const starPower = pickStarPower(def, placed, tempo);
 
   const T = (b: number) => Math.round(b * RES);
@@ -335,26 +351,32 @@ export function generateChart(def: SongDef): GeneratedChart {
   for (const s of def.sections) lines.push(`  ${T(s.beat)} = E "section ${s.name}"`);
   lines.push('}');
 
-  const names: Record<Diff, string> = { easy: 'EasySingle', medium: 'MediumSingle', hard: 'HardSingle', expert: 'ExpertSingle' };
-  for (const d of DIFFS) {
-    const rows: [number, number, string][] = [];
-    for (const p of placed[d]) {
-      for (const lane of p.lanes) rows.push([T(p.b), 0, `N ${lane} ${T(p.sus)}`]);
-      if (p.forceStrum) rows.push([T(p.b), 1, `N 5 0`]);
+  const names: Record<Diff, string> = { easy: 'Easy', medium: 'Medium', hard: 'Hard', expert: 'Expert' };
+  const parts: [string, Record<Diff, Placed[]>][] = [
+    ['Single', placed],
+    ['Touch', touch],
+  ];
+  for (const [part, notes] of parts) {
+    for (const d of DIFFS) {
+      const rows: [number, number, string][] = [];
+      for (const p of notes[d]) {
+        for (const lane of p.lanes) rows.push([T(p.b), 0, `N ${lane} ${T(p.sus)}`]);
+        if (p.forceStrum) rows.push([T(p.b), 1, `N 5 0`]);
+      }
+      for (const [a, b] of starPower) {
+        if (notes[d].some((p) => p.b >= a && p.b < b)) rows.push([T(a), 2, `S 2 ${T(b - a)}`]);
+      }
+      for (const [a, b] of def.solos) {
+        rows.push([T(a), 3, 'E solo']);
+        rows.push([T(b), 3, 'E soloend']);
+      }
+      rows.sort((x, y) => x[0] - y[0] || x[1] - y[1]);
+      lines.push(`[${names[d]}${part}]`, '{');
+      for (const [t, , v] of rows) lines.push(`  ${t} = ${v}`);
+      lines.push('}');
     }
-    for (const [a, b] of starPower) {
-      if (placed[d].some((p) => p.b >= a && p.b < b)) rows.push([T(a), 2, `S 2 ${T(b - a)}`]);
-    }
-    for (const [a, b] of def.solos) {
-      rows.push([T(a), 3, 'E solo']);
-      rows.push([T(b), 3, 'E soloend']);
-    }
-    rows.sort((x, y) => x[0] - y[0] || x[1] - y[1]);
-    lines.push(`[${names[d]}]`, '{');
-    for (const [t, , v] of rows) lines.push(`  ${t} = ${v}`);
-    lines.push('}');
   }
-  return { text: lines.join('\r\n') + '\r\n', placed, starPower };
+  return { text: lines.join('\r\n') + '\r\n', placed, touch, starPower };
 }
 
 /** Two-bar star power phrases every 12–22 seconds, placed where Easy still has a few notes. */
