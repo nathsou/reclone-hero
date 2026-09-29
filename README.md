@@ -109,8 +109,8 @@ before the next notes, which helps on a phone.
 ## Built-in songs
 
 Forty-three songs ship inside the game, so there is always something to play. They are not recordings: each is a
-score written in TypeScript (`src/starter/songs`), synthesized in the browser when you pick it (the song is
-cut into pieces that render on several Web Workers at once, in about 1–2 s) and charted from the same score, so notes and audio cannot drift apart. They add
+score written in TypeScript (`src/starter/songs`), synthesized in the browser when you pick it (a Web Worker
+renders the stems in 2–6 s) and charted from the same score, so notes and audio cannot drift apart. They add
 about 390 KB to the build, need no download, and carry no licensing strings.
 
 | Song | Credit | Style | Expert |
