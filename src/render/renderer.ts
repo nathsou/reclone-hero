@@ -17,6 +17,7 @@ import {
   openBarMesh,
   pillMesh,
   lensMesh,
+  beadMesh,
   bezelButtonMesh,
   softButtonMesh,
   squareButtonMesh,
@@ -254,6 +255,7 @@ export class Renderer {
       block: lit(blockMesh(), 1024, [4, 4]),
       pill: lit(pillMesh(), 1024, [4, 4]),
       lens: lit(lensMesh(), 1024, [4, 4]),
+      bead: lit(beadMesh(), 1024, [4, 4]),
     };
     this.buttonMeshes = {
       wheel: lit(wheelMesh(), 5, [4, 4]),
@@ -437,6 +439,8 @@ export class Renderer {
     if (this.sceneDepth) gl.deleteRenderbuffer(this.sceneDepth);
     deleteTarget(gl, this.scene);
     for (const t of this.bloom) deleteTarget(gl, t);
+    for (const t of this.grabs) deleteTarget(gl, t);
+    this.grabs = [null, null];
     this.msFbo = this.msColor = this.msDepth = this.sceneDepth = null;
     this.bloom = [];
 
@@ -650,12 +654,16 @@ export class Renderer {
     gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
     gl.disable(gl.CULL_FACE);
 
+    const glass = this.skin.style === 7;
     this.fillNotes(s);
     this.drawBackground(s);
+    // Liquid Glass refracts what is behind it: copy the frame before the highway and before the gems.
+    if (glass) this.grab(0, fbo);
     this.drawHighway(s);
     this.drawBeats(s);
     this.drawSustains();
     this.drawButtons(s);
+    if (glass) this.grab(1, fbo);
     this.drawGems();
     this.drawParticles();
 
@@ -665,6 +673,33 @@ export class Renderer {
       gl.blitFramebuffer(0, 0, this.width, this.height, 0, 0, this.width, this.height, gl.COLOR_BUFFER_BIT, gl.NEAREST);
     }
     this.post(s);
+  }
+
+  /** Liquid Glass: copies of the frame so far (behind the highway, behind the gems). */
+  private grabs: (Target | null)[] = [null, null];
+
+  private grab(i: number, fbo: WebGLFramebuffer) {
+    const gl = this.gl;
+    let t = this.grabs[i];
+    if (!t || t.w !== this.width || t.h !== this.height) {
+      deleteTarget(gl, t);
+      t = this.grabs[i] = target(gl, this.width, this.height, this.hdr);
+    }
+    gl.bindFramebuffer(gl.READ_FRAMEBUFFER, fbo);
+    gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER, t.fbo);
+    gl.blitFramebuffer(0, 0, this.width, this.height, 0, 0, this.width, this.height, gl.COLOR_BUFFER_BIT, gl.NEAREST);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, fbo);
+  }
+
+  /** Point u_grab at a frame copy (or at a harmless 1×1 texture when the skin does not use it). */
+  private bindGrab(p: Program, i: number) {
+    if (!p.u.u_grab) return;
+    const gl = this.gl;
+    const t = this.skin.style === 7 ? this.grabs[i] : null;
+    gl.activeTexture(gl.TEXTURE1);
+    gl.bindTexture(gl.TEXTURE_2D, t ? t.tex : this.bgTex);
+    gl.uniform1i(p.u.u_grab, 1);
+    gl.activeTexture(gl.TEXTURE0);
   }
 
   private uniforms(p: Program) {
@@ -681,6 +716,8 @@ export class Renderer {
     if (p.u.u_inkCol) gl.uniform3f(p.u.u_inkCol, this.inkCol[0], this.inkCol[1], this.inkCol[2]);
     if (p.u.u_dpr) gl.uniform1f(p.u.u_dpr, this.width / Math.max(1, this.cssW));
     if (p.u.u_openL) gl.uniform1f(p.u.u_openL, HALF - 0.28 - OPEN_R);
+    if (p.u.u_screen) gl.uniform2f(p.u.u_screen, this.width, this.height);
+    if (p.u.u_view) gl.uniformMatrix4fv(p.u.u_view, false, this.view);
     if (p.u.u_gems) {
       gl.uniform4fv(p.u.u_gems, this.gemList);
       gl.uniform1i(p.u.u_gemCount, this.gemCount);
@@ -733,6 +770,8 @@ export class Renderer {
     gl.uniform1f(p.u.u_railMode, railMode(th));
     gl.uniform1f(p.u.u_board, th.board);
     gl.uniform1f(p.u.u_gloss, this.skin.style === 6 ? 1 : 0);
+    gl.uniform1f(p.u.u_glass, this.skin.style === 7 ? 1 : 0);
+    this.bindGrab(p, 0);
     gl.uniform1f(p.u.u_sp, s.spActive ? 1 : 0);
     gl.uniform1f(p.u.u_miss, s.missPulse);
     gl.uniform1f(p.u.u_solo, s.solo ? 1 : 0);
@@ -800,7 +839,7 @@ export class Renderer {
     const opens = this.opens.inst;
     const sus = this.sustains.inst;
     gems.count = opens.count = sus.count = 0;
-    const traced = this.skin.style === 6;
+    const traced = this.skin.style >= 6;
     const list = this.gemList;
     this.gemCount = 0;
     const notes = s.notes;
@@ -931,7 +970,9 @@ export class Renderer {
     }
     inst.upload();
     gl.enable(gl.DEPTH_TEST);
-    gl.disable(gl.BLEND);
+    // Only the glass buttons are see-through; every other style writes alpha 1.
+    gl.enable(gl.BLEND);
+    gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
     this.uniforms(this.pButton);
     gl.bindVertexArray(this.buttons.vao);
     gl.drawArraysInstanced(gl.TRIANGLES, 0, this.buttons.count, inst.count);
@@ -942,6 +983,7 @@ export class Renderer {
     gl.enable(gl.DEPTH_TEST);
     const p = this.pGem;
     this.uniforms(p);
+    this.bindGrab(p, 1);
     gl.uniform1f(p.u.u_hopoScale, this.skin.hopoScale);
     // Blended so distant gems fade into whatever is behind them (light themes included).
     gl.enable(gl.BLEND);

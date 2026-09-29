@@ -61,6 +61,14 @@ export function skinPreviewSvg(id: SkinId): string {
         body += `<rect x="${x - 6}" y="${cy - 6.6}" width="12" height="2.6" rx="1.3" fill="rgba(255,255,255,.75)"/>`;
         break;
       }
+      case 'glass': {
+        // a clear bead: tinted body, bright rim, a crescent highlight and a coloured caustic below
+        defs += `<radialGradient id="glass-b${idx}" cx=".5" cy=".6" r=".65"><stop offset="0" stop-color="${kind === 1 ? '#f4f4f8' : kind === 2 ? '#1a1a1e' : mixHex(col, '#ffffff', 0.25)}" stop-opacity=".9"/><stop offset=".8" stop-color="${kind === 2 ? '#0a0a0c' : col}" stop-opacity=".55"/><stop offset="1" stop-color="#ffffff" stop-opacity=".9"/></radialGradient>`;
+        body += `<ellipse cx="${x}" cy="${cy + 6}" rx="12" ry="5" fill="${col}" opacity=".35"/>`;
+        body += `<ellipse cx="${x}" cy="${cy}" rx="16" ry="11" fill="url(#glass-b${idx})" stroke="rgba(255,255,255,.8)" stroke-width="1"/>`;
+        body += `<path d="M${x - 10} ${cy - 4} Q${x} ${cy - 11} ${x + 10} ${cy - 4}" fill="none" stroke="#ffffff" stroke-width="2" stroke-linecap="round" opacity=".85"/>`;
+        break;
+      }
       case 'swiss': {
         body += `<ellipse cx="${x}" cy="${cy}" rx="16" ry="11" fill="${col}"/>`;
         if (kind === 1) body += `<ellipse cx="${x}" cy="${cy}" rx="10" ry="7" fill="none" stroke="#e8e8e8" stroke-width="3.2"/>`;

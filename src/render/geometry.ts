@@ -410,3 +410,17 @@ export function bezelButtonMesh(): Float32Array {
     true,
   );
 }
+
+/** Liquid Glass: a smooth glass bead, one region; the shader draws the HOPO / tap markings. */
+export function beadMesh(): Float32Array {
+  const pts: [number, number][] = [];
+  // a squashed superellipse: flat-ish top, rounded shoulder, flat bottom
+  for (let i = 0; i <= 12; i++) {
+    const a = (i / 12) * (Math.PI / 2);
+    const c = Math.cos(a);
+    const s = Math.sin(a);
+    pts.push([0.43 * Math.sign(s) * Math.abs(s) ** 0.6, 0.11 + 0.15 * Math.sign(c) * Math.abs(c) ** 0.6]);
+  }
+  pts.push([0.43, 0.06], [0.4, 0.01], [0.34, 0], [0, 0]);
+  return lathe(chain(pts, 0), 48, 0.72, false, 0, true);
+}

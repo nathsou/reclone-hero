@@ -1,7 +1,7 @@
 // Note skins: how gems, sustains, fret buttons and hit particles look. Independent of the page theme.
 // Colour order: green, red, yellow, blue, orange, open, star power, missed (linear light).
 
-export const SKIN_IDS = ['dome', 'studio', 'neon', 'swiss', 'baroque', 'pixel', 'clay'] as const;
+export const SKIN_IDS = ['dome', 'studio', 'glass', 'neon', 'swiss', 'baroque', 'pixel', 'clay'] as const;
 export type SkinId = (typeof SKIN_IDS)[number];
 
 export interface NoteSkin {
@@ -11,7 +11,7 @@ export interface NoteSkin {
   /** index passed to shaders to pick a shading style */
   style: number;
   colors: number[][];
-  gem: 'dome' | 'puck' | 'disc' | 'jewel' | 'block' | 'pill' | 'lens';
+  gem: 'dome' | 'puck' | 'disc' | 'jewel' | 'block' | 'pill' | 'lens' | 'bead';
   button: 'wheel' | 'ring' | 'flat' | 'gold' | 'square' | 'soft' | 'bezel';
   particles: 'sparks' | 'dots' | 'glitter' | 'squares' | 'puffs';
   /** scale on HOPO gems (smaller in Neon, like Guitar Hero) */
@@ -58,6 +58,26 @@ export const SKINS: Record<SkinId, NoteSkin> = {
     button: 'bezel',
     particles: 'sparks',
     hopoScale: 0.92,
+  },
+  glass: {
+    id: 'glass',
+    name: 'Liquid Glass',
+    description: 'Glass beads, tubes and a flowing glass highway that bend, split and reflect the light behind them.',
+    style: 7,
+    colors: [
+      [0.1, 0.85, 0.3],
+      [1.0, 0.1, 0.14],
+      [1.0, 0.72, 0.08],
+      [0.1, 0.38, 1.0],
+      [1.0, 0.36, 0.05],
+      [0.62, 0.22, 1.0],
+      [0.55, 0.9, 1.0],
+      [0.4, 0.4, 0.42],
+    ],
+    gem: 'bead',
+    button: 'bezel',
+    particles: 'glitter',
+    hopoScale: 0.9,
   },
   neon: {
     id: 'neon',
