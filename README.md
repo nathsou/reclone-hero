@@ -206,6 +206,9 @@ sections are placed too. Hide the built-in songs under Settings › Data › Bui
 
 `node tests/tools/starter-dev.ts <song-id> <out-dir>` renders a song to WAV, prints per-instrument levels and
 writes its `.chart`; add `--chart expert --bars 8-12` for a text view of the notes.
+`node tests/tools/loudness.ts [song-id…] [--write]` measures how loud each built-in song plays and writes the
+level trims (`src/starter/songs/levels.ts`) that keep them all within about a decibel of each other; run it again
+after changing a song's mix.
 
 ## Feedback when you make a mistake
 

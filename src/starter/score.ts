@@ -101,6 +101,11 @@ export interface SongDef {
   solos: [number, number][];
   lengthBeats: number;
   previewBeat: number;
+  /**
+   * Level trim in dB before the master limiter, so the songs play at about the same loudness
+   * (measured by tests/tools/loudness.ts). 0 when missing.
+   */
+  levelDb?: number;
   /** Cover palette and fallback motif; shipped songs have bespoke vectors in coverDesign.ts. */
   art: { from: string; to: string; ink: string; motif: 'sun' | 'grid' | 'rings' | 'bars' | 'wave' | 'crest' | 'shards' | 'orbit' };
 }
