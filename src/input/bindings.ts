@@ -63,6 +63,12 @@ export const STANDARD_PROFILE: PadProfile = {
   whammy: null,
 };
 
+/** Short label for a KeyboardEvent.code: "KeyA" -> "A", "ArrowUp" -> "↑". */
+export function keyLabel(code: string): string {
+  const special: Record<string, string> = { ArrowUp: '↑', ArrowDown: '↓', ArrowLeft: '←', ArrowRight: '→', Space: '␣', Semicolon: ';', Comma: ',', Period: '.', Slash: '/' };
+  return special[code] ?? code.replace(/^Key/, '').replace(/^Digit/, '').replace(/^Numpad/, 'Num ');
+}
+
 const PADS_KEY = 'chsq.pads';
 const KEYS_KEY = 'chsq.keys';
 

@@ -11,3 +11,8 @@ interface Window {
 }
 
 declare module '*.css';
+
+declare module '*?worker&inline' {
+  const WorkerCtor: new () => Worker;
+  export default WorkerCtor;
+}

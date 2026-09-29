@@ -4,7 +4,7 @@ import type { GenreFilter } from './library/genres.ts';
 export type MissFeedback = 'auto' | 'mute' | 'muffle' | 'off';
 export type Quality = 'high' | 'medium' | 'low';
 export type Theme = 'system' | 'classic' | 'ink' | 'swiss' | 'baroque' | 'synthwave' | 'terminal' | 'paper' | 'midnight';
-export type NoteStyle = 'theme' | 'dome' | 'neon' | 'swiss' | 'baroque' | 'pixel' | 'clay';
+export type NoteStyle = 'theme' | 'dome' | 'studio' | 'neon' | 'swiss' | 'baroque' | 'pixel' | 'clay';
 export type SongView = 'list' | 'covers';
 
 export interface Settings {
@@ -16,6 +16,10 @@ export interface Settings {
   hitWindowMs: number;
   strumLeniencyMs: number;
   lefty: boolean;
+  /** keyboard: a fret key press also strums (no separate strum key needed) */
+  kbTapMode: boolean;
+  /** list the songs that ship with the game */
+  builtinSongs: boolean;
   timingBar: boolean;
   missFeedback: MissFeedback;
   missSounds: boolean;
@@ -45,6 +49,8 @@ export const DEFAULT_SETTINGS: Settings = {
   hitWindowMs: 90,
   strumLeniencyMs: 70,
   lefty: false,
+  kbTapMode: true,
+  builtinSongs: true,
   timingBar: true,
   missFeedback: 'auto',
   missSounds: true,

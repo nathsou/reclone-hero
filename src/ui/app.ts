@@ -2,6 +2,7 @@ import { audio } from '../audio/audio.ts';
 import { input } from '../input/input.ts';
 import type { NavAction } from '../input/input.ts';
 import { Library } from '../library/library.ts';
+import { settings } from '../settings.ts';
 import type { LibrarySource } from '../library/sources.ts';
 import { h } from './dom.ts';
 import { toggleFullscreen } from './fullscreen.ts';
@@ -69,10 +70,22 @@ export class App {
       await this.openLibrary(res.source);
       return;
     }
-    this.show(new LibraryScreen(this, res.state === 'needs-permission' ? res.handle : null));
+    if (res.state === 'needs-permission') {
+      this.show(new LibraryScreen(this, res.handle));
+      return;
+    }
+    // First visit: straight to the built-in songs. The folder button adds the player's own.
+    await this.openLibrary(null);
+    if (settings.builtinSongs) this.toast('Welcome! Play the built-in songs on the keyboard or a guitar, or add your own songs with the folder button.');
   }
 
-  async openLibrary(source: LibrarySource, rescan = false): Promise<void> {
+  /** Re-list songs without rescanning (e.g. after showing or hiding the built-in songs). */
+  async refreshLibrary(): Promise<void> {
+    await this.library.index();
+    if (this.screen && 'refresh' in this.screen) (this.screen as { refresh(): void }).refresh();
+  }
+
+  async openLibrary(source: LibrarySource | null, rescan = false): Promise<void> {
     const { LibraryScreen } = await import('./screens/library.ts');
     const loading = new LibraryScreen(this, null, true);
     this.show(loading);

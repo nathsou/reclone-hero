@@ -92,6 +92,8 @@ export class GameScreen implements Screen {
     await audio().resume();
 
     const stems = Object.entries(song.stems).filter(([k]) => k !== 'preview');
+    // Built-in songs are synthesized on the spot rather than read from disk.
+    lib.builtin.onRenderProgress = (p) => this.progress(p * 0.4, `Synthesizing the band… ${Math.round(p * 100)}%`);
     let read = 0;
     const files: StemFile[] = await Promise.all(
       stems.map(async ([stem, file]) => {
@@ -100,6 +102,7 @@ export class GameScreen implements Screen {
         return { stem, bytes };
       }),
     );
+    lib.builtin.onRenderProgress = null;
     if (this.destroyed) return;
     const loaded = await audio().loadSong(files, instrument, (d, t) => this.progress(0.4 + (d / t) * 0.5, `Decoding audio (${d}/${t})`));
     if (this.destroyed) return;

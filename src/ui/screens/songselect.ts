@@ -120,7 +120,7 @@ export class SongSelect implements Screen {
     this.scrubPos = h('div', { class: 'pos' });
     const scrubber = h('div', { class: 'scrubber', title: 'Jump to a letter' }, this.scrubTicks, h('div', { class: 'rail' }), this.scrubPos);
     this.bindScrubber(scrubber);
-    this.covers = h('div', { class: 'covers' }, this.coverLabel, this.coverStage, this.coverInfo, scrubber);
+    this.covers = h('div', { class: 'covers', onwheel: (e: WheelEvent) => this.coverWheel(e) }, this.coverLabel, this.coverStage, this.coverInfo, scrubber);
     this.footer = h('footer', { class: 'hints' });
     const lib = app.library;
     this.el = h(
@@ -168,6 +168,11 @@ export class SongSelect implements Screen {
       this.footer,
     );
     this.applyView();
+    this.refilter();
+  }
+
+  /** The library changed underneath (e.g. built-in songs shown or hidden). */
+  refresh(): void {
     this.refilter();
   }
 
@@ -621,7 +626,7 @@ export class SongSelect implements Screen {
             hint('V', 'list / covers'),
           ]
         : [
-            hint('←→ / strum', 'browse'),
+            hint('←→ / wheel', 'browse'),
             hint('PgUp/PgDn', 'group'),
             hint('Enter', 'play', 'g'),
             hint('P', 'practice', 'y'),
@@ -631,6 +636,31 @@ export class SongSelect implements Screen {
             hint('R', 'random'),
           ];
     replace(this.footer, ...hints, h('span', { class: 'grow' }), hint('Shift+F', 'fullscreen'));
+  }
+
+  private wheelAcc = 0;
+
+  /**
+   * Mouse wheel and trackpad move through the covers: one cover per wheel notch, one per 40 px of
+   * trackpad travel. Either axis works, so a horizontal swipe does too.
+   */
+  private coverWheel(e: WheelEvent) {
+    if (e.ctrlKey) return;
+    e.preventDefault();
+    const d = Math.abs(e.deltaX) > Math.abs(e.deltaY) ? e.deltaX : e.deltaY;
+    let steps: number;
+    if (e.deltaMode === WheelEvent.DOM_DELTA_LINE) steps = Math.sign(d) * Math.max(1, Math.round(Math.abs(d) / 3));
+    else if (e.deltaMode === WheelEvent.DOM_DELTA_PAGE) steps = Math.sign(d) * COVER_SPAN;
+    else if (Math.abs(d) >= 50 && Number.isInteger(d)) {
+      // A wheel notch: browsers report ~100 px, more when the wheel spins fast.
+      steps = Math.sign(d) * Math.max(1, Math.round(Math.abs(d) / 100));
+      this.wheelAcc = 0;
+    } else {
+      this.wheelAcc += d;
+      steps = Math.trunc(this.wheelAcc / 40);
+      this.wheelAcc -= steps * 40;
+    }
+    if (steps) this.select(this.sel + steps);
   }
 
   /** Cover flow: the selected cover faces forward, the ones around it fan out behind. */

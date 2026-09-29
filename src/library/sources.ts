@@ -2,7 +2,7 @@ import { base64ToBytes } from '../util/text.ts';
 import type { RawSongFolder } from './song.ts';
 
 export interface LibrarySource {
-  readonly kind: 'http' | 'fs' | 'files';
+  readonly kind: 'http' | 'fs' | 'files' | 'builtin';
   readonly label: string;
   scan(onProgress?: (found: number) => void): Promise<RawSongFolder[]>;
   readFile(path: string): Promise<Uint8Array>;

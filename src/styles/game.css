@@ -222,23 +222,6 @@
 }
 
 /* giant faint section name behind the highway */
-.hud-ghost {
-  position: absolute;
-  left: 0;
-  right: 0;
-  top: 15%;
-  text-align: center;
-  font-family: var(--font-display);
-  font-size: clamp(90px, 15.6vw, 200px);
-  line-height: 1;
-  font-weight: 800;
-  letter-spacing: -0.05em;
-  color: var(--hud-ghost);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: clip;
-}
-
 .hud-left,
 .hud-right,
 .hud-timing,
@@ -691,6 +674,54 @@
   color: var(--dim);
 }
 
+/* keyboard labels under the frets, shown while playing on the keyboard */
+.hud-keys {
+  display: none;
+}
+
+.hud-keys.on {
+  display: block;
+}
+
+.hud-keys .cap {
+  position: absolute;
+  left: 0;
+  top: 0;
+  min-width: 26px;
+  padding: 3px 6px 2px;
+  border: 1px solid color-mix(in srgb, var(--text) 30%, transparent);
+  border-bottom-width: 3px;
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--bg) 60%, transparent);
+  color: var(--text);
+  font: 600 13px/1.1 var(--font-mono);
+  text-align: center;
+  opacity: 0.7;
+  transition: opacity 0.12s;
+}
+
+.hud-keys .cap.down {
+  opacity: 1;
+  margin-top: 2px;
+  border-bottom-width: 1px;
+}
+
+.hud-keys .f0.down {
+  border-color: var(--green);
+}
+.hud-keys .f1.down {
+  border-color: var(--red);
+}
+.hud-keys .f2.down {
+  border-color: var(--yellow);
+}
+.hud-keys .f3.down {
+  border-color: var(--blue);
+}
+.hud-keys .f4.down {
+  border-color: var(--orange);
+}
+
 .hud-countdown {
   position: absolute;
   left: 50%;
@@ -792,9 +823,6 @@
   .hud-timeline {
     left: 16px;
     right: 16px;
-  }
-  .hud-ghost {
-    display: none;
   }
 }
 
