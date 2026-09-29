@@ -1,7 +1,7 @@
 // Note skins: how gems, sustains, fret buttons and hit particles look. Independent of the page theme.
 // Colour order: green, red, yellow, blue, orange, open, star power, missed (linear light).
 
-export const SKIN_IDS = ['neon', 'swiss', 'baroque', 'pixel', 'clay'] as const;
+export const SKIN_IDS = ['dome', 'neon', 'swiss', 'baroque', 'pixel', 'clay'] as const;
 export type SkinId = (typeof SKIN_IDS)[number];
 
 export interface NoteSkin {
@@ -11,14 +11,34 @@ export interface NoteSkin {
   /** index passed to shaders to pick a shading style */
   style: number;
   colors: number[][];
-  gem: 'puck' | 'disc' | 'jewel' | 'block' | 'pill';
-  button: 'ring' | 'flat' | 'gold' | 'square' | 'soft';
+  gem: 'dome' | 'puck' | 'disc' | 'jewel' | 'block' | 'pill';
+  button: 'wheel' | 'ring' | 'flat' | 'gold' | 'square' | 'soft';
   particles: 'sparks' | 'dots' | 'glitter' | 'squares' | 'puffs';
   /** scale on HOPO gems (smaller in Neon, like Guitar Hero) */
   hopoScale: number;
 }
 
 export const SKINS: Record<SkinId, NoteSkin> = {
+  dome: {
+    id: 'dome',
+    name: 'Classic dome',
+    description: 'Domed gems with a muted rim and a cap, wheel frets.',
+    style: 5,
+    colors: [
+      [0.041, 0.875, 0.145],
+      [1.0, 0.04, 0.066],
+      [1.0, 0.652, 0.038],
+      [0.038, 0.263, 1.0],
+      [1.0, 0.259, 0.01],
+      [0.442, 0.072, 1.0],
+      [0.334, 0.867, 1.0],
+      [0.28, 0.259, 0.227],
+    ],
+    gem: 'dome',
+    button: 'wheel',
+    particles: 'sparks',
+    hopoScale: 0.9,
+  },
   neon: {
     id: 'neon',
     name: 'Neon',

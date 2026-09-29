@@ -31,6 +31,7 @@ import type { NoteSkin } from './skins.ts';
 export const DEFAULT_RENDER_THEME: RenderTheme = {
   light: false, bgBottom: [0.03, 0.012, 0.05], bgTop: [0.012, 0.01, 0.03], art: 1, highwayTint: [1, 1, 1], grid: 0, scanlines: 0, pattern: 0, bloom: 0.55, vignette: 0.35,
   hwFar: [0.008, 0.008, 0.016], hwNear: [0.03, 0.028, 0.05], laneLine: [0.06, 0.06, 0.09], strike: [0.25, 0.25, 0.3], beat: [0.7, 0.7, 0.85], beatOver: 0,
+  railColor: null, board: 0, ink: 0, inkColor: [0.01, 0.009, 0.007],
 };
 
 /** How hit sparks behave per skin (all allocation-free at runtime). */
@@ -139,8 +140,8 @@ export class Renderer {
   private gems!: Mesh;
   private gemMeshes!: Record<NoteSkin['gem'], Mesh>;
   private buttonMeshes!: Record<NoteSkin['button'], Mesh>;
-  private skin: NoteSkin = SKINS.neon;
-  private colorsFlat = new Float32Array(SKINS.neon.colors.flat());
+  private skin: NoteSkin = SKINS.dome;
+  private colorsFlat = new Float32Array(SKINS.dome.colors.flat());
   private opens!: Mesh;
   private buttons!: Mesh;
   private sustains!: Mesh;
@@ -235,6 +236,7 @@ export class Renderer {
     };
     // Every skin's meshes are small; build them all now so switching skins costs nothing.
     this.gemMeshes = {
+      dome: lit(gemMesh(), 1024, [4, 4]),
       puck: lit(gemMesh(), 1024, [4, 4]),
       disc: lit(discMesh(), 1024, [4, 4]),
       jewel: lit(jewelMesh(), 1024, [4, 4]),
@@ -242,14 +244,15 @@ export class Renderer {
       pill: lit(pillMesh(), 1024, [4, 4]),
     };
     this.buttonMeshes = {
+      wheel: lit(fretButtonMesh(), 5, [4, 4]),
       ring: lit(fretButtonMesh(), 5, [4, 4]),
       flat: lit(flatButtonMesh(), 5, [4, 4]),
       gold: lit(goldButtonMesh(), 5, [4, 4]),
       square: lit(squareButtonMesh(), 5, [4, 4]),
       soft: lit(softButtonMesh(), 5, [4, 4]),
     };
-    this.gems = this.gemMeshes.puck;
-    this.buttons = this.buttonMeshes.ring;
+    this.gems = this.gemMeshes.dome;
+    this.buttons = this.buttonMeshes.wheel;
     this.opens = lit(openBarMesh(HALF - 0.28), 128, [4, 4]);
 
     const strip = stripMesh(64);

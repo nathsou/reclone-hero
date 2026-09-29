@@ -319,7 +319,7 @@ function themePicker(): HTMLElement {
   const grid = h('div', { class: 'theme-grid', role: 'radiogroup', 'aria-label': 'Theme' });
   const render = () => {
     const cards = [
-      { id: 'system' as const, name: 'Match system', description: 'Neon or Light, following your OS.', swatch: THEMES.neon.swatch, alt: THEMES.light.swatch },
+      { id: 'system' as const, name: 'Match system', description: 'Classic dark or Daylight ink, following your OS.', swatch: THEMES.classic.swatch, alt: THEMES.ink.swatch },
       ...THEME_IDS.map((id) => ({ ...THEMES[id], alt: null })),
     ];
     replace(

@@ -66,8 +66,8 @@ const state: RenderState = {
   lefty: params.has('lefty'),
   solo: params.has('solo'),
   beatPulse: 0.2,
-  theme: THEMES[(params.get('theme') ?? 'neon') as ThemeId]?.render ?? THEMES.neon.render,
-  skin: SKINS[(params.get('skin') ?? THEMES[(params.get('theme') ?? 'neon') as ThemeId]?.skin ?? 'neon') as SkinId] ?? SKINS.neon,
+  theme: THEMES[(params.get('theme') ?? 'classic') as ThemeId]?.render ?? THEMES.classic.render,
+  skin: SKINS[(params.get('skin') ?? THEMES[(params.get('theme') ?? 'classic') as ThemeId]?.skin ?? 'dome') as SkinId] ?? SKINS.dome,
 };
 document.getElementById('legend')!.textContent =
   'near → far: missed blue · held green sustain · blue HOPO · green HOPO · yellow strum · orange tap · red strum\n' +
