@@ -1136,6 +1136,7 @@
 
 .tf-pad {
   position: relative;
+  touch-action: none;
   border-radius: 14px;
   background: color-mix(in srgb, var(--c) 22%, transparent);
   border: 2px solid color-mix(in srgb, var(--c) 70%, transparent);
@@ -1146,6 +1147,7 @@
 
 .tf-pad i {
   position: absolute;
+  pointer-events: none;
   left: 50%;
   top: 45%;
   height: 40%;

@@ -23,6 +23,7 @@ import { isFavourite, toggleFavourite } from '../../game/favourites.ts';
 import { moveFocus, navFocus, keyFocus } from '../focusNav.ts';
 import type { MenuItem } from '../menu.ts';
 import type { Group } from '../songlist.ts';
+import { CoverGesture } from '../coverGesture.ts';
 
 const ROW_H = 56;
 const HEADER_H = 44;
@@ -64,6 +65,7 @@ export class SongSelect implements Screen {
   private readonly covers: HTMLDivElement;
   private readonly coverLabel: HTMLDivElement;
   private readonly coverStage: HTMLDivElement;
+  private readonly coverGesture: CoverGesture;
   private readonly coverInfo: HTMLDivElement;
   private readonly scrubTicks: HTMLDivElement;
   private readonly scrubPos: HTMLDivElement;
@@ -131,6 +133,11 @@ export class SongSelect implements Screen {
     };
     this.coverLabel = h('div', { class: 'covers-label' });
     this.coverStage = h('div', { class: 'cover-stage' });
+    this.coverGesture = new CoverGesture(this.coverStage, {
+      count: () => this.filtered.length,
+      selected: () => this.sel,
+      change: position => { this.select(Math.round(position), false, true); this.renderCovers(position); },
+    });
     this.coverInfo = h('div', { class: 'covers-info' });
     this.scrubTicks = h('div', { class: 'ticks' });
     this.scrubPos = h('div', { class: 'pos' });
@@ -138,6 +145,14 @@ export class SongSelect implements Screen {
     this.bindScrubber(scrubber);
     this.covers = h('div', { class: 'covers', onwheel: (e: WheelEvent) => this.coverWheel(e) }, this.coverLabel, this.coverStage, this.coverInfo, scrubber);
     this.footer = h('footer', { class: 'hints' });
+    const more = h('button', {
+      class: 'btn mobile-library-toggle', 'aria-expanded': 'false', 'aria-controls': 'library-options',
+      onclick: () => {
+        const open = more.getAttribute('aria-expanded') !== 'true';
+        more.setAttribute('aria-expanded', String(open));
+        this.el.querySelector('.topbar')!.classList.toggle('expanded', open);
+      },
+    }, icon('settings'), 'Browse');
     const lib = app.library;
     this.el = h(
       'div',
@@ -148,38 +163,41 @@ export class SongSelect implements Screen {
         logo('small'),
         h('div', { class: 'search-box' }, this.search, h('kbd', null, '/')),
         h('div', { class: 'segmented view-toggle', role: 'group', 'aria-label': 'View' }, this.viewBtns.list, this.viewBtns.covers),
-        h(
-          'div',
-          { class: 'ctl-group' },
-          h('span', { class: 'ctl' }, 'Sort', this.sortValue, sort),
-          this.sortDir,
-          h('span', { class: 'ctl genre-anchor' }, 'Genre', this.genreBtn),
-          this.favBtn,
-        ),
-        this.count,
-        h('div', { class: 'grow' }),
-        h(
-          'div',
-          { class: 'tools' },
-          h('button', { class: 'btn ghost icon', title: 'Random song (R)', 'aria-label': 'Random song', onclick: () => this.random() }, icon('shuffle')),
-          h('button', { class: 'btn ghost icon', title: 'Rescan library', 'aria-label': 'Rescan library', onclick: () => lib.source && app.openLibrary(lib.source, true) }, icon('refresh')),
+        more,
+        h('div', { class: 'library-options', id: 'library-options' },
           h(
-            'button',
-            {
-              class: 'btn ghost icon',
-              title: 'Choose a different charts folder',
-              'aria-label': 'Choose charts folder',
-              onclick: async () => {
-                const { Library } = await import('../../library/library.ts');
-                const src = await Library.pickAny();
-                if (src) await app.openLibrary(src, true);
-              },
-            },
-            icon('folder'),
+            'div',
+            { class: 'ctl-group' },
+            h('span', { class: 'ctl' }, 'Sort', this.sortValue, sort),
+            this.sortDir,
+            h('span', { class: 'ctl genre-anchor' }, 'Genre', this.genreBtn),
+            this.favBtn,
           ),
-          canFullscreen() ? h('button', { class: 'btn ghost icon', title: 'Fullscreen (Shift+F)', 'aria-label': 'Fullscreen', onclick: () => void toggleFullscreen() }, icon('maximize')) : null,
-          h('button', { class: 'btn', onclick: () => this.openSettings() }, icon('settings'), 'Settings'),
+          this.count,
+          h('div', { class: 'grow' }),
+          h(
+            'div',
+            { class: 'tools' },
+            h('button', { class: 'btn ghost icon', title: 'Random song (R)', 'aria-label': 'Random song', onclick: () => this.random() }, icon('shuffle')),
+            h('button', { class: 'btn ghost icon', title: 'Rescan library', 'aria-label': 'Rescan library', onclick: () => lib.source && app.openLibrary(lib.source, true) }, icon('refresh')),
+            h(
+              'button',
+              {
+                class: 'btn ghost icon',
+                title: 'Choose a different charts folder',
+                'aria-label': 'Choose charts folder',
+                onclick: async () => {
+                  const { Library } = await import('../../library/library.ts');
+                  const src = await Library.pickAny();
+                  if (src) await app.openLibrary(src, true);
+                },
+              },
+              icon('folder'),
+            ),
+            canFullscreen() ? h('button', { class: 'btn ghost icon', title: 'Fullscreen (Shift+F)', 'aria-label': 'Fullscreen', onclick: () => void toggleFullscreen() }, icon('maximize')) : null,
+          ),
         ),
+        h('button', { class: 'btn toolbar-settings', onclick: () => this.openSettings() }, icon('settings'), 'Settings'),
       ),
       h('main', { class: 'select-main' }, h('div', { class: 'list-wrap' }, this.list, this.sticky), this.detail, this.covers),
       this.footer,
@@ -195,8 +213,9 @@ export class SongSelect implements Screen {
 
   /** Stop the preview while the tab is in the background; pick it back up on return. */
   private onVisibility = () => {
-    if (document.hidden) this.preview.cancel();
+    if (document.hidden) { this.preview.cancel(); this.coverGesture.stop(); }
     else {
+      this.renderCovers();
       const song = this.filtered[this.sel];
       if (song) this.schedulePreview(song);
     }
@@ -210,6 +229,7 @@ export class SongSelect implements Screen {
   }
 
   destroy(): void {
+    this.coverGesture.destroy();
     this.genrePanel.close();
     document.removeEventListener('visibilitychange', this.onVisibility);
     this.preview.cancel();
@@ -225,6 +245,7 @@ export class SongSelect implements Screen {
   // ---------------------------------------------------------------- list
 
   private refilter() {
+    this.coverGesture.stop();
     const q = this.search.value.trim().toLowerCase();
     const current = this.filtered[this.sel] ?? this.app.library.songs.find((x) => x.id === kept.songId);
     const terms = q.split(/\s+/).filter(Boolean);
@@ -429,7 +450,9 @@ export class SongSelect implements Screen {
     return p;
   }
 
-  private select(i: number, force = false) {
+  private select(i: number, force = false, fromGesture = false) {
+    const moving = this.coverGesture.position !== undefined;
+    if (!fromGesture) this.coverGesture.stop();
     if (!this.filtered.length) {
       this.detail.replaceChildren(h('div', { class: 'empty' }, 'No songs match.'));
       this.coverInfo.replaceChildren(h('div', { class: 'empty' }, 'No songs match.'));
@@ -440,7 +463,10 @@ export class SongSelect implements Screen {
       return;
     }
     i = Math.max(0, Math.min(this.filtered.length - 1, i));
-    if (i === this.sel && !force) return;
+    if (i === this.sel && !force) {
+      if (moving && !fromGesture) this.renderCovers();
+      return;
+    }
     this.sel = i;
     kept.songId = this.filtered[i].id;
     this.renderRows();
@@ -609,6 +635,7 @@ export class SongSelect implements Screen {
         h('button', { class: 'btn', disabled: !canPlay, onclick: () => this.practice() }, 'Practice', h('kbd', null, 'P')),
         h('button', { class: 'btn ghost', disabled: !canPlay, onclick: () => this.play(true) }, 'Watch bot', h('kbd', null, 'B')),
         this.favToggle(song),
+        h('button', { class: 'btn mobile-song-options', onclick: () => this.openOptions() }, 'More'),
       ),
     );
   }
@@ -616,6 +643,7 @@ export class SongSelect implements Screen {
   // ---------------------------------------------------------------- covers
 
   private setView(v: SongView) {
+    this.coverGesture.stop();
     if (v === this.view) return;
     this.view = v;
     updateSettings({ songView: v });
@@ -688,12 +716,12 @@ export class SongSelect implements Screen {
   }
 
   /** Cover flow: the selected cover faces forward, the ones around it fan out behind. */
-  private renderCovers() {
+  private renderCovers(position = this.coverGesture.position ?? this.sel) {
     if (this.view !== 'covers' || !this.filtered.length) return;
     const lo = Math.max(0, this.sel - COVER_SPAN);
     const hi = Math.min(this.filtered.length - 1, this.sel + COVER_SPAN);
     for (const [i, el] of this.coverEls) {
-      if (i < lo || i > hi) {
+      if (i < lo || i > hi || el.dataset.songId !== this.filtered[i].id) {
         el.remove();
         this.coverEls.delete(i);
       }
@@ -703,6 +731,7 @@ export class SongSelect implements Screen {
       const song = this.filtered[i];
       if (!el) {
         el = h('div', { class: 'cover' });
+        el.dataset.songId = song.id;
         const idx = i;
         el.addEventListener('click', () => (idx === this.sel ? void this.play(false) : this.select(idx)));
         if (song.albumArt) {
@@ -716,11 +745,13 @@ export class SongSelect implements Screen {
         this.coverStage.append(el);
         this.coverEls.set(i, el);
       }
-      const d = i - this.sel;
+      const d = i - position;
       el.style.setProperty('--s', String(Math.sign(d)));
       el.style.setProperty('--a', String(Math.abs(d)));
-      el.style.zIndex = String(20 - Math.abs(d));
-      el.classList.toggle('center', d === 0);
+      el.style.setProperty('--near', String(Math.min(1, Math.abs(d))));
+      el.style.setProperty('--beyond', String(Math.max(0, Math.abs(d) - 1)));
+      el.style.zIndex = String(20 - Math.round(Math.abs(d)));
+      el.classList.toggle('center', i === this.sel);
       el.classList.toggle('far', Math.abs(d) >= 3);
     }
     const g = this.groups[this.groupOfSong(this.sel)];

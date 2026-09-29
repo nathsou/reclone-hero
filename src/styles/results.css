@@ -13,6 +13,7 @@
   align-items: center;
   gap: 24px;
   flex: none;
+  flex-wrap: wrap;
 }
 
 .res-art {
@@ -55,6 +56,13 @@
   gap: 32px;
   align-items: flex-start;
   flex: none;
+  flex-wrap: wrap;
+}
+
+.res-best {
+  margin-top: 6px;
+  color: var(--dim);
+  font: 500 11px/1.5 var(--font-mono);
 }
 
 .res-num .label {

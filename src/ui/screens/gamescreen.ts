@@ -143,6 +143,11 @@ export class GameScreen implements Screen {
       }
     }
     if (this.destroyed) return;
+    this.game.prepareStart();
+    // Touch pads change the canvas height. Let layout and ResizeObserver settle before warming
+    // the GPU targets; otherwise the first gameplay frame deletes the targets we just warmed.
+    await new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
+    if (this.destroyed) return;
     this.game.renderer.warmUp(chart.beats, noteSkin(), renderTheme());
     // Give the browser an idle moment to collect loading garbage before the music starts.
     await new Promise<void>((resolve) =>

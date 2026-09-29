@@ -1,5 +1,5 @@
 import { audio } from '../../audio/audio.ts';
-import { INSTRUMENT_LABEL, trackKey } from '../../chart/types.ts';
+import { DIFFICULTIES, INSTRUMENT_LABEL, trackKey } from '../../chart/types.ts';
 import { HIT } from '../../engine/engine.ts';
 import { formatTime } from '../../util/text.ts';
 import type { GameResult, SectionResult } from '../../game/game.ts';
@@ -12,6 +12,7 @@ import type { App, Screen } from '../app.ts';
 import { h } from '../dom.ts';
 import type { GameRequest } from './gamescreen.ts';
 import { starsEl } from './songselect.ts';
+import { resultSummary } from '../resultAdvice.ts';
 
 const LANE_NAMES = ['Green', 'Red', 'Yellow', 'Blue', 'Orange'];
 
@@ -39,10 +40,11 @@ export class ResultsScreen implements Screen {
     const acc = r.total ? r.hits / r.total : 0;
     const fc = (this.fc = r.misses === 0 && r.overstrums === 0 && r.total > 0);
     let newBest = false;
+    const key = scoreKey(song.id, trackKey(t.instrument, t.difficulty));
     if (!req.bot && !req.practice) {
-      const prev = getBest(scoreKey(song.id, trackKey(t.instrument, t.difficulty)));
-      newBest = recordScore(scoreKey(song.id, trackKey(t.instrument, t.difficulty)), { score: r.score, stars: r.stars, accuracy: acc, fc, date: Date.now(), input: r.input }) && !!prev;
+      newBest = recordScore(key, { score: r.score, stars: r.stars, accuracy: acc, fc, date: Date.now(), input: r.input });
     }
+    const best = getBest(key);
     const weakest = (this.weakest = req.practice ? null : weakestSection(r.sections));
     const mean = r.deltas.length ? r.deltas.reduce((a, b) => a + b, 0) / r.deltas.length : 0;
 
@@ -87,9 +89,7 @@ export class ResultsScreen implements Screen {
     this.timeline.append(heads, this.plot, this.drift, axis);
 
     const stats: (string | HTMLElement)[] = [
-      'Best streak ',
-      h('b', null, String(r.maxStreak)),
-      ` · Star Power ${r.spPhrases} / ${r.spPhrasesTotal} · Sustains dropped ${r.sustainDrops}`,
+      `Star Power ${r.spPhrases} / ${r.spPhrasesTotal} · Sustains dropped ${r.sustainDrops}`,
     ];
     if (r.solos.length) stats.push(` · Solos ${r.solos.map((x) => `${Math.round((x.hits / x.total) * 100)}%`).join(' ')}`);
 
@@ -104,7 +104,8 @@ export class ResultsScreen implements Screen {
         h(
           'div',
           { class: 'res-nums' },
-          h('div', { class: 'res-num' }, h('div', { class: 'label' }, 'Score'), h('div', { class: 'v' }, r.score.toLocaleString('en-US')), newBest ? h('span', { class: 'tag best' }, 'NEW BEST') : null),
+          h('div', { class: 'res-num' }, h('div', { class: 'label' }, 'Score'), h('div', { class: 'v' }, r.score.toLocaleString('en-US')), newBest ? h('span', { class: 'tag best' }, 'NEW BEST') : null, h('div', { class: 'res-best' }, `Best score: ${best ? best.score.toLocaleString('en-US') : '—'}`, best?.input ? ` · ${PLAYED_WITH_LABEL[best.input]}` : '')),
+          h('div', { class: 'res-num' }, h('div', { class: 'label' }, 'Max streak'), h('div', { class: 'v' }, r.maxStreak.toLocaleString('en-US'))),
           h('div', { class: 'res-num' }, h('div', { class: 'label' }, 'Accuracy'), h('div', { class: 'v' }, `${(acc * 100).toFixed(1)}%`), fc ? h('span', { class: 'tag fc' }, 'FULL COMBO') : null),
           h('div', { class: 'res-num' }, h('div', { class: 'label' }, 'Stars'), h('div', { class: 'res-stars' }, starsEl(r.stars))),
         ),
@@ -335,13 +336,15 @@ export class ResultsScreen implements Screen {
   /** Plain-language advice derived from how notes were lost. */
   private tips(): string[] {
     const r = this.r;
+    if (this.req.bot) return [];
+    const tapping = r.input === 'touch' || (r.input === 'keyboard' && settings.kbTapMode);
     const tips: string[] = [];
     const lost = r.total - r.hits;
-    if (r.overstrums >= 3) tips.push(`${r.overstrums} overstrums broke your streak. Only strum when a gem reaches the line, and let HOPOs ring without strumming.`);
+    if (r.overstrums >= 3) tips.push(tapping ? `${r.overstrums} extra presses broke your streak. Press the frets when a gem reaches the line.` : `${r.overstrums} overstrums broke your streak. Only strum when a gem reaches the line, and let HOPOs ring without strumming.`);
     if (r.wrongFret > r.lateMiss && r.wrongFret >= 5) tips.push('Most misses were wrong frets, not timing. A slowed-down practice loop helps the shapes sink in.');
-    if (r.lateMiss > r.wrongFret && r.lateMiss >= 5) tips.push('Most misses were notes you never played. Try a faster note speed so you can read further ahead.');
+    if (r.lateMiss > r.wrongFret && r.lateMiss >= 5) tips.push('Most misses were notes you never played. Practise the weakest section at a slower speed until the pattern feels familiar.');
     if (r.sustainDrops >= 3) tips.push(`${r.sustainDrops} sustains were let go early. Keep the fret down until the tail passes the line.`);
-    if (lost >= 8 && r.missByType.hopo > lost * 0.4) tips.push('HOPOs cost you the most. After a miss, the next HOPO has to be strummed.');
+    if (lost >= 8 && r.missByType.hopo > lost * 0.4) tips.push(tapping ? 'HOPOs cost you the most. Use a fresh fret press for each note, including repeated frets.' : 'HOPOs cost you the most. After a miss, the next HOPO has to be strummed.');
     if (lost >= 8 && r.missChords > lost * 0.4) tips.push('Chords cost you the most. Chords need exactly their frets: no extra lower frets.');
     const worstLane = r.missByLane.indexOf(Math.max(...r.missByLane));
     if (lost >= 10 && r.missByLane[worstLane] > lost * 0.45) tips.push(`The ${LANE_NAMES[worstLane].toLowerCase()} fret accounts for most misses.`);
@@ -351,7 +354,9 @@ export class ResultsScreen implements Screen {
   private work(weakest: SectionResult | null): HTMLElement {
     const tips = this.tips();
     const box = h('div');
-    if (!tips.length) box.append(h('p', { class: 'lead' }, this.r.total === this.r.hits ? 'Nothing to fix: a clean run. Try a harder difficulty.' : 'Nothing stood out. Keep going: consistency comes with repetition.'));
+    const t = this.r.setup.track;
+    const harderDifficulty = DIFFICULTIES.slice(DIFFICULTIES.indexOf(t.difficulty) + 1).find(d => this.req.chart.tracks.has(trackKey(t.instrument, d)));
+    if (!tips.length) box.append(h('p', { class: 'lead' }, resultSummary({ ...this.r, bot: this.req.bot, practiceSpeed: this.req.practice?.speed, harderDifficulty })));
     for (const t of tips) box.append(h('p', { class: 'lead' }, t));
     if (weakest) box.append(h('p', { class: 'aside' }, 'The ', h('b', null, weakest.name), ` (outlined) cost you the most: ${weakest.total - weakest.hits} notes.`));
     return box;

@@ -143,3 +143,45 @@ test('every built-in song has a three-fret touch part on every difficulty', () =
     }
   }
 });
+
+const added = new Set(['mars-war-machine', 'mercury-winged-messenger', 'jupiter-jollity', 'paper-hearts', 'city-lights', 'golden-hour', 'warehouse-current', 'prism-parade', 'assembly-line', 'photon-run']);
+for (const def of STARTER_SONGS.filter(s => added.has(s.id))) {
+  test(`new "${def.name}": complete audio is finite, bounded and audible in both stems`, () => {
+    let peak = 0, ep = 0, eb = 0, frames = 0;
+    for (const b of renderSong(def, 22050)) {
+      frames += b.n;
+      for (let i = 0; i < b.n; i++) {
+        assert.ok(Number.isFinite(b.pl[i]) && Number.isFinite(b.pr[i]) && Number.isFinite(b.bl[i]) && Number.isFinite(b.br[i]));
+        peak = Math.max(peak, Math.abs(b.pl[i] + b.bl[i]), Math.abs(b.pr[i] + b.br[i]));
+        ep += b.pl[i] ** 2 + b.pr[i] ** 2;
+        eb += b.bl[i] ** 2 + b.br[i] ** 2;
+      }
+    }
+    assert.ok(peak <= 0.981, `mix peak ${peak}`);
+    assert.ok(Math.sqrt(ep / (frames * 2)) > 0.02, 'player is audible');
+    assert.ok(Math.sqrt(eb / (frames * 2)) > 0.02, 'band is audible');
+  });
+  test(`new "${def.name}": every generated part/difficulty can be full-comboed`, async () => {
+    const { Engine } = await import('../src/engine/engine.ts');
+    const { applyAction, botActions } = await import('../src/engine/bot.ts');
+    const chart = buildChart(parseDotChart(generateChart(def).text));
+    for (const [key, track] of chart.tracks) {
+      const engine = new Engine(track, chart.tempo);
+      for (const action of botActions(track)) applyAction(engine, action);
+      engine.advance(chart.lastNoteTime + 5);
+      assert.equal(engine.hits, track.notes.length, `${def.id} ${key}`);
+      assert.equal(engine.misses, 0, `${def.id} ${key}`);
+      assert.equal(engine.overstrums, 0, `${def.id} ${key}`);
+    }
+  });
+}
+
+test('Holst opening excerpts keep their original meter and pitches', async () => {
+  const { MARS_OSTINATO, MERCURY_MOTIF, JUPITER_MOTIF } = await import('../src/starter/songs/planets.ts');
+  const { seqLength } = await import('../src/starter/score.ts');
+  assert.equal(seqLength(MARS_OSTINATO), 5);
+  assert.equal(seqLength(MERCURY_MOTIF), 6);
+  // The notation ends with an eighth rest; seqLength measures the last sounding note.
+  assert.equal(seqLength(JUPITER_MOTIF) + 0.5, 14);
+  assert.deepEqual(MERCURY_MOTIF.slice(0, 6).map(n => n.p[0]), [65, 70, 74, 76, 71, 68]);
+});
