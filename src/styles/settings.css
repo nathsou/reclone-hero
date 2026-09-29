@@ -85,6 +85,26 @@
   color: var(--text);
 }
 
+/* the tab list has focus (guitar or arrows): highlight the tab like a focused row */
+.nav-tab:focus,
+.settings-back:focus {
+  outline: none;
+}
+
+.nav-tab:focus {
+  margin: 0 -12px;
+  padding-left: 12px;
+  padding-right: 12px;
+  border-radius: var(--radius);
+  background: var(--panel);
+}
+
+.settings-back:focus {
+  color: var(--text);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
 .nav-tab.on::after {
   content: '';
   width: 6px;
