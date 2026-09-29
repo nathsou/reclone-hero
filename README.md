@@ -4,7 +4,7 @@
 
 A Clone Hero–compatible rhythm game that runs in the browser. It reads your existing song folders
 (`notes.chart` / `notes.mid` + `song.ini` + audio stems), plays them on a WebGL2 highway, and is built with
-nothing but TypeScript 7 and Vite: no runtime dependencies. No songs and no guitar? It comes with eight
+nothing but TypeScript 7 and Vite: no runtime dependencies. No songs and no guitar? It comes with 23
 built-in songs and plays on the keyboard.
 
 ## Running it
@@ -16,7 +16,7 @@ npm run dev
 
 Open the printed URL in a Chromium-based browser (Chrome, Edge, Arc, Brave).
 
-- **Built-in songs:** on a first visit the song list opens straight away with the eight songs that ship with
+- **Built-in songs:** on a first visit the song list opens straight away with the 23 songs that ship with
   the game (see [Built-in songs](#built-in-songs)).
 - **Your library:** click the folder button (or **Open charts folder…**) and pick the folder that holds your songs. The browser
   remembers it, so next time you only confirm access. Songs are read straight from disk; nothing is uploaded.
@@ -25,7 +25,7 @@ Open the printed URL in a Chromium-based browser (Chrome, Edge, Arc, Brave).
 
 ### Without any server
 
-`npm run build` produces a single self-contained file, `dist/index.html` (about 470 KB, all scripts, fonts,
+`npm run build` produces a single self-contained file, `dist/index.html` (about 570 KB, all scripts, fonts,
 styles and the built-in songs inlined). Double-click it to play from disk (`file://`), or put it on any static host (GitHub Pages,
 Netlify, a USB stick). Pushing to `main` deploys it to GitHub Pages (`.github/workflows/pages.yml`). Nothing runs server-side: songs are read in the browser.
 
@@ -77,7 +77,8 @@ On the results screen `Enter` returns to the song list, `R` retries and `P` prac
   Daylight ink (a paper highway with inked outlines). "Match system" switches between the two. The earlier
   colour schemes (Swiss, Baroque, Synthwave, Terminal, Paper, Midnight) are still there under Settings › Display.
 - **Note styles**, independent of the theme: Classic dome (the default), Studio (glass lenses in chrome
-  bezels on a lacquered board, with ray-traced reflections; see [Graphics](#graphics)), Neon (glowing pucks), Swiss (flat
+  bezels on a lacquered board, with ray-traced reflections), Liquid Glass (glass beads, tubes and a flowing glass
+  highway that refract what is behind them; see [Graphics](#graphics)), Neon (glowing pucks), Swiss (flat
   geometric dots), Baroque (faceted jewels in gold, pearls for HOPOs), Pixel (8-bit blocks) and Clay (soft
   pastel pebbles). Each keeps the same strum / HOPO / tap language and has its own sustains, fret buttons and
   hit particles.
@@ -88,10 +89,10 @@ On the results screen `Enter` returns to the song list, `R` retries and `P` prac
 
 ## Built-in songs
 
-Eight songs ship inside the game, so there is always something to play. They are not recordings: each is a
+Twenty-three songs ship inside the game, so there is always something to play. They are not recordings: each is a
 score written in TypeScript (`src/starter/songs`), synthesized in the browser when you pick it (a Web Worker
 renders the stems in 2–4 s) and charted from the same score, so notes and audio cannot drift apart. They add
-about 140 KB to the build, need no download, and carry no licensing strings.
+about 240 KB to the build, need no download, and carry no licensing strings.
 
 | Song | Credit | Style | Expert |
 | --- | --- | --- | --- |
@@ -103,8 +104,24 @@ about 140 KB to the build, need no download, and carry no licensing strings.
 | Canon in D | Pachelbel (c. 1700) | rock | busier each variation, shred section |
 | In the Hall of the Mountain King | Grieg, Peer Gynt (1875) | metal, 100 → 185 BPM | speeds up all the way |
 | Redline | original | punk-metal, 176 BPM | gallops, fills, twin leads |
+| Minuet in G | Petzold (1725) | chiptune waltz | gentle, quarter and eighth notes |
+| Morning Mood | Grieg, Peer Gynt (1875) | chill 6/8 | gentle eighth notes |
+| Swan Lake | Tchaikovsky (1876) | dark synthwave | long held notes, harp arpeggios |
+| The Blue Danube | Strauss II (1866) | electro waltz in 3/4 | waltz melody, arpeggios |
+| Funeral March | Chopin, Sonata No. 2 (1839) | doom metal | heavy chords, a clean trio |
+| The Entertainer | Joplin (1902) | electro swing | syncopated rag |
+| Eine kleine Nachtmusik | Mozart (1787) | electro house | Alberti arpeggios, big hook |
+| Prelude in C | Bach, WTC I (1722) | synthwave | 35 bars of hammer-on arpeggios |
+| Symphony No. 40 | Mozart (1788) | drum & bass, 174 BPM | fast sighing theme |
+| Carol of the Bells | Leontovych (1916) | metal waltz | the ostinato, then everything on top |
+| Symphony No. 5 | Beethoven (1808) | metal | the motif everywhere, a development solo |
+| Toccata and Fugue in D minor | Bach (c. 1704) | organ metal | pedal-point flurries, a sweep solo |
+| William Tell Overture | Rossini (1829) | gallop punk | sixteenth-sixteenth-eighth, all the way |
+| Ride of the Valkyries | Wagner (1856) | symphonic metal in 9/8 | triplet chugs, the horn call |
+| Moonlight Sonata | Beethoven (1801) | Adagio, then Presto as metal | storms of rising arpeggios |
 
-The classical pieces are public-domain compositions in new arrangements; the originals were written for the
+The classical pieces are public-domain compositions in new arrangements (melodies as written, with new
+bass lines, drums and some new passages); the originals were written for the
 game. Instruments are synthesized from scratch: Karplus–Strong strings through an amp and cabinet model for
 guitars and bass, band-limited supersaws, FM electric piano and bells, additive organ, and a synthesized drum
 kit, mixed with a Freeverb reverb, tempo-synced echo and a limiter shared by both stems.
@@ -148,6 +165,14 @@ reflections on glass lenses, polished and anodised metal, and clear-coated bodie
 the fragment shaders: each frame the 32 nearest gems are uploaded as spheres, reflection rays from gems and fret
 buttons are traced against them and against the highway plane, and the highway itself becomes lacquer that
 traces the mirror images of the approaching gems and darkens under them with soft contact shadows.
+
+**Liquid Glass** refracts for real, in screen space: the frame is copied just before the highway is drawn and
+again just before the gems, and each glass surface samples the copy of what is behind it, offset by its
+surface normal. The three colour channels are offset by slightly different amounts, so edges split into
+rainbow fringes (dispersion). The highway is a glass slab with slow swells that travel with the chart, lens-like
+bevelled edges and a light frost; the beads magnify the lane lines under them, reflect the room and each other,
+glow at the rim and cast coloured caustics on the glass below; sustains are clear tubes and the fret buttons
+are glass rings that fill with colour.
 
 `visual-test.html` (dev server only) shows every gem and sustain state in a frozen scene for tuning.
 
