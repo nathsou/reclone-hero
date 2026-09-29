@@ -16,7 +16,7 @@ npm run dev
 
 Open the printed URL in a Chromium-based browser (Chrome, Edge, Arc, Brave).
 
-- **Built-in songs:** on a first visit the song list opens straight away with the 23 songs that ship with
+- **Built-in songs:** on a first visit the song list opens straight away with the 43 songs that ship with
   the game (see [Built-in songs](#built-in-songs)).
 - **Your library:** click the folder button (or **Open charts folder…**) and pick the folder that holds your songs. The browser
   remembers it, so next time you only confirm access. Songs are read straight from disk; nothing is uploaded.
@@ -48,7 +48,10 @@ Turn **Settings › Controls › Fret keys strum** off to strum with `↑`/`↓`
 `Space` is Star Power, `W` whammy, `Esc` pause (the pause menu can also switch difficulty). While you play on the keyboard, the key for each fret is shown
 under it. All keys can be remapped in Settings › Controls. Easy (three frets) and Medium (four) are good places
 to start.
-In menus, strum moves, green confirms, red goes back, yellow opens practice, blue/orange change difficulty.
+The whole menu works from the guitar or the keyboard: strum or arrows move, green or `Enter` confirms, red or
+`Esc` goes back, yellow opens practice, blue/orange (or `←`/`→`) change difficulty and adjust settings. In the
+song list the guitar's select button (or `Space`) opens the song options: play, practise or watch the bot,
+favourite, instrument and difficulty, sort, filters, view, search and settings. `*` stars a song.
 On the results screen `Enter` returns to the song list, `R` retries and `P` practises the weakest section.
 
 ## What's in it
@@ -71,6 +74,8 @@ On the results screen `Enter` returns to the song list, `R` retries and `P` prac
   genre, charter, folder, most played or recently played), ascending or descending, with a sticky group
   header, `PgUp`/`PgDn` to jump between groups, `R` for a random song and `/` to search. `V` switches
   between the list (with the song's details beside it) and a cover-flow view with an A–Z scrubber.
+- **Favourites:** star songs (`*`, the ☆ button or the song options) and show only your favourites.
+  Favourites are kept in backups.
 - **Genre filter:** show only, or hide, whole genre families (hiding *Metal* also hides metalcore, djent,
   deathcore…) or exact genres.
 - **Themes:** Classic dark (the default: a textured board, steel rails, domed gems and wheel frets) and
@@ -81,17 +86,17 @@ On the results screen `Enter` returns to the song list, `R` retries and `P` prac
   highway that refract what is behind them; see [Graphics](#graphics)), Neon (glowing pucks), Baroque (faceted
   jewels in gold, pearls for HOPOs) and Pixel (8-bit blocks). Each keeps the same strum / HOPO / tap language and has its own sustains, fret buttons and
   hit particles.
-- **Backups:** Settings › Data exports settings, key and controller mappings and best scores to a file,
-  to import on another computer (scores merge, keeping the best).
+- **Backups:** Settings › Data exports settings, key and controller mappings, favourites and best scores to a
+  file, to import on another computer (scores merge, keeping the best; favourites are combined).
 - **Controls:** remap any single guitar input (Settings › Controls › Change) without redoing the rest.
 - **Video backgrounds**, album-art backgrounds, fullscreen (`Shift+F`, `Esc` to leave), lefty flip, quality levels.
 
 ## Built-in songs
 
-Twenty-three songs ship inside the game, so there is always something to play. They are not recordings: each is a
+Forty-three songs ship inside the game, so there is always something to play. They are not recordings: each is a
 score written in TypeScript (`src/starter/songs`), synthesized in the browser when you pick it (a Web Worker
-renders the stems in 2–4 s) and charted from the same score, so notes and audio cannot drift apart. They add
-about 240 KB to the build, need no download, and carry no licensing strings.
+renders the stems in 2–6 s) and charted from the same score, so notes and audio cannot drift apart. They add
+about 390 KB to the build, need no download, and carry no licensing strings.
 
 | Song | Credit | Style | Expert |
 | --- | --- | --- | --- |
@@ -118,12 +123,39 @@ about 240 KB to the build, need no download, and carry no licensing strings.
 | William Tell Overture | Rossini (1829) | gallop punk | sixteenth-sixteenth-eighth, all the way |
 | Ride of the Valkyries | Wagner (1856) | symphonic metal in 9/8 | triplet chugs, the horn call |
 | Moonlight Sonata | Beethoven (1801) | Adagio, then Presto as metal | storms of rising arpeggios |
+| Spring | Vivaldi, The Four Seasons (1725) | played straight: solo violin and strings | birdsong trills, the storm |
+| Little Fugue in G minor | Bach, BWV 578 (c. 1707) | played straight on organ, two voices | a fugue subject in sixteenths |
+| Pomp and Circumstance | Elgar, March No. 1 (1901) | played straight: strings, then brass and timpani | stately, in harmony |
+| Can-Can | Offenbach (1858) | played straight: pit orchestra galop | fast, twice round, faster |
+| Gymnopédie No. 1 | Satie (1888) | played straight on piano | slow melody and left-hand chords |
+| Caprice No. 24 | Paganini (1817) | neoclassical metal | the theme, then triplet sweeps |
+| Korobeiniki | Russian folk song (1861) | chiptune into metal | three levels, each faster |
+| Drunken Sailor | sea shanty | shanty punk with accordion and fiddle | chugs, a fiddle break, double stops |
+| Greensleeves | English ballad (16th c.) | Renaissance consort: lute, fiddle, viols | melody, then in thirds |
+| The Irish Washerwoman | Irish jig | session into Celtic rock, 6/8 | fiddle, banjo, then electric |
+| Hava Nagila | Hebrew folk song (1918) | slow hora into surf rock | faster each time, in thirds |
+| When the Saints Go Marching In | spiritual | New Orleans brass band | a dirge, then a swinging banjo chorus |
+| Glass Elevator | original | funk, 104 BPM | scratchy sixteenth-note chords, a unison riff |
+| Pocket Change | original | ska punk, 184 BPM | off-beat upstrokes, power chords, horns |
+| Switchback Breakdown | original | bluegrass, no drums | banjo rolls, a flatpicked guitar break |
+| Rust Belt Shuffle | original | 12-bar blues in 12/8 | a boogie riff, two choruses of bends |
+| Low Orbit | original | post-rock | clean arpeggios, then tremolo picking |
+| Seventh Gear | original | progressive metal in 7/8 | 2+2+3 riffs, a clean interlude, a solo |
+| Afterglow Protocol | original | trance, 138 BPM | plucked arpeggios, a supersaw drop |
+| Sunday Tape | original | lo-fi neo-soul, swung | chord stabs, fills, double stops |
 
-The classical pieces are public-domain compositions in new arrangements (melodies as written, with new
-bass lines, drums and some new passages); the originals were written for the
-game. Instruments are synthesized from scratch: Karplus–Strong strings through an amp and cabinet model for
-guitars and bass, band-limited supersaws, FM electric piano and bells, additive organ, and a synthesized drum
-kit, mixed with a Freeverb reverb, tempo-synced echo and a limiter shared by both stems.
+The classical and traditional pieces are public-domain compositions. Some are played straight, as written
+(Spring, the Little Fugue, Pomp and Circumstance, the Can-Can, the Gymnopédie); the others are new
+arrangements (melodies as written, with new bass lines, drums and some new passages). The originals were
+written for the game. Many of the older melodies are quoted note for note from public ABC transcriptions,
+read by a small ABC reader (`src/starter/abc.ts`, checked bar by bar by a test): thesession.org (Korobeiniki,
+Drunken Sailor, The Irish Washerwoman), John Chambers' collection at trillian.mit.edu (Hava Nagila, the
+Can-Can, Pomp and Circumstance; Frank Nordberg's Spring, Jeff Bigler's two-voice Little Fugue, and the Paganini
+caprice from Lester Bailey's collection), Chris Spencer's abc-music (Greensleeves) and Colin Hume
+(Gymnopédie No. 1). Instruments are synthesized from scratch: Karplus–Strong strings through an amp and cabinet
+model for guitars, bass and banjo, band-limited supersaws, pulse, brass, reed and bowed-string oscillators
+(chiptune, horns, accordion, fiddle), FM electric piano and bells, additive organ, tuned timpani and a
+synthesized drum kit, mixed with a Freeverb reverb, tempo-synced echo and a limiter shared by both stems.
 
 Charts are generated for all four difficulties. Expert plays every note of the guitar part. Lower difficulties
 keep the metrically strongest notes within a note budget (about 40 / 60 / 80 % of Expert), a minimum spacing and

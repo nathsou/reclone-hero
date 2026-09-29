@@ -1,4 +1,5 @@
 import type { NavAction } from '../../input/input.ts';
+import { keyFocus, navFocus } from '../focusNav.ts';
 import { trackKey } from '../../chart/types.ts';
 import { formatTime } from '../../util/text.ts';
 import type { App, Screen } from '../app.ts';
@@ -82,14 +83,18 @@ export class PracticeModal implements Screen {
   private start: () => Promise<void>;
 
   nav(a: NavAction): void {
-    if (a === 'confirm') void this.start();
-    else if (a === 'back') this.app.popModal(this);
+    if (a === 'back') this.app.popModal(this);
+    else if (a === 'confirm') {
+      // green presses a focused button, and otherwise starts
+      if (document.activeElement instanceof HTMLButtonElement && this.el.contains(document.activeElement)) document.activeElement.click();
+      else void this.start();
+    } else navFocus(this.el, a);
   }
 
   key(e: KeyboardEvent): boolean {
     if (e.key === 'Escape') this.app.popModal(this);
-    else if (e.key === 'Enter' && !(document.activeElement instanceof HTMLSelectElement)) void this.start();
-    else return false;
+    else if (e.key === 'Enter' && !(document.activeElement instanceof HTMLButtonElement)) void this.start();
+    else return keyFocus(this.el, e);
     return true;
   }
 }

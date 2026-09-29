@@ -77,10 +77,11 @@ export class BuiltinSource implements LibrarySource {
       case 'guitar.wav':
       case 'song.wav': {
         const stems = await renderStems(def.id, (p) => this.onRenderProgress?.(p));
-        return file === 'guitar.wav' ? stems.guitar : stems.song;
+        // A copy: decoding detaches the buffer it is given, and the render stays cached for replays.
+        return (file === 'guitar.wav' ? stems.guitar : stems.song).slice();
       }
       case 'preview.wav':
-        return renderPreview(def.id);
+        return (await renderPreview(def.id)).slice();
       case 'album.png': {
         let p = this.art.get(def.id);
         if (!p) this.art.set(def.id, (p = coverArt(def)));

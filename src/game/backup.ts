@@ -6,7 +6,7 @@ import type { BestScore } from './scores.ts';
 
 const APP = 'reclone-hero';
 const FORMAT = 1;
-const KEYS = { settings: 'chsq.settings', keys: 'chsq.keys', pads: 'chsq.pads', scores: 'chsq.scores', plays: 'chsq.plays' } as const;
+const KEYS = { settings: 'chsq.settings', keys: 'chsq.keys', pads: 'chsq.pads', scores: 'chsq.scores', plays: 'chsq.plays', favourites: 'chsq.favourites' } as const;
 type Section = keyof typeof KEYS;
 
 export interface Backup {
@@ -50,6 +50,7 @@ export interface BackupSummary {
   controllers: number;
   scores: number;
   plays: number;
+  favourites: number;
   exportedAt: string;
 }
 
@@ -72,6 +73,7 @@ export function summarize(b: Backup): BackupSummary {
     controllers: b.data.pads ? Object.keys(b.data.pads as object).length : 0,
     scores: b.data.scores ? Object.keys(b.data.scores as object).length : 0,
     plays: b.data.plays ? Object.keys(b.data.plays as object).length : 0,
+    favourites: Array.isArray(b.data.favourites) ? b.data.favourites.length : 0,
     exportedAt: b.exportedAt,
   };
 }
@@ -100,5 +102,10 @@ export function applyBackup(b: Backup): void {
       mine[k] = m ? { count: Math.max(m.count, p.count), last: Math.max(m.last, p.last) } : p;
     }
     write(KEYS.plays, mine);
+  }
+  if (Array.isArray(b.data.favourites)) {
+    // Favourites: the union of both lists.
+    const mine = read(KEYS.favourites);
+    write(KEYS.favourites, [...new Set([...(Array.isArray(mine) ? mine : []), ...b.data.favourites])]);
   }
 }

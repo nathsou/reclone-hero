@@ -42,6 +42,12 @@ const HOLDS: Record<InstrumentKind, boolean> = {
   pickbass: false,
   synthbass: false,
   subbass: false,
+  chip: true,
+  brass: true,
+  accordion: true,
+  fiddle: true,
+  banjo: false,
+  timpani: false,
 };
 
 export interface Placed {

@@ -86,3 +86,42 @@ test('the renderer produces bounded, non-silent audio in both stems', () => {
   assert.ok(peak <= 1, `peak ${peak}`);
   assert.ok(energyP > 1 && energyB > 1);
 });
+
+test('ABC reader: key signature, lengths, broken rhythm, repeats with endings, chords', async () => {
+  const { abc, harmony } = await import('../src/starter/abc.ts');
+  const t = abc(`X:1
+T:Test
+M:4/4
+L:1/8
+K:G
+|:"G" G2 AB c>d e2|1 "D" f4 z4:|2 "G" g8|]`);
+  // F is sharp in G major; c>d is dotted; the first ending is skipped the second time through
+  const pitches = t.notes.map((n) => n.p[0]);
+  assert.deepEqual(pitches, [67, 69, 71, 72, 74, 76, 78, 67, 69, 71, 72, 74, 76, 79]);
+  assert.equal(t.notes[3].d, 0.75);
+  assert.equal(t.notes[4].d, 0.25);
+  assert.equal(t.length, 16);
+  assert.deepEqual(harmony(t, 4), ['G', 'D', 'G', 'G']);
+  const minor = abc(`M:3/4\nL:1/4\nK:Am\n[CEG]2 ^F | (3ABc d|`);
+  assert.deepEqual(minor.notes[0].p, [60, 64, 67]);
+  assert.equal(minor.notes[1].p[0], 66);
+  assert.ok(Math.abs(minor.notes[2].d - 2 / 3) < 1e-9);
+});
+
+test('every ABC tune quoted in a built-in song adds up, bar by bar', async () => {
+  const { readdirSync, readFileSync } = await import('node:fs');
+  const { abc } = await import('../src/starter/abc.ts');
+  const dir = new URL('../src/starter/songs/', import.meta.url).pathname;
+  let tunes = 0;
+  for (const f of readdirSync(dir, { withFileTypes: true })) {
+    const src = new TextDecoder().decode(readFileSync(dir + f.name));
+    for (const m of src.matchAll(/abc\(`([^`$]*)`/g)) {
+      const t = abc(m[1]);
+      // an upbeat and the bar that completes it may be short
+      const inner = t.bars.slice(1, -1);
+      inner.forEach((b, i) => assert.ok(Math.abs(b - t.bar) < 1e-6, `${f.name}: bar ${i + 1} lasts ${b} beats, not ${t.bar}`));
+      tunes++;
+    }
+  }
+  assert.ok(tunes >= 5);
+});

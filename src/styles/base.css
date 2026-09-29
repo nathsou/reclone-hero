@@ -122,6 +122,11 @@ kbd {
 .sw.o {
   background: var(--orange);
 }
+/* the select / star power button */
+.sw.p {
+  background: var(--sp);
+  border-radius: 50%;
+}
 
 /* ------------------------------------------------------------------ logo */
 .logo {

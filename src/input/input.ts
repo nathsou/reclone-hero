@@ -9,7 +9,7 @@ export interface InputEvent {
   source: 'kb' | 'pad';
 }
 
-export type NavAction = 'up' | 'down' | 'left' | 'right' | 'confirm' | 'back' | 'start' | 'alt';
+export type NavAction = 'up' | 'down' | 'left' | 'right' | 'confirm' | 'back' | 'start' | 'alt' | 'menu';
 
 const REPEAT_DELAY_MS = 300;
 
@@ -22,6 +22,7 @@ const PAD_NAV: Partial<Record<Action, NavAction>> = {
   yellow: 'alt',
   blue: 'left',
   orange: 'right',
+  starPower: 'menu',
 };
 
 /**

@@ -18,6 +18,9 @@ import { GenrePanel, describeGenreFilter } from '../genrePanel.ts';
 import { icon } from '../icons.ts';
 import { passesGenreFilter } from '../../library/genres.ts';
 import { getPlays } from '../../game/plays.ts';
+import { isFavourite, toggleFavourite } from '../../game/favourites.ts';
+import { moveFocus, navFocus, keyFocus } from '../focusNav.ts';
+import type { MenuItem } from '../menu.ts';
 import type { Group } from '../songlist.ts';
 
 const ROW_H = 56;
@@ -52,6 +55,8 @@ export class SongSelect implements Screen {
   private sel = 0;
   private readonly sortDir: HTMLButtonElement;
   private readonly sortValue: HTMLSpanElement;
+  private readonly sortSelect: HTMLSelectElement;
+  private readonly favBtn: HTMLButtonElement;
   private readonly genreBtn: HTMLButtonElement;
   private readonly viewBtns: Record<SongView, HTMLButtonElement>;
   private readonly footer: HTMLElement;
@@ -92,6 +97,9 @@ export class SongSelect implements Screen {
       this.updateSortButton();
       this.refilter();
     });
+    this.sortSelect = sort;
+    this.favBtn = h('button', { class: 'ctl-btn fav-btn', title: 'Show only favourite songs', onclick: () => this.toggleFavouritesOnly() }, '★ Favourites');
+    this.favBtn.classList.toggle('on', settings.favouritesOnly);
     this.sortValue = h('span', { class: 'v' });
     this.sortDir = h('button', {
       class: 'ctl-btn',
@@ -145,6 +153,7 @@ export class SongSelect implements Screen {
           h('span', { class: 'ctl' }, 'Sort', this.sortValue, sort),
           this.sortDir,
           h('span', { class: 'ctl genre-anchor' }, 'Genre', this.genreBtn),
+          this.favBtn,
         ),
         this.count,
         h('div', { class: 'grow' }),
@@ -221,6 +230,7 @@ export class SongSelect implements Screen {
     const gf = settings.genreFilter;
     const matching = this.app.library.songs.filter((s) => {
       if (!passesGenreFilter(s.genre, gf)) return false;
+      if (settings.favouritesOnly && !isFavourite(s.id)) return false;
       if (!terms.length) return true;
       const hay = `${s.name} ${s.artist} ${s.album} ${s.charter} ${s.genre} ${s.pack} ${s.year}`.toLowerCase();
       return terms.every((t) => hay.includes(t));
@@ -334,7 +344,7 @@ export class SongSelect implements Screen {
       row.dataset.item = String(v);
       const it = this.items[v];
       row.classList.toggle('sel', it === this.sel);
-      const key = it >= 0 ? `s:${this.filtered[it].id}` : `g:${it}:${this.groups[-it - 1].label}`;
+      const key = it >= 0 ? `s:${this.filtered[it].id}:${isFavourite(this.filtered[it].id) ? 1 : 0}` : `g:${it}:${this.groups[-it - 1].label}`;
       if (row.dataset.key === key) continue;
       row.dataset.key = key;
       if (it < 0) {
@@ -364,7 +374,7 @@ export class SongSelect implements Screen {
         row,
         h('span', { class: 'idx' }, String(it + 1).padStart(2, '0')),
         art,
-        h('div', { class: 'meta' }, h('div', { class: 'title' }, s.name), h('div', { class: 'artist' }, sub)),
+        h('div', { class: 'meta' }, h('div', { class: 'title' }, s.name, isFavourite(s.id) ? h('span', { class: 'fav', title: 'Favourite' }, '★') : null), h('div', { class: 'artist' }, sub)),
         h('div', { class: 'side' }, best ? starsEl(best.stars) : null, best?.fc ? h('span', { class: 'fc' }, 'FC') : null, rating !== undefined && rating >= 0 && settings.sort !== 'difficulty' ? pips(rating) : null),
         h('div', { class: 'len' }, s.lengthMs ? formatTime(s.lengthMs / 1000) : ''),
       );
@@ -597,6 +607,7 @@ export class SongSelect implements Screen {
         h('button', { class: 'btn primary big', disabled: !canPlay, onclick: () => this.play(false) }, icon('play'), 'Play'),
         h('button', { class: 'btn', disabled: !canPlay, onclick: () => this.practice() }, 'Practice', h('kbd', null, 'P')),
         h('button', { class: 'btn ghost', disabled: !canPlay, onclick: () => this.play(true) }, 'Watch bot', h('kbd', null, 'B')),
+        this.favToggle(song),
       ),
     );
   }
@@ -632,6 +643,8 @@ export class SongSelect implements Screen {
             hint('Tab', 'instrument'),
             hint('R', 'random'),
             hint('V', 'list / covers'),
+            hint('*', 'favourite'),
+            hint('Space', 'options', 'p'),
           ]
         : [
             hint('←→ / wheel', 'browse'),
@@ -642,6 +655,8 @@ export class SongSelect implements Screen {
             hint('V', 'list / covers'),
             hint('Tab', 'instrument'),
             hint('R', 'random'),
+            hint('*', 'favourite'),
+            hint('Space', 'options', 'p'),
           ];
     replace(this.footer, ...hints, h('span', { class: 'grow' }), hint('Shift+F', 'fullscreen'));
   }
@@ -745,7 +760,8 @@ export class SongSelect implements Screen {
         h('button', { class: 'btn', disabled: !canPlay, onclick: () => this.practice() }, h('i', { class: 'dot sq' }), 'Practice'),
       );
     }
-    replace(this.coverInfo, h('div', { class: 'title' }, song.name), h('div', { class: 'sub' }, meta), controls);
+    controls.append(this.favToggle(song));
+    replace(this.coverInfo, h('div', { class: 'title' }, song.name, isFavourite(song.id) ? h('span', { class: 'fav' }, '★') : null), h('div', { class: 'sub' }, meta), controls);
   }
 
   /** Tick labels along the bottom: the first letter of each run (A–Z), or the group labels for other sorts. */
@@ -857,8 +873,93 @@ export class SongSelect implements Screen {
     this.instrumentChanged();
   }
 
+  // ---------------------------------------------------------------- favourites and options
+
+  private toggleFav() {
+    const song = this.filtered[this.sel];
+    if (!song) return;
+    const on = toggleFavourite(song.id);
+    this.app.toast(on ? `★ ${song.name} added to favourites` : `${song.name} removed from favourites`);
+    if (!on && settings.favouritesOnly) {
+      this.refilter();
+      return;
+    }
+    this.renderRowsForce();
+    this.renderDetail(song);
+  }
+
+  private favToggle(song: SongEntry): HTMLButtonElement {
+    const on = isFavourite(song.id);
+    return h('button', { class: `btn ghost fav-toggle${on ? ' on' : ''}`, title: on ? 'Remove from favourites (*)' : 'Add to favourites (*)', 'aria-pressed': String(on), onclick: () => this.toggleFav() }, on ? '★' : '☆', ' Favourite');
+  }
+
+  private toggleFavouritesOnly() {
+    updateSettings({ favouritesOnly: !settings.favouritesOnly });
+    this.favBtn.classList.toggle('on', settings.favouritesOnly);
+    this.refilter();
+  }
+
+  private cycleSort(dir: number) {
+    const i = SORTS.indexOf(settings.sort);
+    const next = SORTS[(i + dir + SORTS.length) % SORTS.length];
+    this.sortSelect.value = next;
+    updateSettings({ sort: next, sortReverse: false });
+    this.updateSortButton();
+    this.refilter();
+  }
+
+  private openGenres() {
+    this.genrePanel.open(this.genreBtn, this.app.library.songs);
+    moveFocus(this.genrePanel.el, 1);
+  }
+
+  /** The song options menu: guitar select button or Space. */
+  private openOptions() {
+    const song = this.filtered[this.sel];
+    void import('./songOptions.ts').then(({ SongOptions }) => this.app.pushModal(new SongOptions(this.app, song ? `${song.name} · ${song.artist}` : 'Songs', () => this.optionItems())));
+  }
+
+  private optionItems(): MenuItem[] {
+    const song = this.filtered[this.sel];
+    const ready = this.ready();
+    const none = () => {};
+    const [natural, reversed] = SORT_DIRECTION[settings.sort];
+    const items: MenuItem[] = [];
+    if (ready) {
+      items.push({ label: 'Play', action: () => void this.play(false) }, { label: 'Practice', action: () => void this.practice() }, { label: 'Watch the bot', action: () => void this.play(true) });
+    }
+    if (song) items.push({ label: isFavourite(song.id) ? '★ Remove from favourites' : '☆ Add to favourites', action: none, adjust: () => this.toggleFav() });
+    if (this.available().length > 1) items.push({ label: `Instrument: ${INSTRUMENT_LABEL[this.instrument]}`, action: none, adjust: () => this.cycleInstrument() });
+    if (ready) items.push({ label: `Difficulty: ${DIFF_LABEL[this.difficulty]}`, action: none, adjust: (d) => this.cycleDifficulty(d) });
+    items.push(
+      { label: `Sort: ${SORT_LABEL[settings.sort]}`, action: none, adjust: (d) => this.cycleSort(d) },
+      { label: `Order: ${settings.sortReverse ? reversed : natural}`, action: none, adjust: () => this.sortDir.click() },
+      { label: `Showing: ${settings.favouritesOnly ? 'favourites only' : 'all songs'}`, action: none, adjust: () => this.toggleFavouritesOnly() },
+      { label: `Genres: ${describeGenreFilter(settings.genreFilter)}…`, action: () => this.openGenres() },
+      { label: `View: ${this.view === 'list' ? 'list' : 'covers'}`, action: none, adjust: () => this.setView(this.view === 'list' ? 'covers' : 'list') },
+      { label: 'Random song', action: () => this.random() },
+      { label: 'Search…', action: () => this.search.focus() },
+      {
+        label: 'Choose charts folder…',
+        action: () =>
+          void import('../../library/library.ts').then(async ({ Library }) => {
+            const src = await Library.pickAny();
+            if (src) await this.app.openLibrary(src, true);
+          }),
+      },
+      { label: 'Settings', action: () => this.openSettings() },
+    );
+    return items;
+  }
+
   nav(a: NavAction): void {
-    if (a === 'up') this.select(this.sel - 1);
+    if (this.genrePanel.isOpen) {
+      if (a === 'back' || a === 'menu' || a === 'start') this.genrePanel.close();
+      else navFocus(this.genrePanel.el, a);
+      return;
+    }
+    if (a === 'menu') this.openOptions();
+    else if (a === 'up') this.select(this.sel - 1);
     else if (a === 'down') this.select(this.sel + 1);
     else if (a === 'confirm') void this.play(false);
     else if (a === 'alt') void this.practice();
@@ -870,6 +971,7 @@ export class SongSelect implements Screen {
   key(e: KeyboardEvent): boolean {
     const inSearch = document.activeElement === this.search;
     const covers = this.view === 'covers';
+    if (this.genrePanel.isOpen && e.key !== 'Escape') return keyFocus(this.genrePanel.el, e);
     switch (e.key) {
       case 'ArrowUp':
         this.select(this.sel - 1);
@@ -913,6 +1015,8 @@ export class SongSelect implements Screen {
     else if (e.key === 'p' || e.key === 'P') void this.practice();
     else if (e.key === 'b' || e.key === 'B') void this.play(true);
     else if (e.key === 'r' || e.key === 'R') this.random();
+    else if (e.key === ' ') this.openOptions();
+    else if (e.key === '*') this.toggleFav();
     else if (e.key === '/') {
       this.search.focus();
       this.search.select();
