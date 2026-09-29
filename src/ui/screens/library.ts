@@ -3,6 +3,8 @@ import { FsSource } from '../../library/sources.ts';
 import type { App, Screen } from '../app.ts';
 import { h, setText } from '../dom.ts';
 import { logo } from '../logo.ts';
+import { keyFocus, moveFocus, navFocus } from '../focusNav.ts';
+import type { NavAction } from '../../input/input.ts';
 
 /** First-run / reconnect screen for choosing where charts come from. */
 export class LibraryScreen implements Screen {
@@ -83,6 +85,19 @@ export class LibraryScreen implements Screen {
         'Pick the folder that contains your Clone Hero songs (each song folder has notes.chart or notes.mid plus audio). Nothing is uploaded: files are read straight from disk.',
       ),
     );
+  }
+
+  shown(): void {
+    // first button focused, so the guitar and Enter work straight away
+    setTimeout(() => moveFocus(this.buttons, 1), 0);
+  }
+
+  nav(a: NavAction): void {
+    navFocus(this.el, a);
+  }
+
+  key(e: KeyboardEvent): boolean {
+    return keyFocus(this.el, e);
   }
 
   progress(n: number): void {

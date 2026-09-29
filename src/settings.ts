@@ -20,6 +20,8 @@ export interface Settings {
   kbTapMode: boolean;
   /** list the songs that ship with the game */
   builtinSongs: boolean;
+  /** song list: only starred songs */
+  favouritesOnly: boolean;
   timingBar: boolean;
   missFeedback: MissFeedback;
   missSounds: boolean;
@@ -51,6 +53,7 @@ export const DEFAULT_SETTINGS: Settings = {
   lefty: false,
   kbTapMode: true,
   builtinSongs: true,
+  favouritesOnly: false,
   timingBar: true,
   missFeedback: 'auto',
   missSounds: true,

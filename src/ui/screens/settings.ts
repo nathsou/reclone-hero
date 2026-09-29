@@ -8,6 +8,7 @@ import type { Settings } from '../../settings.ts';
 import { shortPadName } from '../app.ts';
 import type { App, Screen } from '../app.ts';
 import { h, replace } from '../dom.ts';
+import { controls } from '../focusNav.ts';
 import { THEMES } from '../themes.ts';
 import type { ThemeId } from '../themes.ts';
 import { SKINS, SKIN_IDS } from '../../render/skins.ts';
@@ -162,7 +163,7 @@ export class SettingsModal implements Screen {
       try {
         const backup = parseBackup(await file.text());
         const sum = summarize(backup);
-        const parts = [sum.settings && 'settings', sum.keys && 'keyboard keys', sum.controllers && `${sum.controllers} controller${sum.controllers > 1 ? 's' : ''}`, sum.scores && `${sum.scores} best score${sum.scores > 1 ? 's' : ''}`, sum.plays && `play history for ${sum.plays} song${sum.plays > 1 ? 's' : ''}`].filter(Boolean);
+        const parts = [sum.settings && 'settings', sum.keys && 'keyboard keys', sum.controllers && `${sum.controllers} controller${sum.controllers > 1 ? 's' : ''}`, sum.scores && `${sum.scores} best score${sum.scores > 1 ? 's' : ''}`, sum.plays && `play history for ${sum.plays} song${sum.plays > 1 ? 's' : ''}`, sum.favourites && `${sum.favourites} favourite${sum.favourites > 1 ? 's' : ''}`].filter(Boolean);
         replace(
           status,
           h('p', null, `Backup from ${new Date(sum.exportedAt).toLocaleString()} with ${parts.join(', ') || 'nothing'}.`),
@@ -197,7 +198,7 @@ export class SettingsModal implements Screen {
       h(
         'p',
         { class: 'hint' },
-        `Export saves your settings, keyboard keys, controller mappings, play history and ${scores} best score${scores === 1 ? '' : 's'} to a file. Import it on the other computer. Your songs are not included: point the game at your charts folder there.`,
+        `Export saves your settings, keyboard keys, controller mappings, play history, favourites and ${scores} best score${scores === 1 ? '' : 's'} to a file. Import it on the other computer. Your songs are not included: point the game at your charts folder there.`,
       ),
       h('div', { class: 'actions' }, h('button', { class: 'btn primary', onclick: () => downloadBackup() }, 'Export…'), h('button', { class: 'btn', onclick: () => fileInput.click() }, 'Import…')),
       fileInput,
@@ -342,9 +343,9 @@ export class SettingsModal implements Screen {
     );
   }
 
-  /** Rows the arrow keys move between: the primary control of each row. */
+  /** Controls the arrow keys and strum move between: every row's control and every button. */
   private stops(): HTMLElement[] {
-    return [...this.body.querySelectorAll<HTMLElement>('[data-stop]')];
+    return controls(this.body);
   }
 
   private moveStop(dir: number) {

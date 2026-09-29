@@ -1,7 +1,9 @@
 import { audio } from '../../audio/audio.ts';
 import { input } from '../../input/input.ts';
+import type { NavAction } from '../../input/input.ts';
 import { settings, updateSettings } from '../../settings.ts';
 import type { App, Screen } from '../app.ts';
+import { keyFocus, navFocus } from '../focusNav.ts';
 import { h, replace, setText } from '../dom.ts';
 
 const BPM = 100;
@@ -200,11 +202,17 @@ export class CalibrationModal implements Screen {
     if (this.running) this.stop(false);
   }
 
+  nav(a: NavAction): void {
+    if (this.running) return;
+    if (a === 'back') this.close();
+    else navFocus(this.el, a);
+  }
+
   key(e: KeyboardEvent): boolean {
     if (e.key === 'Escape') {
       this.close();
       return true;
     }
-    return false;
+    return this.running ? false : keyFocus(this.el, e);
   }
 }
