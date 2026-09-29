@@ -1,193 +1,206 @@
 import { rng } from './dsp.ts';
 import type { SongDef } from './score.ts';
+import { COVER_DESIGNS } from './coverDesign.ts';
+import type { CoverDesign } from './coverDesign.ts';
 
 const SIZE = 512;
+const FONT = "'Inter Tight', 'Inter', system-ui, sans-serif";
+const TAU = Math.PI * 2;
 
-/** Album cover for a built-in song: a gradient, a motif, and the title set in the corner. */
+/** A cover is a small vector score, drawn only on demand. PNGs never enter the shipped bundle. */
 export async function coverArt(def: SongDef): Promise<Blob> {
+  // The same bundled typeface is used by the UI. Wait for it so first-visit covers don't cache
+  // fallback-font lettering, which can overflow after a reload on another browser.
+  await document.fonts.load(`800 48px ${FONT}`);
   const canvas = document.createElement('canvas');
   canvas.width = canvas.height = SIZE;
   const g = canvas.getContext('2d')!;
-  const { from, to, ink, motif } = def.art;
-  const bg = g.createLinearGradient(0, 0, SIZE * 0.3, SIZE);
-  bg.addColorStop(0, from);
-  bg.addColorStop(1, to);
+  drawCover(g, def);
+  return new Promise((resolve, reject) => canvas.toBlob(b => b ? resolve(b) : reject(new Error('toBlob failed')), 'image/png'));
+}
+
+/** Kept separate from Blob encoding so the whole collection can be previewed and audited. */
+export function drawCover(g: CanvasRenderingContext2D, def: SongDef): void {
+  const design = COVER_DESIGNS[def.id] ?? fallback(def);
+  const seed = [...def.id].reduce((a, c) => Math.imul(a, 31) + c.charCodeAt(0) | 0, 7);
+  const rand = rng(seed);
+  const { from, to, ink } = def.art;
+  const paper = design.layout === 1;
+  const bold = design.layout === 2;
+  const bg = paper ? ink : bold ? to : from;
+  // Dark accent colours sometimes need light lettering even on the bold poster layout.
+  let fg = contrast(from, bg) >= contrast(ink, bg) ? from : ink;
+  if (contrast(fg, bg) < 4.5) fg = contrast('#ffffff', bg) > contrast('#060606', bg) ? '#ffffff' : '#060606';
+  const accent = paper ? to : bold ? ink : to;
+  g.save();
   g.fillStyle = bg;
   g.fillRect(0, 0, SIZE, SIZE);
-  const rand = rng([...def.id].reduce((a, c) => a * 31 + c.charCodeAt(0), 7));
-  g.strokeStyle = ink;
-  g.fillStyle = ink;
   g.lineCap = 'round';
-  const c = SIZE / 2;
+  g.lineJoin = 'round';
 
-  switch (motif) {
-    case 'sun': {
-      // setting sun cut by horizontal bands, over a horizon
-      const r = SIZE * 0.3;
-      const cy = SIZE * 0.5;
-      g.save();
-      g.beginPath();
-      g.arc(c, cy, r, 0, Math.PI * 2);
-      g.clip();
-      const sun = g.createLinearGradient(0, cy - r, 0, cy + r);
-      sun.addColorStop(0, ink);
-      sun.addColorStop(1, to);
-      g.fillStyle = sun;
-      g.fillRect(0, 0, SIZE, SIZE);
-      g.fillStyle = from;
-      for (let i = 0; i < 7; i++) {
-        const y = cy + r * 0.05 + i * i * 3.4 + i * 6;
-        g.fillRect(0, y, SIZE, 2 + i * 1.6);
-      }
-      g.restore();
-      g.globalAlpha = 0.55;
-      g.lineWidth = 1.5;
-      for (let i = 0; i < 9; i++) {
-        const y = cy + r + 6 + i * i * 2.2;
-        g.beginPath();
-        g.moveTo(0, y);
-        g.lineTo(SIZE, y);
-        g.stroke();
+  // Oversized colour fields give the thumbnail a silhouette before the fine lettering is legible.
+  g.fillStyle = accent;
+  g.globalAlpha = paper ? 0.16 : bold ? 0.18 : 0.28;
+  if (paper) {
+    g.beginPath(); g.arc(384, 135, 246, 0, TAU); g.fill();
+  } else if (bold) {
+    g.beginPath(); g.moveTo(0, 0); g.lineTo(310, 0); g.lineTo(512, 334); g.lineTo(512, 392); g.lineTo(0, 195); g.fill();
+  } else {
+    g.globalAlpha = 0.3;
+    g.beginPath(); g.ellipse(280, 196, 204, 160, -0.3, 0, TAU); g.fill();
+  }
+  g.globalAlpha = 1;
+  backdrop(g, design.scene, accent, rand, paper);
+
+  // Three distinct poster compositions, with per-song framing and an individually drawn symbol.
+  g.save();
+  const x = paper ? 105 : bold ? 128 : 108;
+  const y = paper ? 82 : bold ? 72 : 76;
+  const scale = paper ? 2.7 : bold ? 2.65 : 2.85;
+  g.translate(x, y);
+  g.scale(scale, scale);
+  g.translate(50, 50);
+  g.rotate(paper ? -0.07 : bold ? 0.06 : 0);
+  g.translate(-50, -50);
+  const silhouette = new Path2D(design.shape);
+  g.save();
+  g.translate(paper ? 2 : 3, paper ? 3 : 4);
+  g.fillStyle = accent;
+  g.globalAlpha = paper ? 0.7 : 0.45;
+  g.fill(silhouette, 'evenodd');
+  g.restore();
+  g.fillStyle = fg;
+  g.fill(silhouette, 'evenodd');
+  if (design.lines) {
+    g.strokeStyle = accent;
+    g.lineWidth = 1.5;
+    g.stroke(new Path2D(design.lines));
+  }
+  g.restore();
+
+  // A quiet title area holds its contrast regardless of the illustration palette.
+  g.fillStyle = bg;
+  g.globalAlpha = 0.94;
+  g.fillRect(0, 370, SIZE, 142);
+  g.globalAlpha = 1;
+  g.strokeStyle = fg;
+  g.globalAlpha = 0.35;
+  g.lineWidth = 1;
+  g.beginPath(); g.moveTo(30, 370); g.lineTo(482, 370); g.stroke();
+  g.globalAlpha = 1;
+  g.fillStyle = fg;
+  g.textBaseline = 'top';
+  lettering(g, def.artist.toUpperCase(), 30, 24, 452, 15, 600);
+  // The genre is secondary, leaving the title and composer as the visual anchors.
+  g.save(); g.translate(485, 352); g.rotate(-Math.PI / 2);
+  g.globalAlpha = 0.75;
+  lettering(g, def.genre.toUpperCase(), 0, -12, 240, 11, 600);
+  g.restore();
+  title(g, def.name, fg);
+  g.restore();
+}
+
+function contrast(a: string, b: string): number {
+  const luminance = (hex: string) => {
+    const channels = [1, 3, 5].map(i => {
+      const c = parseInt(hex.slice(i, i + 2), 16) / 255;
+      return c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
+    });
+    return channels[0] * 0.2126 + channels[1] * 0.7152 + channels[2] * 0.0722;
+  };
+  const l = [luminance(a), luminance(b)].sort((x, y) => y - x);
+  return (l[0] + 0.05) / (l[1] + 0.05);
+}
+
+function lettering(g: CanvasRenderingContext2D, text: string, x: number, y: number, width: number, size: number, weight: number) {
+  g.font = `${weight} ${size}px ${FONT}`;
+  while (g.measureText(text).width > width && size > 9) g.font = `${weight} ${--size}px ${FONT}`;
+  g.fillText(text, x, y, width);
+}
+
+/** Keep meaningful words together; long classical titles get three lines instead of tiny type. */
+function title(g: CanvasRenderingContext2D, name: string, color: string) {
+  let size = name.length < 18 ? 55 : 48;
+  let lines: string[] = [];
+  for (; size >= 29; size--) {
+    g.font = `800 ${size}px ${FONT}`;
+    lines = [''];
+    for (const word of name.split(/\s+/)) {
+      const i = lines.length - 1;
+      const candidate = lines[i] ? `${lines[i]} ${word}` : word;
+      if (lines[i] && g.measureText(candidate).width > 452) lines.push(word);
+      else lines[i] = candidate;
+    }
+    if (lines.length * size * 1.04 <= 104 && lines.every(l => g.measureText(l).width <= 452)) break;
+  }
+  g.fillStyle = color;
+  g.font = `800 ${size}px ${FONT}`;
+  const y = 386 + Math.max(0, (104 - lines.length * size * 1.04) / 2);
+  lines.forEach((line, i) => g.fillText(line, 30, y + i * size * 1.04, 452));
+}
+
+function backdrop(g: CanvasRenderingContext2D, scene: CoverDesign['scene'], color: string, rand: () => number, paper: boolean) {
+  g.save();
+  g.beginPath(); g.rect(0, 58, 512, 306); g.clip();
+  g.fillStyle = g.strokeStyle = color;
+  g.globalAlpha = paper ? 0.35 : 0.38;
+  g.lineWidth = 1.5;
+  switch (scene) {
+    case 'rays':
+      for (let i = 0; i < 18; i++) {
+        const a = i / 18 * TAU + rand() * 0.04;
+        g.beginPath(); g.moveTo(256 + Math.cos(a) * 167, 215 + Math.sin(a) * 167);
+        g.lineTo(256 + Math.cos(a) * 360, 215 + Math.sin(a) * 360); g.stroke();
       }
       break;
-    }
-    case 'grid': {
-      const hy = SIZE * 0.46;
-      g.globalAlpha = 0.8;
-      g.lineWidth = 2;
-      for (let i = -12; i <= 12; i++) {
-        g.beginPath();
-        g.moveTo(c + i * 8, hy);
-        g.lineTo(c + i * 90, SIZE);
-        g.stroke();
-      }
-      for (let i = 1; i < 12; i++) {
-        const y = hy + (SIZE - hy) * (i / 12) ** 2.2;
-        g.beginPath();
-        g.moveTo(0, y);
-        g.lineTo(SIZE, y);
-        g.stroke();
-      }
-      g.globalAlpha = 1;
-      for (let i = 0; i < 40; i++) g.fillRect(rand() * SIZE, rand() * hy * 0.9, 2, 2);
-      break;
-    }
-    case 'rings': {
-      g.lineWidth = 3;
-      for (let i = 0; i < 14; i++) {
-        g.globalAlpha = 0.9 - i * 0.055;
-        g.beginPath();
-        g.arc(c + i * 6, SIZE * 0.42 - i * 2, 18 + i * 17, 0, Math.PI * 2);
-        g.stroke();
+    case 'steps':
+      for (let i = 0; i < 8; i++) {
+        g.beginPath(); const y = 85 + i * 36;
+        g.moveTo(0, y); g.lineTo(58 + i * 25, y); g.lineTo(112 + i * 25, y + 26); g.lineTo(512, y + 26); g.stroke();
       }
       break;
-    }
-    case 'bars': {
-      const n = 24;
-      const w = SIZE / n;
-      for (let i = 0; i < n; i++) {
-        const h = SIZE * (0.12 + 0.55 * Math.abs(Math.sin(i * 0.45 + rand() * 0.6)) * (0.5 + rand() * 0.5));
-        g.globalAlpha = 0.35 + 0.6 * (h / (SIZE * 0.67));
-        g.fillRect(i * w + 3, SIZE * 0.72 - h, w - 6, h);
+    case 'ribbons':
+      for (let i = 0; i < 6; i++) {
+        g.beginPath(); const x = -100 + i * 120;
+        g.moveTo(x, 80); g.bezierCurveTo(x + 220, 95, x - 130, 304, x + 240, 355); g.stroke();
       }
       break;
-    }
-    case 'wave': {
-      g.lineWidth = 2.5;
-      for (let k = 0; k < 16; k++) {
-        g.globalAlpha = 0.25 + k * 0.045;
-        g.beginPath();
-        for (let x = 0; x <= SIZE; x += 4) {
-          const y = SIZE * 0.2 + k * 20 + Math.sin(x * 0.018 + k * 0.5) * 24 * Math.sin(k * 0.3 + 0.5) + Math.sin(x * 0.051 + k) * 6;
-          if (x === 0) g.moveTo(x, y);
-          else g.lineTo(x, y);
+    case 'stars':
+      for (let i = 0; i < 50; i++) {
+        const x = 12 + rand() * 488, y = 60 + rand() * 290, r = 1 + rand() * 2;
+        if (i % 8 === 0) { g.fillRect(x - r * 2, y, r * 4, 1); g.fillRect(x, y - r * 2, 1, r * 4); }
+        else {g.beginPath(); g.arc(x, y, r, 0, TAU); g.fill();}
+      }
+      break;
+    case 'staff':
+      for (let j = 0; j < 3; j++) for (let i = 0; i < 5; i++) {
+        const y = 90 + j * 112 + i * 9;
+        g.beginPath();g.moveTo(0, y);g.bezierCurveTo(180, y - 50, 360, y + 40, 512, y - 15);g.stroke();
+      }
+      break;
+    case 'tiles':
+      for (let y = 62; y < 364; y += 38) for (let x = 12; x < 512; x += 38) {
+        if (rand() < 0.24) g.fillRect(x, y, 18, 18);
+        else g.strokeRect(x, y, 18, 18);
+      }
+      break;
+    case 'ripples':
+      for (let i = 0; i < 11; i++) {
+        const y = 65 + i * 29;
+        g.beginPath();g.moveTo(-20, y);
+        for (let x = -20; x < 532; x += 55) {
+          g.quadraticCurveTo(x + 14, y - 11, x + 28, y);
+          g.quadraticCurveTo(x + 41, y + 11, x + 55, y);
         }
         g.stroke();
       }
       break;
-    }
-    case 'crest': {
-      // nested arches, like a cathedral window, with a rose at the top
-      g.lineWidth = 3;
-      for (let i = 0; i < 6; i++) {
-        const w = 150 - i * 22;
-        const top = SIZE * 0.2 + i * 18;
-        const bottom = SIZE * 0.74;
-        g.globalAlpha = 1 - i * 0.12;
-        g.beginPath();
-        g.moveTo(c - w, bottom);
-        g.lineTo(c - w, top + w);
-        g.arc(c, top + w, w, Math.PI, 0);
-        g.lineTo(c + w, bottom);
-        g.stroke();
-      }
-      g.globalAlpha = 0.9;
-      for (let k = 0; k < 12; k++) {
-        const a = (k / 12) * Math.PI * 2;
-        g.beginPath();
-        g.arc(c + Math.cos(a) * 26, SIZE * 0.36 + Math.sin(a) * 26, 14, 0, Math.PI * 2);
-        g.stroke();
-      }
-      break;
-    }
-    case 'shards': {
-      for (let i = 0; i < 26; i++) {
-        g.globalAlpha = 0.15 + rand() * 0.6;
-        const x = rand() * SIZE;
-        const y = rand() * SIZE * 0.75;
-        const s = 20 + rand() * 90;
-        g.beginPath();
-        g.moveTo(x, y);
-        g.lineTo(x + (rand() - 0.5) * s * 2, y + s);
-        g.lineTo(x + (rand() - 0.5) * s * 2, y + s * (0.3 + rand()));
-        g.closePath();
-        if (rand() < 0.5) g.fill();
-        else g.stroke();
-      }
-      break;
-    }
-    case 'orbit': {
-      g.lineWidth = 1.5;
-      for (let i = 0; i < 7; i++) {
-        g.globalAlpha = 0.7;
-        g.beginPath();
-        g.ellipse(c, SIZE * 0.42, 40 + i * 30, 14 + i * 10, -0.35, 0, Math.PI * 2);
-        g.stroke();
-        // a planet somewhere on the (rotated) orbit
-        const a = rand() * Math.PI * 2;
-        const rx = 40 + i * 30;
-        const ry = 14 + i * 10;
-        const th = -0.35;
-        const px = c + rx * Math.cos(a) * Math.cos(th) - ry * Math.sin(a) * Math.sin(th);
-        const py = SIZE * 0.42 + rx * Math.cos(a) * Math.sin(th) + ry * Math.sin(a) * Math.cos(th);
-        g.globalAlpha = 1;
-        g.beginPath();
-        g.arc(px, py, 4 + rand() * 5, 0, Math.PI * 2);
-        g.fill();
-      }
-      g.beginPath();
-      g.arc(c, SIZE * 0.42, 26, 0, Math.PI * 2);
-      g.fill();
-      break;
-    }
   }
+  g.restore();
+}
 
-  // title block
-  g.globalAlpha = 1;
-  const shade = g.createLinearGradient(0, SIZE * 0.62, 0, SIZE);
-  shade.addColorStop(0, 'rgba(0,0,0,0)');
-  shade.addColorStop(1, 'rgba(0,0,0,0.55)');
-  g.fillStyle = shade;
-  g.fillRect(0, SIZE * 0.6, SIZE, SIZE * 0.4);
-  g.fillStyle = '#fff';
-  g.textBaseline = 'alphabetic';
-  const font = "'Inter Tight', 'Inter', system-ui, sans-serif";
-  let size = 58;
-  g.font = `800 ${size}px ${font}`;
-  while (g.measureText(def.name).width > SIZE - 64 && size > 26) g.font = `800 ${(size -= 2)}px ${font}`;
-  g.fillText(def.name, 32, SIZE - 40);
-  g.globalAlpha = 0.85;
-  g.font = `600 22px ${font}`;
-  g.fillText(def.artist.toUpperCase(), 32, SIZE - 40 - size - 6);
-  return new Promise((resolve, reject) => canvas.toBlob((b) => (b ? resolve(b) : reject(new Error('toBlob failed'))), 'image/png'));
+/** New, uncatalogued songs still get a code-only cover; the shipped catalog has bespoke designs. */
+function fallback(def: SongDef): CoverDesign {
+  return {scene: def.art.motif === 'orbit' ? 'stars' : 'ribbons', layout: 0,
+    shape: 'M18 25H82V75H18ZM26 33V67H74V33Z', lines:'M35 55L45 40L55 60L65 45'};
 }

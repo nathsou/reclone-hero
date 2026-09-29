@@ -77,6 +77,7 @@ try {
   console.log('PASS: medium default, explicit high preserved, covers after search/sort/genre/favourites/empty results');
 
   await page.getByRole('button', { name: 'Settings', exact: true }).click();
+  await page.locator('.settings-page').evaluate(el => Promise.all(el.getAnimations().map(a => a.finished)));
   for (const width of [1280, 1024, 390]) {
     await page.setViewportSize({width, height:800});
     let navBox;

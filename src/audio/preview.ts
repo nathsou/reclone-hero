@@ -20,8 +20,11 @@ export class PreviewPlayer {
     const stems = song.stems;
     const files = stems.preview ? [stems.preview] : Object.entries(stems).filter(([k]) => k !== 'crowd' && k !== 'preview').map(([, f]) => f);
     if (!files.length) return;
-    const urls = await Promise.all(files.map((f) => this.library.fileUrl(song, f)));
-    if (token !== this.token) {
+    const loaded = await Promise.allSettled(files.map((f) => this.library.fileUrl(song, f)));
+    const urls = loaded.flatMap(r => r.status === 'fulfilled' ? [r.value] : []);
+    // Fast browsing supersedes queued built-in previews. They are optional: a canceled or
+    // unreadable preview must neither produce an unhandled rejection nor leak other stem URLs.
+    if (token !== this.token || loaded.some(r => r.status === 'rejected')) {
       urls.forEach((u) => this.library.release(u));
       return;
     }

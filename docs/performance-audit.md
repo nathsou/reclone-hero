@@ -62,6 +62,20 @@ are mix measurements, not an assertion of a listening study. The ten new songs a
 their complete audio at 22.05 kHz in the test suite; a separate full render at 44.1 kHz also checks
 finite samples, non-silent stems and the linked mix peak limit.
 
+## Cover artwork and browsing
+
+All 53 built-ins now have individual vector illustrations and share a small Canvas renderer. The art redesign
+and preview error handling add about 4.9 KB gzip to the complete single-file build (276.46 → 281.32 KB).
+No PNGs are bundled: a cover is encoded only when requested and reused by the existing artwork cache.
+The flat colour fields avoid expensive image textures and keep runtime PNGs small (about 37 KiB on average
+in Chrome). A contact-sheet audit checks all 53 complete, distinct renders and provides 36-pixel thumbnails
+for visual review. Existing bundled fonts are loaded before encoding to prevent cached fallback lettering.
+
+Rapid production browsing also reproduced unhandled “superseded” preview errors. Preview loads now settle
+all stem requests, release partially loaded URLs on cancellation/failure, and return quietly. Regression
+tests cover both a rejected stem and a canceled request that returns late. Audio preview failures do not
+prevent song selection or gameplay.
+
 ## WASM assessment and next priorities
 
 - Keep judgement, input and frame orchestration in TypeScript. The JS benchmark has substantial CPU
@@ -89,6 +103,9 @@ node tests/bench/starter.bench.ts photon-run --full
 # With an optional Playwright installation and Chrome, start Vite, then:
 PLAYWRIGHT_MODULE=/absolute/path/to/playwright/index.mjs \
 CHROME_PATH=/absolute/path/to/chrome node tests/tools/browser-audit.mjs
+# For the cover contact sheet:
+PLAYWRIGHT_MODULE=/absolute/path/to/playwright/index.mjs \
+CHROME_PATH=/absolute/path/to/chrome node tests/tools/cover-audit.mjs
 ```
 
 Browser checks cover filtered/reordered/favourite cover identity, touch momentum/snapping/cancellation,

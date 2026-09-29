@@ -25,7 +25,7 @@ Open the printed URL in a Chromium-based browser (Chrome, Edge, Arc, Brave).
 
 ### Without any server
 
-`npm run build` produces a single self-contained file, `dist/index.html` (about 785 KB, all scripts, fonts,
+`npm run build` produces a single self-contained file, `dist/index.html` (about 796 KB, all scripts, fonts,
 styles and the built-in songs inlined). Double-click it to play from disk (`file://`), or put it on any static host (GitHub Pages,
 Netlify, a USB stick). Pushing to `main` deploys it to GitHub Pages (`.github/workflows/pages.yml`). Nothing runs server-side: songs are read in the browser.
 
@@ -180,6 +180,12 @@ are the public-domain incipits on [IMSLP's The Planets page](https://imslp.org/w
 The Circuit Atlas tracks draw on the production palettes of Daft Punk's *Homework*, *Discovery*,
 *Human After All* and *TRON: Legacy*, respectively, with newly written melodies and no samples from those records.
 Ode to Joy's lead/band balance and Pocket Change's headroom have also been improved.
+
+Every starter song has a bespoke vector cover illustrating its musical theme, with prominent title and
+composer/artist lettering. Compact path commands and shared drawing routines generate the covers on demand;
+no cover image files, external downloads or extra fonts are bundled. Three poster layouts, seven background
+treatments and individually drawn silhouettes keep all 53 covers distinct at both Cover Flow and thumbnail sizes.
+`tests/tools/cover-audit.mjs` renders a contact sheet for reviewing the complete collection.
 
 Many of the older melodies are quoted note for note from public ABC transcriptions,
 read by a small ABC reader (`src/starter/abc.ts`, checked bar by bar by a test): thesession.org (Korobeiniki,
