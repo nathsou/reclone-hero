@@ -1017,9 +1017,9 @@ export class Renderer {
     gl.bindTexture(gl.TEXTURE_2D, B.length ? B[0].tex : scene.tex);
     gl.uniform1i(p.u.u_bloom, 1);
     gl.uniform1f(p.u.u_bloomAmt, B.length ? s.theme.bloom : 0);
-    // the Classic board keeps the page dark: its screen-edge flood and drain are toned down
-    gl.uniform1f(p.u.u_miss, s.missPulse * (s.theme.board > 0.5 ? 0.45 : 1));
-    gl.uniform1f(p.u.u_sp, s.spActive ? (s.theme.board > 0.5 ? 0.3 : 1) : 0);
+    // the Classic board and the paper keep the page calm: their screen-edge flood and drain are toned down
+    gl.uniform1f(p.u.u_miss, s.missPulse * (s.theme.board > 0.5 || s.theme.ink > 0.5 ? 0.45 : 1));
+    gl.uniform1f(p.u.u_sp, s.spActive ? (s.theme.board > 0.5 || s.theme.ink > 0.5 ? 0.3 : 1) : 0);
     gl.uniform1f(p.u.u_vignette, s.theme.vignette);
     gl.uniform1f(p.u.u_scan, s.theme.scanlines);
     gl.uniform1f(p.u.u_flat, s.theme.ink);

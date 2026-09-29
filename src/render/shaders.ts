@@ -330,7 +330,7 @@ void main() {
   if (i_b.y == 1.0) p *= vec3(u_hopoScale, u_hopoScale * 0.85, u_hopoScale);
   p.y *= 1.0 - 0.65 * u_ink;   // inked gems are nearly flat: a thin black edge rather than a tall wall
   // dome shadow disc: a soft shadow, or the ink look's hard drop shadow, pushed towards the camera
-  if (a_region > 3.5) p.z += mix(0.04, 0.075, u_ink) * s;
+  if (a_region > 3.5) p.z += mix(0.04, 0.06, u_ink) * s;
   v_world = p + i_a.xyz;
   v_normal = a_normal;
   v_local = a_pos;
@@ -460,7 +460,7 @@ vec4 dome(vec3 N, vec3 V, vec3 L) {
       // HOPO: a white body that only picks up the fret colour at the edge (the cap hides the middle)
       float u = clamp((length(bq - vec2(0.0, -0.1)) - 0.4) / 0.6, 0.0, 1.0);
       vec3 mid = hexc(0xd9d5cd);
-      s = u < 0.55 ? mix(vec3(1.0), mid, u / 0.55) : mix(mid, fretS, (u - 0.55) / 0.45 * 0.6);
+      s = u < 0.65 ? mix(vec3(1.0), mid, u / 0.65) : mix(mid, fretS, (u - 0.65) / 0.35 * 0.5);
     } else {
       s = bt < 0.55 ? mix(tintS, fretS, bt / 0.55) : mix(fretS, shadeS, clamp((bt - 0.55) / 0.45, 0.0, 1.0));
     }
