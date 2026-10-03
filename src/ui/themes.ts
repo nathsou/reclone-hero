@@ -81,7 +81,7 @@ export const THEMES: Record<ThemeId, ThemeDef> = {
       railColor: [0.55, 0.53, 0.5],
       hwFar: [0.004, 0.003, 0.0026],
       hwNear: [0.0095, 0.0068, 0.0056],
-      laneLine: [0.03, 0.028, 0.026],
+      laneLine: [0.075, 0.07, 0.064],
       strike: [0.55, 0.53, 0.5],
       beat: [0.72, 0.7, 0.66],
       bloom: 0.45,

@@ -271,14 +271,16 @@ void main() {
 
   vec3 base = mix(u_hwFar, u_hwNear, near);
   if (board) {
-    // dark board: diagonal stripes and a fine grain, both faded out where they would alias
-    float diag = (x * 0.8 + track * 0.62) * 3.4;
-    float stripe = smoothstep(0.42, 0.58, abs(fract(diag) - 0.5) * 2.0);
+    // dark board: soft diagonal stripes and a fine grain that scroll with the chart (so the surface
+    // reads as moving) but stay low in contrast, so nothing on the board competes with the gems;
+    // both fade out where they would alias
+    float diag = (x * 0.8 + track * 0.62) * 2.4;
+    float stripe = smoothstep(0.3, 0.7, abs(fract(diag) - 0.5) * 2.0);
     stripe = mix(0.5, stripe, 1.0 - smoothstep(0.25, 0.6, fwidth(diag)));
     vec2 gp = vec2(x * 46.0, track * 4.0);
     float grain = hash21(floor(gp)) - 0.5;
     grain *= 1.0 - smoothstep(0.3, 0.8, fwidth(gp.x));
-    base = mix(disp(hexc(0x1d1511)), disp(hexc(0x33241c)), stripe) * (1.0 + grain * 0.3);
+    base = mix(disp(hexc(0x1a1310)), disp(hexc(0x241a15)), stripe) * (1.0 + grain * 0.22);
     // the theme's far colour is darker than its near colour: keep that as the fade with distance
     base *= mix(u_hwFar.g / max(u_hwNear.g, 1e-5), 1.0, near);
   }
@@ -334,8 +336,9 @@ void main() {
   float d = abs(fract(x) - 0.5);
   float sep;
   if (board || inked) {
+    // at least a pixel and a half wide, so the lanes stay legible all the way down the highway
     float lw = fwidth(x);
-    sep = (1.0 - smoothstep(lw * 0.4, lw * 1.4, d)) * step(ax, 2.0);
+    sep = (1.0 - smoothstep(max(lw * 0.75, 0.008), max(lw * 1.75, 0.016), d)) * step(ax, 2.0);
   } else {
     sep = (1.0 - smoothstep(0.0, 0.02, d)) * step(ax, 2.0);
   }
