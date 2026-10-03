@@ -21,7 +21,7 @@ type Tab = 'gameplay' | 'audio' | 'video' | 'controls' | 'data';
 
 const TAB_LABEL: Record<Tab, string> = { gameplay: 'Gameplay', audio: 'Audio', video: 'Display', controls: 'Controls', data: 'Data' };
 const TABS = Object.keys(TAB_LABEL) as Tab[];
-const FRETS = ['#3cf06a', '#ff3b4a', '#ffd23a', '#3a8bff', '#ff8a1f'];
+const FRETS = ['#1fd14a', '#f2263b', '#ffcc12', '#2271ff', '#ff7a0f'];
 
 export class SettingsModal implements Screen {
   readonly el: HTMLElement;
@@ -107,6 +107,7 @@ export class SettingsModal implements Screen {
       slider('Strum leniency', 'strumLeniencyMs', 0, 120, 5, (v) => `${v} ms`, 'How long a strum may come before its fret press.'),
       h('div', { class: 'sec-label' }, 'Feedback'),
       toggle('Timing bar', 'timingBar', 'Shows early/late ticks under the strike line.'),
+      toggle('Lyrics', 'lyrics', 'Shows the words at the top of the screen on charts that have them.'),
       toggle('Auto Star Power', 'autoStarPower', 'Star Power goes off by itself as soon as it can, just before the next notes. Handy on touch screens.'),
       select('When you miss', 'missFeedback', [
         ['auto', 'Mute my part (or muffle)'],

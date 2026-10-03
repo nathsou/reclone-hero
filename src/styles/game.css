@@ -96,6 +96,7 @@
 
 /* ------------------------------------------------------------------ HUD */
 .hud {
+  --dock-y: 96px;
   position: absolute;
   inset: 0;
   pointer-events: none;
@@ -219,6 +220,84 @@
   color: var(--text);
   text-transform: uppercase;
   letter-spacing: 0.04em;
+}
+
+/* lyrics: in the top bar, in place of the song title (songs with lyrics only): the line being sung with
+   its sung syllables lit and the next line below, clear of the highway where notes arrive */
+.hud-lyrics {
+  position: absolute;
+  left: 50%;
+  top: calc(8px + env(safe-area-inset-top));
+  width: max-content;
+  max-width: min(92vw, 820px);
+  transform: translateX(-50%);
+  text-align: center;
+  opacity: 0;
+  transition: opacity 0.25s;
+}
+
+.hud.has-lyrics .hud-top {
+  display: none;
+}
+
+.hud.has-lyrics {
+  --dock-y: 112px;
+}
+
+.hud.has-lyrics .hud-timeline {
+  top: calc(70px + env(safe-area-inset-top));
+}
+
+.hud-lyrics.on {
+  opacity: 1;
+}
+
+.hud-lyrics .cur {
+  font: 700 clamp(19px, 2.3vw, 27px) / 1.2 var(--font-display);
+  letter-spacing: -0.01em;
+  color: var(--text);
+  white-space: pre-wrap;
+}
+
+.hud-lyrics .cur .sung {
+  color: var(--accent);
+}
+
+.hud-lyrics .next {
+  margin-top: 2px;
+  font: 500 clamp(13px, 1.5vw, 17px) / 1.25 var(--font-display);
+  color: var(--dim);
+  white-space: pre-wrap;
+}
+
+.hud-lyrics .next:empty {
+  display: none;
+}
+
+.hud-lyrics .cur.in-a {
+  animation: lyric-in-a 0.22s ease-out;
+}
+
+.hud-lyrics .cur.in-b {
+  animation: lyric-in-b 0.22s ease-out;
+}
+
+@keyframes lyric-in-a {
+  from {
+    opacity: 0.2;
+    transform: translateY(6px);
+  }
+}
+
+@keyframes lyric-in-b {
+  from {
+    opacity: 0.2;
+    transform: translateY(6px);
+  }
+}
+
+.hud.narrow .hud-lyrics {
+  max-width: calc(100% - 24px);
 }
 
 /* giant faint section name behind the highway */
@@ -1095,6 +1174,11 @@
     animation: fc-fade 0.3s forwards;
     transform: none;
     color: var(--gold);
+  }
+
+  .hud-lyrics .cur.in-a,
+  .hud-lyrics .cur.in-b {
+    animation: none;
   }
 }
 

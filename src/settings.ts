@@ -30,6 +30,8 @@ export interface Settings {
   /** song list: only starred songs */
   favouritesOnly: boolean;
   timingBar: boolean;
+  /** words at the top of the screen on charts that have lyrics */
+  lyrics: boolean;
   missFeedback: MissFeedback;
   missSounds: boolean;
   volMaster: number;
@@ -65,6 +67,7 @@ export const DEFAULT_SETTINGS: Settings = {
   builtinSongs: true,
   favouritesOnly: false,
   timingBar: true,
+  lyrics: true,
   missFeedback: 'auto',
   missSounds: true,
   volMaster: 0.9,

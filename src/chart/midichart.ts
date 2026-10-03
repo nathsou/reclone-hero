@@ -25,6 +25,8 @@ export function parseMidiChart(bytes: Uint8Array, multiplierNote = 116): RawChar
     tempos: [],
     timeSigs: [],
     sections: [],
+    lyrics: [],
+    phrases: [],
     tracks: new Map(),
     meta: {},
   };
@@ -46,6 +48,10 @@ export function parseMidiChart(bytes: Uint8Array, multiplierNote = 116): RawChar
       readInstrument(track, inst, chart, multiplierNote);
     }
   });
+  // lyrics from the lead vocals, or from the first harmony part when there is no lead part
+  const named = (n: string) => midi.tracks.find((t) => t.name.trim().toUpperCase() === n);
+  const vocals = named('PART VOCALS') ?? named('HARM1');
+  if (vocals) readVocals(vocals, chart);
   return chart;
 }
 
@@ -127,4 +133,33 @@ function readInstrument(track: MidiTrack, inst: Instrument, chart: RawChart, mul
 function inRanges(ranges: TickRange[], tick: number): boolean {
   for (const r of ranges) if (tick >= r.start && tick < r.end) return true;
   return false;
+}
+
+/** Phrase markers in PART VOCALS (Rock Band: 105, and 106 for the second player). */
+const PHRASE_NOTES = [105, 106];
+
+/** Lyrics: every text or lyric event that is not a [bracketed] event, and the phrase notes as lines. */
+function readVocals(track: MidiTrack, chart: RawChart) {
+  const open = new Map<number, number>();
+  const phrases: TickRange[] = [];
+  for (const ev of track.events) {
+    if (ev.type === EV_TEXT && ev.text && (ev.a === 0x01 || ev.a === 0x05)) {
+      const text = ev.text.trim();
+      if (text && !text.startsWith('[')) chart.lyrics.push({ tick: ev.tick, text });
+    } else if ((ev.type === EV_NOTE_ON || ev.type === EV_NOTE_OFF) && PHRASE_NOTES.includes(ev.a)) {
+      const start = open.get(ev.a);
+      if (start !== undefined) {
+        phrases.push({ start, end: ev.tick });
+        open.delete(ev.a);
+      }
+      if (ev.type === EV_NOTE_ON) open.set(ev.a, ev.tick);
+    }
+  }
+  // 105 and 106 often mark the same phrases: keep each range once
+  phrases.sort((a, b) => a.start - b.start || a.end - b.end);
+  for (const p of phrases) {
+    const prev = chart.phrases[chart.phrases.length - 1];
+    if (prev && p.start < prev.end) prev.end = Math.max(prev.end, p.end);
+    else chart.phrases.push({ ...p });
+  }
 }

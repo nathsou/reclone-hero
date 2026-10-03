@@ -296,6 +296,7 @@ export class Game {
     const t = this.setup.track;
     this.hud.setTitle(song.name, song.artist, `${INSTRUMENT_LABEL[t.instrument]} · ${t.difficulty}`);
     this.hud.setSections(this.setup.chart.sections.map((s) => s.time), practice ? practice.start : this.startTime, this.endTime);
+    this.hud.setLyrics(this.setup.chart.lyrics);
     if (practice) this.hud.toast(`PRACTICE · ${practice.label}`, 'info', `${Math.round(practice.speed * 100)}% speed`);
     const touch = !this.setup.bot && TouchFrets.wanted();
     this.hud.touch.setVisible(touch, this.setup.track.instrument === 'touch' ? TOUCH_LANES : undefined);
@@ -504,6 +505,8 @@ export class Game {
       this.sectionIdx = si;
       if (si >= 0) this.hud.setSection(secs[si].name);
     }
+    this.hud.showLyrics(settings.lyrics);
+    this.hud.setLyricsTime(t);
 
     let sustainMask = 0;
     let sustainSp = false;

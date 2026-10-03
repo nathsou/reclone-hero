@@ -23,10 +23,13 @@ export function parseDotChart(text: string): RawChart {
     tempos: [],
     timeSigs: [],
     sections: [],
+    lyrics: [],
+    phrases: [],
     tracks: new Map(),
     meta: {},
   };
   let section = '';
+  let phraseStart = -1;
   let track: RawTrack | null = null;
   let soloStart = -1;
 
@@ -73,6 +76,15 @@ export function parseDotChart(text: string): RawChart {
         const ev = value.slice(1).trim().replace(/^"(.*)"$/, '$1');
         const m = /^section\s+(.*)$/.exec(ev);
         if (m) chart.sections.push({ tick, name: m[1] });
+        else if (ev.startsWith('lyric ')) chart.lyrics.push({ tick, text: ev.slice(6) });
+        else if (ev === 'phrase_start') {
+          // a new phrase also ends one left open
+          if (phraseStart >= 0) chart.phrases.push({ start: phraseStart, end: tick });
+          phraseStart = tick;
+        } else if (ev === 'phrase_end' && phraseStart >= 0) {
+          chart.phrases.push({ start: phraseStart, end: tick });
+          phraseStart = -1;
+        }
       }
     } else if (track) {
       if (kind === 'N') {
@@ -92,6 +104,11 @@ export function parseDotChart(text: string): RawChart {
         }
       }
     }
+  }
+  // a last phrase with no end runs on past its last syllable
+  if (phraseStart >= 0) {
+    const last = chart.lyrics.reduce((m, l) => Math.max(m, l.tick), phraseStart);
+    chart.phrases.push({ start: phraseStart, end: last + chart.resolution * 2 });
   }
   return chart;
 }

@@ -1,3 +1,4 @@
+import type { LyricLine } from '../chart/lyrics.ts';
 import { TouchFrets } from './touchFrets.ts';
 import { formatTime } from '../util/text.ts';
 import { h, setText } from './dom.ts';
@@ -5,6 +6,14 @@ import { h, setText } from './dom.ts';
 const MULT_CLASS = ['', 'm1', 'm2', 'm3', 'm4'];
 const MULT_TEXT = ['', '×1', '×2', '×3', '×4', '×5', '×6', '×7', '×8'];
 const SP_SEGMENTS = 4;
+/** seconds a lyric line shows before it is sung, and the longest pause over which the next line is previewed */
+const LYRIC_LEAD = 1.2;
+const LYRIC_NEXT_GAP = 4;
+
+/** One span per syllable; a space after each word. */
+function lyricSpans(line: LyricLine): HTMLSpanElement[] {
+  return line.syllables.map((s) => h('span', null, s.join ? s.text : s.text + ' '));
+}
 
 /** Group digits without Intl (cheaper, and only called when the number changes). */
 function groupDigits(n: number): string {
@@ -97,6 +106,15 @@ export class Hud {
   private readonly countdown: HTMLDivElement;
   private readonly keys: HTMLDivElement;
   private readonly keyCaps: HTMLSpanElement[] = [];
+  private readonly lyricsEl: HTMLDivElement;
+  private readonly lyricCur: HTMLDivElement;
+  private readonly lyricNext: HTMLDivElement;
+  private lyricLines: LyricLine[] = [];
+  private lyricsOn = true;
+  /** index of the line shown (-1: none), syllables of it already sung, last time seen */
+  private lyricIdx = -1;
+  private lyricSung = 0;
+  private lyricT = -Infinity;
   private lastKeysDown = -1;
   private tickIndex = 0;
   private readonly scoreText = document.createTextNode('0');
@@ -177,12 +195,16 @@ export class Hud {
       this.keyCaps.push(cap);
       this.keys.append(cap);
     }
+    this.lyricCur = h('div', { class: 'cur' });
+    this.lyricNext = h('div', { class: 'next' });
+    this.lyricsEl = h('div', { class: 'hud-lyrics', 'aria-live': 'off' }, this.lyricCur, this.lyricNext);
     this.root = h(
       'div',
       { class: 'hud' },
       h('div', { class: 'hud-vignette' }),
       this.title,
       this.timeline,
+      this.lyricsEl,
       this.left,
       this.right,
       this.toasts,
@@ -204,8 +226,9 @@ export class Hud {
     const narrow = leftEdge[0] < 170 || this.root.clientWidth - rightEdge[0] < 170;
     this.root.classList.toggle('narrow', narrow);
     if (narrow) {
-      this.left.style.transform = 'translate(12px, 96px)';
-      this.right.style.transform = `translate(${this.root.clientWidth - 12}px, 96px) translate(-100%, 0)`;
+      // --dock-y: below the timeline (lower when lyrics take the top bar)
+      this.left.style.transform = 'translate(12px, var(--dock-y))';
+      this.right.style.transform = `translate(${this.root.clientWidth - 12}px, var(--dock-y)) translate(-100%, 0)`;
     } else {
       this.left.style.transform = `translate(${leftEdge[0]}px, ${leftEdge[1]}px) translate(-100%, -100%)`;
       this.right.style.transform = `translate(${rightEdge[0]}px, ${rightEdge[1]}px) translate(0, -100%)`;
@@ -412,6 +435,9 @@ export class Hud {
   /** A new run (start, restart, practice loop): clear what the last one left on screen. */
   resetRun(): void {
     this.runId++;
+    this.lyricT = -Infinity;
+    this.lyricIdx = -1;
+    this.lyricsEl.classList.remove('on');
     clearTimeout(this.soloTimer);
     this.soloTimer = 0;
     this.solo.classList.remove('on', 'done', 'perfect', 'slipping');
@@ -432,6 +458,68 @@ export class Hud {
 
   missTick(): void {
     restartAnim(this.root, 'missflash-a', 'missflash-b');
+  }
+
+  /** The song's lyric lines (empty: none). */
+  setLyrics(lines: LyricLine[]): void {
+    this.lyricLines = lines;
+    this.root.classList.toggle('has-lyrics', lines.length > 0 && this.lyricsOn);
+    this.lyricIdx = -1;
+    this.lyricSung = 0;
+    this.lyricT = -Infinity;
+    this.lyricCur.replaceChildren();
+    this.lyricNext.replaceChildren();
+    this.lyricsEl.classList.remove('on');
+  }
+
+  /** Lyrics setting: hides the lyrics without forgetting them. */
+  showLyrics(on: boolean): void {
+    if (on === this.lyricsOn) return;
+    this.lyricsOn = on;
+    this.lyricsEl.style.display = on ? '' : 'none';
+    this.root.classList.toggle('has-lyrics', on && this.lyricLines.length > 0);
+  }
+
+  /**
+   * Called every frame with the song time: shows the line being sung (from a moment before it starts)
+   * with its sung syllables lit, and the next line under it. Touches the DOM only when a syllable is
+   * reached or the line changes.
+   */
+  setLyricsTime(t: number): void {
+    const lines = this.lyricLines;
+    if (!lines.length || !this.lyricsOn) return;
+    // seeking back (restart, practice loop): find the line again from the top
+    let i = Math.max(0, this.lyricIdx);
+    if (t < this.lyricT - 0.05) {
+      i = 0;
+      this.lyricIdx = -2; // rebuild the line: its sung syllables are not sung any more
+    }
+    this.lyricT = t;
+    while (i < lines.length && lines[i].endTime <= t) i++;
+    // a line appears shortly before it starts; long breaks leave the bar empty
+    const show = i < lines.length && lines[i].startTime - t < LYRIC_LEAD ? i : -1;
+    if (show !== this.lyricIdx) {
+      this.lyricIdx = show;
+      this.lyricSung = 0;
+      if (show < 0) {
+        this.lyricsEl.classList.remove('on');
+      } else {
+        this.lyricCur.replaceChildren(...lyricSpans(lines[show]));
+        const next = lines[show + 1];
+        this.lyricNext.replaceChildren(...(next && next.startTime - lines[show].endTime < LYRIC_NEXT_GAP ? lyricSpans(next) : []));
+        this.lyricsEl.classList.add('on');
+        restartAnim(this.lyricCur, 'in-a', 'in-b');
+      }
+    }
+    if (show < 0) return;
+    const syl = lines[show].syllables;
+    let k = this.lyricSung;
+    while (k < syl.length && syl[k].time <= t) k++;
+    if (k !== this.lyricSung) {
+      const spans = this.lyricCur.children;
+      for (let j = this.lyricSung; j < k; j++) spans[j]?.classList.add('sung');
+      this.lyricSung = k;
+    }
   }
 
   private lastCountdown = 0;
