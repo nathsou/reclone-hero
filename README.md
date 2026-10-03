@@ -194,7 +194,7 @@ Can-Can, Pomp and Circumstance; Frank Nordberg's Spring, Jeff Bigler's two-voice
 caprice from Lester Bailey's collection), Chris Spencer's abc-music (Greensleeves) and Colin Hume
 (Gymnopédie No. 1). Instruments are synthesized from scratch: Karplus–Strong strings through an amp and cabinet
 model for guitars, bass and banjo, band-limited supersaws, pulse, brass, reed and bowed-string oscillators
-(chiptune, horns, accordion, fiddle), FM electric piano and bells, additive organ, tuned timpani and a
+(chiptune, horns, accordion, fiddle), separate acoustic and FM electric pianos, bells, additive organ, tuned timpani and a
 synthesized drum kit, mixed with a Freeverb reverb, tempo-synced echo and a limiter shared by both stems.
 
 Charts are generated for all four difficulties. Expert plays every note of the guitar part. Lower difficulties
@@ -256,6 +256,8 @@ Medium is the default graphics quality; explicit quality choices remain saved. A
 Medium renders 61% fewer pixels than High and uses 2× instead of 4× MSAA. Touch controls establish the
 final canvas size before GPU warm-up, avoiding a target rebuild on the first gameplay frame.
 See [the performance audit](docs/performance-audit.md) for measurements, limitations and the WASM assessment.
+The [starter sound and loading pass](docs/starter-sound-audit.md) documents corrected string tuning,
+acoustic piano, arrangement and mix repairs, and cancellable previews with faster synthesis.
 
 
 The frame loop is built to avoid garbage-collection stutter:
