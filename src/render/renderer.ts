@@ -62,7 +62,7 @@ const BEAT_SP = new Float32Array([0.4, 0.8, 1.2]);
 const DOME = 0;
 const CRYSTAL = 1;
 
-const SUSTAIN_W = 0.13;
+const SUSTAIN_W = 0.14;
 
 export interface RenderState {
   /** song time to draw (already video-calibrated) */
@@ -401,8 +401,11 @@ export class Renderer {
     this.buildTargets();
   }
 
-  /** Camera tuning: eye height/distance and look-at point along the highway. */
-  camera = { height: 5.6, back: 7.4, lookZ: -5.2, fov: 0.74 };
+  /**
+   * Camera tuning: eye height/distance and look-at point along the highway. Steep enough that the far
+   * half of the highway is not squashed: distant gems stay round and readable.
+   */
+  camera = { height: 6.6, back: 6.4, lookZ: -5.4, fov: 0.8 };
 
   private camHeight = NaN;
   private camBack = NaN;

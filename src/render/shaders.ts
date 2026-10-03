@@ -1,5 +1,5 @@
 // GLSL ES 3.0 sources (the #version header is prepended by program()).
-import { DOME_BODY, DOME_CAP, DOME_RIM, DOME_ZS, OPEN_R } from './geometry.ts';
+import { DOME_BODY, DOME_CAP, DOME_RIM, DOME_ZS, OPEN_CAP_L, OPEN_R } from './geometry.ts';
 
 const f = (n: number) => n.toFixed(4);
 
@@ -20,10 +20,10 @@ vec3 invAces(vec3 y) {
 }
 vec3 disp(vec3 s) { return invAces(toLin(s)); }
 vec3 hexc(int v) { return vec3(float((v >> 16) & 255), float((v >> 8) & 255), float(v & 255)) / 255.0; }
-const int FRET[5]  = int[5](0x3cf06a, 0xff3b4a, 0xffd23a, 0x3a8bff, 0xff8a1f);
-const int TINT[5]  = int[5](0x8dffab, 0xff8c96, 0xffe68a, 0x8ab8ff, 0xffb870);
-const int SHADE[5] = int[5](0x15803d, 0xa3162a, 0xa87f06, 0x1d4fb0, 0xb35a0c);
-const int DEEP[5]  = int[5](0x0f6b2c, 0x8c1220, 0x8f6a05, 0x163f94, 0x96480a);
+// Fret colours (green, red, yellow, blue, orange, open): the face, its highlight and its shaded edge.
+const int FRET[6]  = int[6](0x1fd14a, 0xf2263b, 0xffcc12, 0x2271ff, 0xff7a0f, 0xa64dff);
+const int LIGHT[6] = int[6](0x8cffa6, 0xff8a94, 0xfff08a, 0x8cbcff, 0xffbb6b, 0xdcb0ff);
+const int SHADE[6] = int[6](0x08762a, 0x96101f, 0xa37400, 0x0e3ea3, 0xa84606, 0x5a1fa8);
 `;
 
 /**
@@ -512,122 +512,133 @@ const float RIM_R = ${f(DOME_RIM)};
 const float BODY_R = ${f(DOME_BODY)};
 const float CAP_R = ${f(DOME_CAP)};
 const float BAR_R = ${f(OPEN_R)};
+const float OPEN_CAP_L = ${f(OPEN_CAP_L)};
 
-// Classic dome: skirt (0), muted rim (1), cap (2), domed body (3), shadow disc (4, ink only).
+// Classic dome. Regions: dark base (0), bezel ring (1), cap (2), domed body (3), shadow disc (4).
+// One reading per note type, kept in every state: strum = coloured face and a white cap, HOPO = white
+// face inside a coloured ring, tap = dark face inside a coloured ring with a glowing dot.
 vec4 dome(vec3 N, vec3 V, vec3 L) {
   bool isOpen = v_b.x > 4.5;
-  float fwGem = fwidth(length(vec2(v_local.x, v_local.z / ZS)));
-  float fwBar = fwidth(length(vec2(max(abs(v_local.x) - u_openL, 0.0), v_local.z)));
-  float fw = isOpen ? fwBar : fwGem;
-  float fade = smoothstep(-u_len, -u_len * 0.75, v_world.z);
-  int ci = min(int(v_b.x), 4);
-  float type = v_b.y;          // 0 strum, 1 hopo, 2 tap, 3 open
+  int ci = min(int(v_b.x), 5);
+  float type = v_b.y;          // 0 strum, 1 hopo, 2 tap, 3 open strum
   float flags = v_b.z;
   bool sp = mod(flags, 2.0) >= 1.0;
   bool missed = flags >= 2.0;
+  bool hopo = type == 1.0;
+  bool tap = type == 2.0 && !isOpen;
   float reg = v_region;
-  bool skirt = reg < 0.5;
-  bool rimR = reg > 0.5 && reg < 1.5;
+  bool baseR = reg < 0.5;
+  bool bezelR = reg > 0.5 && reg < 1.5;
   bool capR = reg > 1.5 && reg < 2.5;
   bool bodyR = reg > 2.5 && reg < 3.5;
   bool shadow = reg > 3.5;
+  float fade = smoothstep(-u_len, -u_len * 0.75, v_world.z);
 
-  // radial coordinates in world units: r from the centre (or the bar's centre line), lp across
-  vec2 lp = vec2(v_local.x, v_local.z / ZS);
-  float rr = length(lp);
-  float rimOut = RIM_R;
-  float bodyOut = BODY_R;
-  float capOut = CAP_R;
-  if (isOpen) {
-    lp = vec2(0.0, v_local.z);
-    rr = length(vec2(max(abs(v_local.x) - u_openL, 0.0), v_local.z));
-    rimOut = BAR_R;
-    bodyOut = BAR_R - 0.04;
-    capOut = 0.045;
-    if (capR) rr = length(vec2(max(abs(v_local.x) - 0.27, 0.0), v_local.z));
+  // radial coordinates in world units: across the gem, or across the bar from its centre line
+  vec2 lp = isOpen ? vec2(0.0, v_local.z) : vec2(v_local.x, v_local.z / ZS);
+  float rr = isOpen ? length(vec2(max(abs(v_local.x) - u_openL, 0.0), v_local.z)) : length(lp);
+  float bodyOut = isOpen ? 0.13 : BODY_R;
+  float rimOut = isOpen ? BAR_R : RIM_R;
+  float capOut = isOpen ? 0.05 : CAP_R;
+  float rc = (isOpen ? length(vec2(max(abs(v_local.x) - OPEN_CAP_L, 0.0), v_local.z)) : rr) / capOut;
+  float rn = clamp(rr / bodyOut, 0.0, 1.0);
+  float fw = fwidth(rr);
+
+  vec3 fret = hexc(FRET[ci]);
+  vec3 light = hexc(LIGHT[ci]);
+  vec3 shade = hexc(SHADE[ci]);
+  if (sp) {
+    fret = hexc(0x4fe3ff);
+    light = hexc(0xd6fbff);
+    shade = hexc(0x167fa6);
+  }
+  if (missed) {
+    fret = hexc(0x55514c);
+    light = hexc(0x7d7871);
+    shade = hexc(0x2b2926);
   }
 
   if (u_ink > 0.5) {
-    // Daylight ink: flat colours, a heavy outline and a black drop shadow.
+    // Daylight ink: flat colours, the base as a heavy outline and a hard drop shadow.
     vec3 ink = u_inkCol;
     vec3 white = vec3(0.97, 0.96, 0.94);
-    vec3 fretL = isOpen ? toLin(hexc(0xb04dff)) : u_colors[ci];
-    if (sp) fretL = toLin(hexc(0x9fe3f2));
-    if (missed) fretL = toLin(vec3(0.66, 0.64, 0.61));
-    float ow = clamp(4.5 * u_dpr * fw, 0.02, 0.09);
+    vec3 fretL = toLin(fret);
     float lw = clamp(1.5 * u_dpr * fw, 0.006, 0.03);
-    vec3 c = fretL;
-    if (skirt || shadow) c = ink;
-    else if (rr > rimOut - (isOpen ? min(ow, 0.05) : ow)) c = ink;
-    else if (isOpen) {
-      if (capR) c = mix(white, ink, smoothstep(capOut - lw * 1.4, capOut - lw * 0.4, rr));
-      else if (type == 1.0) c = white;
-    } else if (type == 2.0 && !missed) {
-      // tap: black gem with a coloured dot
-      c = mix(fretL, ink, smoothstep(0.13, 0.13 + lw, rr));
-    } else {
-      float ringEdge = 1.0 - smoothstep(lw * 0.5, lw, abs(rr - capOut));
-      float dotEdge = 1.0 - smoothstep(lw * 0.5, lw, abs(rr - 0.115));
-      if (rr < capOut) c = white;
-      if (rr < 0.115) c = type == 1.0 ? white : fretL;
-      c = mix(c, ink, max(ringEdge, dotEdge));
+    vec3 c = ink;
+    if (bezelR) c = fretL;
+    else if (bodyR) {
+      if (tap) c = ink;
+      else if (hopo) c = mix(white, fretL, smoothstep(0.66, 0.68, rn));
+      else c = fretL;
+    } else if (capR) {
+      c = tap ? mix(fretL, ink, smoothstep(0.5, 0.5 + lw / capOut, rc)) : white;
+      c = mix(c, ink, smoothstep(1.0 - lw * 2.5 / capOut, 1.0 - lw * 1.2 / capOut, rc));
     }
+    // a thin ink line between the bezel and the body keeps the rings apart
+    if (bodyR) c = mix(c, ink, smoothstep(bodyOut - lw * 2.0, bodyOut - lw * 0.5, rr));
     return vec4(c, fade);
   }
 
-  if (shadow) return vec4(0.0, 0.0, 0.0, 0.55 * (1.0 - smoothstep(0.18, 0.47, rr)) * fade);
+  // a soft dark halo under the gem: separates it from the board even where both are dark
+  if (shadow) return vec4(0.0, 0.0, 0.0, 0.7 * (1.0 - smoothstep(0.25, 0.5, rr)) * fade);
 
-  // ---- shaded classic look, colours in sRGB as designed and mapped through disp()
-  vec3 fretS = isOpen ? hexc(0xb04dff) : hexc(FRET[ci]);
-  vec3 tintS = isOpen ? hexc(0xe2b0ff) : hexc(TINT[ci]);
-  vec3 shadeS = isOpen ? hexc(0x7a2fd0) : hexc(SHADE[ci]);
-  vec3 deepS = isOpen ? hexc(0x4a1f7a) : hexc(DEEP[ci]);
-  vec3 rimS = isOpen ? hexc(0xf4ecff) : mix(hexc(0x9c978e), fretS, 0.4);
-  if (sp) {
-    fretS = hexc(0x9befff);
-    tintS = hexc(0xdcfbff);
-    shadeS = hexc(0x4fb9d6);
-    deepS = hexc(0x3a9ab2);
-    rimS = hexc(0xa9d6e2);
-  }
-  if (missed) {
-    fretS = hexc(0x5a564f);
-    tintS = hexc(0x8f8a82);
-    shadeS = hexc(0x2f2c29);
-    deepS = hexc(0x1f1d1b);
-    rimS = hexc(0x6f6a63);
-  }
-
-  float spec = pow(max(dot(reflect(-L, N), V), 0.0), 26.0);
+  vec3 H = normalize(L + V);
+  float nh = max(dot(N, H), 0.0);
   vec3 s;
-  if (skirt) {
-    s = deepS * (0.6 + 0.4 * clamp(v_local.y / 0.135, 0.0, 1.0));
-  } else if (rimR) {
-    s = rimS * (1.0 + 0.12 * (-lp.y / rimOut)) * (0.86 + 0.14 * smoothstep(bodyOut, bodyOut + 0.05, rr));
-  } else if (bodyR) {
-    vec2 bq = lp / bodyOut;
-    if (isOpen) bq = vec2(0.0, lp.y / bodyOut);
-    float bt = length(bq - vec2(0.0, -0.44)) / 1.3;
-    if (type == 1.0 && !missed) {
-      // HOPO: a white body that only picks up the fret colour at the edge (the cap hides the middle)
-      float u = clamp((length(bq - vec2(0.0, -0.1)) - 0.4) / 0.6, 0.0, 1.0);
-      vec3 mid = hexc(0xd9d5cd);
-      s = u < 0.65 ? mix(vec3(1.0), mid, u / 0.65) : mix(mid, fretS, (u - 0.65) / 0.35 * 0.5);
+  float emis = 1.0;
+  if (baseR) {
+    // graphite: dark walls and a lighter top band whose rounded outer edge catches a line of light
+    float top = smoothstep(0.35, 0.9, N.y);
+    s = mix(hexc(0x0a0a0b), hexc(0x26252a), top);
+    s += vec3(0.45) * pow(nh, 24.0);
+    if (sp && !missed) s += hexc(0x0b3442) * top;
+  } else if (bezelR) {
+    // a rounded ring of the fret colour: deep on strums (the face stays the brightest colour), bright
+    // and glowing on HOPOs and taps (it frames their white or dark face)
+    float k = clamp(0.35 + 0.65 * N.y + 0.3 * dot(N, L), 0.0, 1.0);
+    if ((hopo || tap) && !missed) {
+      s = mix(shade, mix(fret, light, 0.2), 0.45 + 0.55 * k);
+      emis = 1.3;
     } else {
-      s = bt < 0.55 ? mix(tintS, fretS, bt / 0.55) : mix(fretS, shadeS, clamp((bt - 0.55) / 0.45, 0.0, 1.0));
+      s = mix(shade * 0.55, mix(shade, fret, 0.55), k);
     }
-    if (!missed) s += spec * 0.14;
+    s += vec3(1.0) * pow(nh, 40.0) * (missed ? 0.15 : 0.6);
+  } else if (bodyR) {
+    vec2 q = lp / bodyOut;
+    // the side facing the light is lit up; the edge falls off into the shade colour
+    float hl = 1.0 - smoothstep(0.0, 0.8, length(q - vec2(-0.2, 0.3)));
+    if (tap && !missed) {
+      // tap: a dark glossy face inside the glowing bezel
+      s = mix(hexc(0x24232a), hexc(0x08080a), smoothstep(0.0, 1.0, rn));
+    } else if (hopo && !missed) {
+      // HOPO: a wide white face; the fret colour shows as a band at the edge
+      s = mix(vec3(1.0), hexc(0xe4e0da), smoothstep(0.2, 0.7, rn));
+      s = mix(s, fret, smoothstep(0.7, 0.8, rn));
+      s = mix(s, shade, smoothstep(0.92, 1.0, rn));
+      emis = 1.15;
+    } else {
+      // strum: saturated colour all the way, a highlight on the lit side, deeper at the edge
+      s = mix(fret, shade, smoothstep(0.6, 1.0, rn));
+      s = mix(s, light, hl * 0.5);
+    }
+    s += vec3(1.0) * pow(nh, 50.0) * 0.45;
   } else {
-    // cap: white, dark on taps
-    float ct = isOpen ? 0.4 : clamp(length(lp / capOut - vec2(-0.15, -0.35)) / 1.25, 0.0, 1.0);
-    if (missed) s = mix(hexc(0x77726a), hexc(0x3d3a36), ct);
-    else if (type == 2.0 && !isOpen) s = mix(hexc(0x4a4641), hexc(0x0d0c0b), ct);
-    else s = mix(vec3(1.0), hexc(0xe8e4dd), pow(ct, 1.4));
-    if (!missed) s += spec * 0.2;
+    // cap: bright white (it glows a little); on taps a dark cap with a small glowing fret-coloured dot
+    if (tap && !missed) {
+      float pip = 1.0 - smoothstep(0.42, 0.56, rc);
+      s = mix(hexc(0x2a2930), light, pip);
+      emis = 1.0 + 0.7 * pip;
+    } else {
+      s = mix(vec3(1.0), hexc(0xd8d4ce), smoothstep(0.35, 1.0, rc));
+      if (sp) s = mix(s, hexc(0xe2fbff), 0.6);
+      if (missed) s = hexc(0x8a857e);
+      emis = missed ? 1.0 : 1.5;
+    }
+    s += vec3(1.0) * pow(nh, 60.0) * 0.3;
   }
-  vec3 c = disp(s);
+  vec3 c = disp(s) * emis;
   // star power gems glow: bloom picks the extra energy up
-  if (sp && !missed) c *= 1.0 + 0.5 * (capR || bodyR ? 1.0 : 0.6);
+  if (sp && !missed && !baseR) c *= 1.3;
   return vec4(c, fade);
 }
 
@@ -768,7 +779,7 @@ vec4 wheel(vec3 N) {
     return vec4(c, 1.0);
   }
   vec3 fretS = hexc(FRET[ci]);
-  vec3 tintS = hexc(TINT[ci]);
+  vec3 tintS = hexc(LIGHT[ci]);
   vec3 s;
   float emis = 1.0;
   if (reg < 0.5) {
@@ -906,25 +917,36 @@ void main() {
       o = vec4(c, (1.0 - smoothstep(1.0 - fwu * 1.5, 1.0, ur)) * fade);
       return;
     }
-    vec3 fretS = open ? hexc(0xb04dff) : pow(base, vec3(1.0 / 2.2));
-    if (sp) fretS = hexc(0x5fe6ff);
-    float band = 1.0 - smoothstep(0.12, 0.42, u);
-    vec3 coreS = mix(vec3(1.0), fretS, 0.1) * vec3(0.96, 1.0, 0.97);
-    vec3 s = mix(fretS, coreS, band);
-    float glow = 1.0 + 0.25 * band;
+    // a ribbon of the fret colour with a light core line, in the dark outline the gems have
+    int ci = open ? 5 : min(int(v_b.x), 4);
+    vec3 fret = hexc(FRET[ci]);
+    vec3 light = hexc(LIGHT[ci]);
+    vec3 shade = hexc(SHADE[ci]);
+    if (sp) {
+      fret = hexc(0x4fe3ff);
+      light = hexc(0xd6fbff);
+      shade = hexc(0x167fa6);
+    }
+    float w = v_end.y;                      // half width in world units
+    float core = 1.0 - smoothstep(0.012, 0.04, u * w);
+    float edge = smoothstep(1.0 - 0.045 / w, 1.0 - 0.03 / w, ur);
+    vec3 s = mix(fret, shade, smoothstep(0.35, 0.85, u));
+    s = mix(s, light, core * 0.8);
+    float glow = 1.0;
     if (state == 1.0) {
       // held: brighter, with ripples running up the core
       float ripple = 0.5 + 0.5 * sin(v_z * 7.0 - u_time * 26.0);
-      s = mix(s, vec3(1.0), band * 0.25 * ripple);
-      glow = 1.35 + 0.4 * band;
+      s = mix(s, vec3(1.0), core * (0.35 + 0.35 * ripple));
+      glow = 1.4 + 0.3 * core;
     } else if (state == 2.0) {
-      s = mix(hexc(0x4a4641), hexc(0x8f8a82), band);
-      glow = 1.0;
+      s = mix(hexc(0x3a3733), hexc(0x6e6a63), core);
     } else {
-      s *= 1.0 - 0.10 * band * step(0.5, fract(v_z * 2.2));
+      // faint dashes on the core mark the beat as the tail scrolls
+      s *= 1.0 - 0.12 * core * step(0.5, fract(v_z * 2.2));
     }
-    c = disp(s) * glow;
-    o = vec4(c, (1.0 - smoothstep(0.86, 1.0, ur)) * fade);
+    s = mix(s, hexc(0x0b0b0c), edge);
+    c = disp(s) * mix(glow, 1.0, edge);
+    o = vec4(c, (1.0 - smoothstep(1.0 - fwu * 1.5, 1.0, ur)) * fade);
     return;
   }
 }`;

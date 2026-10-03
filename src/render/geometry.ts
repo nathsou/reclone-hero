@@ -141,31 +141,42 @@ export const QUAD = new Float32Array([-1, -1, 1, -1, -1, 1, 1, 1]);
 
 /** Front-to-back squash of dome gems and wheels (the shader needs it to recover radial coordinates). */
 export const DOME_ZS = 0.85;
-/** Rim, body and cap radii of a dome gem. */
-export const DOME_RIM = 0.43;
-export const DOME_BODY = 0.365;
-export const DOME_CAP = 0.19;
-/** Half depth of the open-note bar and of its body. */
-export const OPEN_R = 0.19;
+/** Dome gem radii: outer edge of the dark base, the silver bezel ring (inner, outer), the body, the cap. */
+export const DOME_RIM = 0.445;
+export const DOME_BEZEL_IN = 0.335;
+export const DOME_BEZEL_OUT = 0.392;
+export const DOME_BODY = 0.345;
+export const DOME_CAP = 0.145;
+/** Half depth of the open-note bar. */
+export const OPEN_R = 0.2;
+/** Half length of the straight part of the open-note cap stripe. */
+export const OPEN_CAP_L = 0.75;
+
+/** Points along a dome: y = base + rise * (1 - (r / radius)^2), from the centre out to `radius`. */
+function domeCurve(radius: number, base: number, rise: number, steps: number, from = 0): [number, number][] {
+  const pts: [number, number][] = [];
+  for (let i = 0; i <= steps; i++) {
+    const r = from + (radius - from) * (i / steps);
+    pts.push([r, base + rise * (1 - (r / radius) ** 2)]);
+  }
+  return pts;
+}
 
 /**
- * Classic dome gem. Regions: skirt (0), muted rim (1), white/dark cap (2), domed body (3) and a flat
- * shadow disc under everything (4, only drawn by the inked look).
+ * Classic dome gem, built to read at a glance: a dark base (0) gives every gem a crisp outline against
+ * the board, a raised silver bezel (1) catches the light around a saturated domed body (3), and a bright
+ * cap (2) sits on top. A flat shadow disc (4) lies under everything.
  */
 export function domeMesh(): Float32Array {
   // profiles run from the top centre outwards and down, so their normals point away from the solid
-  const body: [number, number][] = [];
-  for (let i = 0; i <= 8; i++) {
-    const r = DOME_BODY * (i / 8);
-    body.push([r, 0.176 + 0.09 * (1 - (r / DOME_BODY) ** 2)]);
-  }
   return lathe(
     [
-      ...chain([[0, 0.28], [0.04, 0.279], [0.1, 0.273], [0.16, 0.262], [0.185, 0.248], [0.19, 0.234]], 2),
-      ...chain(body, 3),
-      ...chain([[DOME_BODY, 0.176], [0.385, 0.179], [0.405, 0.175], [0.425, 0.16], [0.43, 0.135]], 1),
-      ...chain([[0.43, 0.135], [0.43, 0.02], [0.415, 0]], 0),
-      ...chain([[0, 0.012], [0.47, 0.012]], 4),
+      ...chain(domeCurve(DOME_CAP + 0.012, 0.262, 0.05, 6), 2),
+      ...chain([[DOME_CAP + 0.012, 0.262], [DOME_CAP + 0.012, 0.24]], 2),
+      ...chain(domeCurve(DOME_BODY, 0.17, 0.11, 10), 3),
+      ...chain([[DOME_BEZEL_IN, 0.168], [0.344, 0.186], [0.356, 0.196], [0.372, 0.196], [0.385, 0.186], [DOME_BEZEL_OUT, 0.168]], 1),
+      ...chain([[DOME_BEZEL_OUT, 0.168], [0.425, 0.162], [0.44, 0.15], [DOME_RIM, 0.132], [DOME_RIM, 0.025], [0.43, 0]], 0),
+      ...chain([[0, 0.012], [0.5, 0.012]], 4),
     ],
     48,
     DOME_ZS,
@@ -181,10 +192,10 @@ export function domeBarMesh(halfWidth: number): Float32Array {
   const len = halfWidth - R;
   const bar = lathe(
     [
-      ...chain([[0, 0.19], [0.07, 0.186], [0.12, 0.172], [R - 0.04, 0.156]], 3),
-      ...chain([[R - 0.04, 0.156], [R - 0.025, 0.155], [R - 0.005, 0.14], [R, 0.12]], 1),
-      ...chain([[R, 0.12], [R, 0]], 0),
-      ...chain([[0, 0.012], [R + 0.03, 0.012]], 4),
+      ...chain(domeCurve(0.13, 0.15, 0.045, 6), 3),
+      ...chain([[0.125, 0.15], [0.132, 0.168], [0.142, 0.176], [0.155, 0.176], [0.165, 0.166], [0.17, 0.15]], 1),
+      ...chain([[0.17, 0.15], [0.19, 0.144], [R, 0.13], [R, 0.02], [R - 0.01, 0]], 0),
+      ...chain([[0, 0.012], [R + 0.05, 0.012]], 4),
     ],
     32,
     1,
@@ -192,7 +203,7 @@ export function domeBarMesh(halfWidth: number): Float32Array {
     len,
     true,
   );
-  const cap = lathe(chain([[0, 0.204], [0.02, 0.202], [0.04, 0.195], [0.045, 0.184]], 2), 32, 1, false, 0.27, true);
+  const cap = lathe(chain(domeCurve(0.05, 0.19, 0.016, 4), 2), 32, 1, false, OPEN_CAP_L, true);
   const all = new Float32Array(bar.length + cap.length);
   all.set(bar);
   all.set(cap, bar.length);

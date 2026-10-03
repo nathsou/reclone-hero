@@ -15,11 +15,12 @@ function mixHex(a: string, b: string, t: number): string {
   return out;
 }
 
-// Classic dome: per fret colour (green, red, yellow) the light tint, the shade and the deep skirt colour.
+// Classic dome: per fret colour (green, red, yellow) the face, its highlight and its shaded edge
+// (FRET, LIGHT and SHADE in the shaders).
 const DOME = [
-  { tint: '#8dffab', shade: '#15803d', deep: '#0f6b2c' },
-  { tint: '#ff8c96', shade: '#a3162a', deep: '#8c1220' },
-  { tint: '#ffe68a', shade: '#a87f06', deep: '#8f6a05' },
+  { fret: '#1fd14a', light: '#8cffa6', shade: '#08762a' },
+  { fret: '#f2263b', light: '#ff8a94', shade: '#96101f' },
+  { fret: '#ffcc12', light: '#fff08a', shade: '#a37400' },
 ];
 
 export function skinPreviewSvg(id: SkinId): string {
@@ -32,21 +33,24 @@ export function skinPreviewSvg(id: SkinId): string {
   const gem = (x: number, col: string, kind: 0 | 1 | 2, idx: number) => {
     switch (id) {
       case 'dome': {
+        // dark base, a ring of the fret colour, then the face: colour (strum), white (HOPO) or dark (tap)
         const c = DOME[idx];
-        const bodyStops =
+        const faceStops =
           kind === 1
-            ? `<stop offset="0" stop-color="#ffffff"/><stop offset=".55" stop-color="#d9d5cd"/><stop offset="1" stop-color="${mixHex('#d9d5cd', col, 0.6)}"/>`
-            : `<stop offset="0" stop-color="${c.tint}"/><stop offset=".55" stop-color="${col}"/><stop offset="1" stop-color="${c.shade}"/>`;
-        const capStops =
+            ? `<stop offset="0" stop-color="#ffffff"/><stop offset=".7" stop-color="#e4e0da"/><stop offset=".8" stop-color="${c.fret}"/><stop offset="1" stop-color="${c.shade}"/>`
+            : kind === 2
+              ? '<stop offset="0" stop-color="#24232a"/><stop offset="1" stop-color="#08080a"/>'
+              : `<stop offset="0" stop-color="${mixHex(c.fret, c.light, 0.45)}"/><stop offset=".6" stop-color="${c.fret}"/><stop offset="1" stop-color="${c.shade}"/>`;
+        defs += `<radialGradient id="dome-f${idx}" cx=".42" cy=".45" r=".62">${faceStops}</radialGradient>`;
+        const ring = kind === 0 ? mixHex(c.shade, c.fret, 0.55) : mixHex(c.fret, c.light, 0.2);
+        body += `<ellipse cx="${x}" cy="${cy + 4}" rx="17" ry="11.5" fill="#0b0b0c"/>`;
+        body += `<ellipse cx="${x}" cy="${cy}" rx="17" ry="11.5" fill="#26252a"/>`;
+        body += `<ellipse cx="${x}" cy="${cy - 0.4}" rx="14.8" ry="10" fill="${ring}"/>`;
+        body += `<ellipse cx="${x}" cy="${cy - 0.8}" rx="12.6" ry="8.4" fill="url(#dome-f${idx})"/>`;
+        body +=
           kind === 2
-            ? '<stop offset="0" stop-color="#4a4641"/><stop offset="1" stop-color="#0d0c0b"/>'
-            : '<stop offset="0" stop-color="#ffffff"/><stop offset="1" stop-color="#e8e4dd"/>';
-        defs += `<radialGradient id="dome-b${idx}" cx=".5" cy=".28" r=".8">${bodyStops}</radialGradient>`;
-        defs += `<radialGradient id="dome-c${idx}" cx=".4" cy=".35" r=".8">${capStops}</radialGradient>`;
-        body += `<ellipse cx="${x}" cy="${cy + 5}" rx="16" ry="11" fill="${c.deep}"/>`;
-        body += `<ellipse cx="${x}" cy="${cy}" rx="16" ry="11" fill="${mixHex('#9c978e', col, 0.4)}"/>`;
-        body += `<ellipse cx="${x}" cy="${cy - 0.5}" rx="13" ry="8.6" fill="url(#dome-b${idx})"/>`;
-        body += `<ellipse cx="${x}" cy="${cy - 1.6}" rx="6.8" ry="4.4" fill="url(#dome-c${idx})"/>`;
+            ? `<ellipse cx="${x}" cy="${cy - 1.6}" rx="5.4" ry="3.6" fill="#2a2930"/><ellipse cx="${x}" cy="${cy - 1.6}" rx="2.6" ry="1.8" fill="${c.light}"/>`
+            : `<ellipse cx="${x}" cy="${cy - 1.6}" rx="5.4" ry="3.6" fill="#ffffff"/>`;
         break;
       }
       case 'glass': {

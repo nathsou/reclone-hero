@@ -39,7 +39,9 @@ function mk(time: number, mask: number, type: NoteType, len = 0, sp = -1): Spec 
   return { time, mask, type, endTime: time + len, sp };
 }
 
-const notes = noteListOf([
+// ?stream: a gameplay-like passage at the default note speed, for judging how readable the highway is
+const stream = params.has('stream');
+const notes = stream ? streamNotes() : noteListOf([
   mk(0.2, 8, 0), // missed blue strum (behind the strike line)
   mk(0.35, 1, 0, 1.2), // held green sustain
   mk(0.55, 8, 1), // blue HOPO
@@ -56,29 +58,54 @@ const notes = noteListOf([
 ]);
 const n = notes.length;
 const noteState = new Uint8Array(n);
-noteState[0] = 2;
-noteState[1] = 1;
-noteState[12] = 1;
 const sustainHeld = new Uint8Array(n);
-sustainHeld[1] = 1;
 const sustainDrop = new Float32Array(n).fill(NaN);
-sustainDrop[12] = 2.35;
+if (!stream) {
+  noteState[0] = 2;
+  noteState[1] = 1;
+  noteState[12] = 1;
+  sustainHeld[1] = 1;
+  sustainDrop[12] = 2.35;
+}
+
+/** Eighths and sixteenths at 150 BPM: singles, chords, a HOPO run, taps, an open note, sustains, star power. */
+function streamNotes() {
+  const e = 0.2;
+  const out: Spec[] = [];
+  let t = 0.25;
+  const add = (mask: number, type: NoteType, step: number, len = 0, sp = -1) => {
+    out.push(mk(t, mask, type, len, sp));
+    t += step;
+  };
+  for (const m of [1, 2, 4, 2, 1, 2, 4, 8]) add(m, 0, e);
+  for (const m of [0b11, 0b110, 0b11, 0b1100]) add(m, 0, e);
+  for (const m of [1, 2, 4, 8, 16, 8, 4, 2]) add(m, m === 1 || m === 16 ? 0 : 1, e / 2);
+  add(0, 0, e);
+  for (const m of [4, 8, 16, 8]) add(m, 2, e / 2);
+  add(0b101, 0, e * 2, e * 1.5);
+  for (const m of [2, 4, 2, 1]) add(m, 0, e, 0, 0);
+  add(0b10010, 0, e, 0, 0);
+  add(0, 1, e);
+  for (const m of [8, 4, 2, 1, 2, 4]) add(m, 0, e / 2);
+  return noteListOf(out);
+}
 const beats = { length: 30, time: Float64Array.from({ length: 30 }, (_, i) => (i - 4) * 0.5), kind: Uint8Array.from({ length: 30 }, (_, i) => (i % 4 === 0 ? 0 : 1)) };
 
 const state: RenderState = {
-  time: 0.3,
+  time: Number(params.get('t') ?? (stream ? 0.12 : 0.3)),
   dt: 0.016,
-  speed: 11,
+  speed: 11 * Number(params.get('speed') ?? (stream ? 1.4 : 1)),
+  length: Number(params.get('length') ?? 1),
   notes,
   noteState,
   spBroken: new Uint8Array(1),
   sustainHeld,
   sustainDrop,
-  sustainMask: 1,
+  sustainMask: stream ? 0 : 1,
   beats,
-  frets: 0b00001,
-  laneHit: new Float32Array([0.3, 0, 0, 0, 0]),
-  laneWrong: new Float32Array([0, 0, 0, Number(params.get('wrong') ?? 1), 0]),
+  frets: stream ? 0 : 0b00001,
+  laneHit: new Float32Array([stream ? 0 : 0.3, 0, 0, 0, 0]),
+  laneWrong: new Float32Array([0, 0, 0, Number(params.get('wrong') ?? (stream ? 0 : 1)), 0]),
   spActive: params.has('sp'),
   multiplier: Number(params.get('mult') ?? 2),
   missPulse: Number(params.get('miss') ?? 0),
@@ -89,10 +116,10 @@ const state: RenderState = {
   theme: THEMES[(params.get('theme') ?? 'classic') as ThemeId]?.render ?? THEMES.classic.render,
   skin: SKINS[(params.get('skin') ?? THEMES[(params.get('theme') ?? 'classic') as ThemeId]?.skin ?? 'dome') as SkinId] ?? SKINS.dome,
 };
-document.getElementById('legend')!.textContent =
+document.getElementById('legend')!.textContent = stream ? '' :
   'near → far: missed blue · held green sustain · blue HOPO · green HOPO · yellow strum · orange tap · red strum\n' +
   'open strum · SP chord · SP HOPO · open HOPO · chord sustain · dropped yellow sustain   (blue button: wrong fret)\n' +
-  'query: ?sp ?solo ?lefty ?miss=1 ?mult=4 ?q=low ?close ?btn ?art ?theme=ink ?skin=glass';
+  'query: ?sp ?solo ?lefty ?miss=1 ?mult=4 ?q=low ?close ?btn ?art ?theme=ink ?skin=glass ?stream ?speed=1.4 ?length=1 ?t=0';
 const loop = () => {
   r.render(state);
   requestAnimationFrame(loop);
