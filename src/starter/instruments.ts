@@ -388,6 +388,53 @@ class Organ implements Voice {
   }
 }
 
+/** Hammered strings: decaying, slightly inharmonic partials and a short damper release.
+ * Recursive oscillators keep the acoustic voice inexpensive even for dense two-hand chords.
+ */
+class AcousticPiano implements Voice {
+  readonly tail = 0.6;
+  readonly stereo = false;
+  private readonly sr: number;
+  constructor(sr: number) { this.sr = sr; }
+
+  note(n: Note, _index: number, lenSec: number, L: Float32Array, _R: Float32Array | null, at: number): void {
+    const sr = this.sr;
+    const held = Math.max(0.025, n.mute ? Math.min(lenSec, 0.12) : lenSec);
+    const total = Math.min(L.length - at, Math.round((held + this.tail) * sr));
+    const releaseAt = Math.round(held * sr);
+    const release = Math.exp(-1 / (0.075 * sr));
+    const attack = Math.max(1, Math.round(0.003 * sr));
+    const amp = n.v * 0.52 / Math.sqrt(n.p.length);
+    for (const p of n.p) {
+      const fundamental = mtof(p);
+      const stiffness = 0.000035 * 2 ** ((p - 60) / 24);
+      const decay = Math.max(0.45, 2.8 * 2 ** ((48 - p) / 36));
+      for (let h = 1; h <= 10; h++) {
+        const f = fundamental * h * Math.sqrt((1 + stiffness * h * h) / (1 + stiffness));
+        if (f >= sr * 0.45) break;
+        const w = TWO_PI * f / sr;
+        const r = Math.exp(-1 / (sr * decay / (1 + 0.22 * (h - 1))));
+        const c = 2 * r * Math.cos(w);
+        const r2 = r * r;
+        // Soft strikes lose upper partials; the fundamental remains clear in the bass.
+        const level = amp * Math.exp(-(h - 1) * (0.3 - 0.18 * n.v)) / h ** 1.35;
+        let previous = -Math.sin(w) * level;
+        let current = 0;
+        let damper = 1;
+        for (let i = 0; i < total; i++) {
+          const next = c * current - r2 * previous;
+          previous = current;
+          current = next;
+          if (i >= releaseAt) damper *= release;
+          L[at + i] += next * Math.min(1, i / attack) * damper;
+        }
+      }
+    }
+  }
+
+  process(): void {}
+}
+
 /** FM electric piano (two-operator, DX-style): cheap enough for dense parts. */
 class Piano implements Voice {
   readonly tail = 1;
@@ -660,6 +707,8 @@ export function makeVoice(kind: InstrumentKind, sr: number, tone = 0.5): Voice {
     case 'organ':
       return new Organ(sr);
     case 'piano':
+      return new AcousticPiano(sr);
+    case 'epiano':
       return new Piano(sr);
     case 'harpsichord':
       return new Harpsichord(sr);

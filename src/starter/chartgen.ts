@@ -38,6 +38,7 @@ const HOLDS: Record<InstrumentKind, boolean> = {
   pluck: false,
   bell: false,
   piano: false,
+  epiano: false,
   harpsichord: false,
   pickbass: false,
   synthbass: false,
