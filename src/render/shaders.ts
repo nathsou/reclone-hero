@@ -1,5 +1,5 @@
 // GLSL ES 3.0 sources (the #version header is prepended by program()).
-import { DOME_BODY, DOME_CAP, DOME_RIM, DOME_ZS, OPEN_CAP_L, OPEN_R } from './geometry.ts';
+import { BEAD_R, BEAD_ZS, DOME_BODY, DOME_CAP, DOME_RIM, DOME_ZS, OPEN_CAP_L, OPEN_R } from './geometry.ts';
 
 const f = (n: number) => n.toFixed(4);
 
@@ -513,6 +513,8 @@ const float BODY_R = ${f(DOME_BODY)};
 const float CAP_R = ${f(DOME_CAP)};
 const float BAR_R = ${f(OPEN_R)};
 const float OPEN_CAP_L = ${f(OPEN_CAP_L)};
+const float BEAD_R = ${f(BEAD_R)};
+const float BEAD_ZS = ${f(BEAD_ZS)};
 
 // Classic dome. Regions: dark base (0), bezel ring (1), cap (2), domed body (3), shadow disc (4).
 // One reading per note type, kept in every state: strum = coloured face and a white cap, HOPO = white
@@ -642,51 +644,68 @@ vec4 dome(vec3 N, vec3 V, vec3 L) {
   return vec4(c, fade);
 }
 
-// Crystal bead: refracts the highway below it (with dispersion), reflects the room and its
-// neighbours, glows at the rim. HOPOs are clear with a milky core, taps are smoked glass.
+// Crystal bead: solid lit glass that bends what is under it and reflects the room. The note types
+// read like the dome's: strum = coloured glass glowing from a white-hot core, HOPO = frosted white glass
+// in a wide coloured rim, tap = smoked glass in a glowing coloured rim. A dark band just inside a bright
+// silhouette outlines every bead, on light and dark boards alike.
 vec4 glassGem(vec3 N, vec3 V) {
   bool isOpen = v_b.x > 4.5;
   int ci = min(int(v_b.x), 5);
-  float type = v_b.y;
+  float type = v_b.y;          // 0 strum, 1 hopo, 2 tap, 3 open strum
   float flags = v_b.z;
   bool sp = mod(flags, 2.0) >= 1.0;
   bool missed = flags >= 2.0;
-  vec3 col = sp ? u_colors[6] : u_colors[ci];
+  bool hopo = type == 1.0;
+  bool tap = type == 2.0 && !isOpen;
   float fade = smoothstep(-u_len, -u_len * 0.75, v_world.z);
+  float lb = u_lightBg;
+  float rad = isOpen ? BAR_R : BEAD_R;
+  vec2 lp = isOpen ? vec2(max(abs(v_local.x) - u_openL, 0.0), v_local.z) : vec2(v_local.x, v_local.z / BEAD_ZS);
+  float rr = clamp(length(lp) / rad, 0.0, 1.2);
+  if (v_region > 3.5) return vec4(0.0, 0.0, 0.0, mix(0.55, 0.3, lb) * (1.0 - smoothstep(0.65, 1.15, rr)) * fade);
+  rr = min(rr, 1.0);
+
+  vec3 col = sp ? u_colors[6] : u_colors[ci];
+  vec3 tint = col / max(max(col.r, col.g), max(col.b, 1e-3));
   float nv = max(dot(N, V), 1e-3);
   vec3 R = reflect(-V, N);
-  vec2 lp = isOpen ? vec2(0.0, v_local.z / 0.16) : vec2(v_local.x, v_local.z / 0.72) / 0.43;
-  float rr = clamp(length(lp), 0.0, 1.0);
   float thick = 1.0 - rr * rr;
   // screen-space lens: the bead magnifies and bends what is under it
   vec3 ns = mat3(u_view) * N;
-  vec2 off = -ns.xy * (0.03 + 0.05 * thick);
-  vec3 under = behind(off, 0.45, 0.0);
-  vec3 tint = col / max(max(col.r, col.g), max(col.b, 1e-3));
-  float lb = u_lightBg;
-  // light backgrounds: deeper absorption so the colour holds up against white
-  tint = pow(tint, vec3(1.0 + 1.2 * lb));
-  vec3 trans;
-  if (type == 1.0 && !isOpen) {
-    // clear glass, milky core
-    trans = under * mix(vec3(1.0), tint, 0.3) + mix(vec3(0.0), vec3(0.9, 0.9, 0.95), 1.0 - smoothstep(0.2, 0.55, rr)) * 0.8 + col * 0.1;
-  } else if (type == 2.0 && !isOpen) {
-    trans = under * 0.12 + col * 0.35 * smoothstep(0.55, 0.95, rr);
-  } else {
-    trans = under * mix(vec3(1.0), tint, 0.85) * 0.85 + col * (0.08 + 0.22 * thick);
-  }
-  if (sp) trans += col * (0.4 + 0.8 * thick);
+  vec3 under = behind(-ns.xy * (0.025 + 0.04 * thick), 0.2, 0.0);
   float F = schlick(0.04, nv);
   vec3 refl = roomTrace(v_world, R, 0.0);
-  float glint = pow(max(dot(R, normalize(vec3(-0.35, 0.8, -0.5))), 0.0), 240.0) * 3.5;
-  float rim = pow(1.0 - nv, 3.0);
-  vec3 c = mix(trans, refl, F) + vec3(1.0) * glint + mix(vec3(1.0), tint, 0.5) * rim * 0.45 * (1.0 - 0.8 * lb);
-  // real glass on white shows dark edges: the rim refracts the darker world around it
-  c = mix(c, c * 0.3 + col * 0.06, lb * smoothstep(0.6, 0.97, rr));
+  float glint = pow(max(dot(R, normalize(vec3(-0.35, 0.8, -0.5))), 0.0), 240.0) * 3.0;
+
+  float outer = smoothstep(0.6, 0.68, rr);   // the coloured rim of HOPOs and taps
+  vec3 c;
   if (missed) {
-    float l = dot(c, vec3(0.2126, 0.7152, 0.0722));
-    c = vec3(l) * 0.35 + vec3(0.01);
+    c = vec3(0.07, 0.07, 0.075) * (0.6 + 0.5 * thick) + under * 0.15;
+  } else if (tap) {
+    float pip = 1.0 - smoothstep(0.13, 0.2, rr);
+    c = under * 0.05 + vec3(0.008, 0.008, 0.01);
+    c = mix(c, col * 1.25, max(outer, pip));
+  } else if (hopo) {
+    vec3 frost = vec3(0.86, 0.87, 0.9) * (0.62 + 0.38 * thick) + under * 0.1;
+    c = mix(frost, col * (0.9 + 0.4 * thick), outer);
+  } else {
+    // coloured glass lit from inside, brightest at a white-hot core
+    c = col * (0.5 + 0.9 * thick) + under * tint * 0.15;
+    c = mix(c, mix(tint, vec3(1.0), 0.65) * 1.6, 1.0 - smoothstep(0.1, 0.34, rr));
   }
+  if (sp && !missed) c *= 1.35;
+  // the walls are clear glass: the board shows through them, tinted, darker than the face
+  float wall = 1.0 - smoothstep(0.3, 0.7, N.y);
+  c = mix(c, under * mix(vec3(1.0), tint, 0.7) * 0.55 + (missed ? vec3(0.02) : col * 0.22), wall * 0.7);
+  // the outline: light refracts out of the bead just inside its edge (a dark band), then skims the
+  // silhouette (a bright rim)
+  float band = smoothstep(0.8, 0.88, rr) * (1.0 - smoothstep(0.95, 1.0, rr));
+  c *= 1.0 - 0.75 * band;
+  float rim = pow(1.0 - nv, 3.0) * smoothstep(0.9, 1.0, rr);
+  // a clear coat: the room's softbox and the neighbouring beads glide across the top
+  float top = smoothstep(0.55, 0.9, N.y);
+  if (missed) refl *= 0.25;
+  c = mix(c, refl, F * 0.7) + refl * 0.1 * top + vec3(1.0) * glint + mix(vec3(1.0), tint, 0.4) * rim * mix(0.7, 0.15, lb) * (missed ? 0.3 : 1.0);
   return vec4(c, fade);
 }
 
@@ -824,9 +843,9 @@ vec4 glassButton(vec3 N) {
   vec3 env = roomTrace(v_world + vec3(0.0, 0.02, 0.0), R, 0.1);
   if (v_region < 0.5) {
     float lb = u_lightBg;
-    vec3 c = col * (mix(0.3, 0.55, lb) + 0.5 * lit + 1.5 * v_a.w) + env * F + vec3(1.0) * rim * 0.5 * (1.0 - 0.7 * lb);
+    vec3 c = col * (mix(0.55, 0.7, lb) + 0.7 * lit + 1.5 * v_a.w) + env * F + vec3(1.0) * rim * 0.5 * (1.0 - 0.7 * lb);
     c = mix(c, vec3(1.2, 0.08, 0.06), wrong * 0.7);
-    return vec4(c, mix(0.78, 0.95, lb) + 0.2 * lit);
+    return vec4(c, mix(0.9, 0.97, lb) + 0.1 * lit);
   }
   float r = length(vec2(v_local.x, v_local.z / 0.72)) / 0.27;
   vec3 c = col * lit * (1.6 - r) + env * F;
@@ -883,19 +902,22 @@ void main() {
   float state = v_b.y;   // 0 upcoming, 1 held, 2 dropped/missed
   vec3 grey = vec3(0.14, 0.14, 0.16);
   if (u_style > 0.5) {
-    // Crystal: a clear tube, see-through in the middle, bright at the walls where light skims it
-    float state = v_b.y;
+    // Crystal: a tinted glass tube with a glowing core, bright where light skims its walls and dark
+    // just inside them, so it keeps an outline over any board
     float fade = smoothstep(-u_len, -u_len * 0.75, v_z) * (1.0 - smoothstep(0.8, 2.6, v_z));
-    float wall = pow(u, 5.0);
-    float crest = exp(-pow((v_su.y + 0.3) / 0.12, 2.0));
+    float wall = pow(u, 6.0);
+    float inner = smoothstep(0.62, 0.74, u) * (1.0 - smoothstep(0.84, 0.92, u));
+    float core = exp(-pow(v_su.y / 0.28, 2.0));
+    float crest = exp(-pow((v_su.y + 0.45) / 0.1, 2.0));
     float flow = 0.5 + 0.5 * sin(v_z * 3.0 - u_time * (state == 1.0 ? 14.0 : 4.0) + v_su.y * 2.0);
     vec3 tint = state == 2.0 ? grey : base;
-    vec3 c2 = tint * (0.25 + 0.6 * wall + (state == 1.0 ? 0.9 * flow : 0.15 * flow)) + vec3(1.0) * (crest * 0.6 + wall * 0.25);
-    float a = 0.28 + 0.6 * wall + 0.3 * crest + (state == 1.0 ? 0.25 : 0.0);
+    float glowAmt = state == 1.0 ? 1.1 + 0.5 * flow : state == 2.0 ? 0.25 : 0.55 + 0.1 * flow;
+    vec3 c2 = tint * (0.18 + glowAmt * core) + vec3(1.0) * (crest * 0.35 + wall * 0.45);
+    c2 *= 1.0 - 0.7 * inner;
+    float a = mix(0.6, 0.85, core) + 0.3 * wall;
     // light backgrounds: a denser, darker tube so it does not wash out
-    c2 = mix(c2, tint * (0.35 + 0.5 * wall) + vec3(1.0) * crest * 0.35, u_lightBg);
-    a = mix(a, 0.55 + 0.4 * wall, u_lightBg);
-    o = vec4(c2, a * (1.0 - smoothstep(0.9, 1.0, u)) * fade);
+    c2 = mix(c2, tint * (0.25 + 0.6 * core) * (1.0 - 0.7 * inner) + vec3(1.0) * crest * 0.25, u_lightBg);
+    o = vec4(c2, min(a, 1.0) * (1.0 - smoothstep(0.92, 1.0, u)) * fade);
     return;
   }
   {

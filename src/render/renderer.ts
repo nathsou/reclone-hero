@@ -2,7 +2,7 @@ import type { BeatList, NoteList } from '../chart/types.ts';
 import { HOPO, TAP, noteListOf } from '../chart/types.ts';
 import { HIT, MISSED } from '../engine/engine.ts';
 import type { Quality } from '../settings.ts';
-import { OPEN_R, QUAD, beadMesh, domeBarMesh, domeMesh, glassButtonMesh, openBarMesh, stripMesh, wheelMesh } from './geometry.ts';
+import { OPEN_R, QUAD, beadMesh, domeBarMesh, domeMesh, glassBarMesh, glassButtonMesh, stripMesh, wheelMesh } from './geometry.ts';
 import { InstanceBuffer, deleteTarget, program, staticBuffer, target } from './gl.ts';
 import type { GL, Program, Target } from './gl.ts';
 import { lookAt, multiply, perspective, project } from './math.ts';
@@ -276,7 +276,7 @@ export class Renderer {
     // Both skins' meshes are small; build them all now so switching skins costs nothing.
     this.styleMeshes = [
       { gems: lit(domeMesh(), 1024, [4, 4]), opens: lit(domeBarMesh(HALF - 0.28), 128, [4, 4]), buttons: lit(wheelMesh(), 5, [4, 4]) },
-      { gems: lit(beadMesh(), 1024, [4, 4]), opens: lit(openBarMesh(HALF - 0.28), 128, [4, 4]), buttons: lit(glassButtonMesh(), 5, [4, 4]) },
+      { gems: lit(beadMesh(), 1024, [4, 4]), opens: lit(glassBarMesh(HALF - 0.28), 128, [4, 4]), buttons: lit(glassButtonMesh(), 5, [4, 4]) },
     ];
     ({ gems: this.gems, opens: this.opens, buttons: this.buttons } = this.styleMeshes[this.skin.style]);
 

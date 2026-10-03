@@ -82,49 +82,6 @@ function chain(points: [number, number][], region: number): ProfileSeg[] {
   return segs;
 }
 
-/** Open note: a bar spanning all lanes. Top face is region 1. */
-export function openBarMesh(halfWidth: number): Float32Array {
-  const section: [number, number, number][] = [
-    // z, y, region of the segment starting here
-    [0.17, 0.0, 0],
-    [0.21, 0.08, 0],
-    [0.16, 0.16, 1],
-    [-0.16, 0.16, 0],
-    [-0.21, 0.08, 0],
-    [-0.17, 0.0, 0],
-  ];
-  const out: number[] = [];
-  const n = section.length;
-  for (let i = 0; i < n; i++) {
-    const [z0, y0, region] = section[i];
-    const [z1, y1] = section[(i + 1) % n];
-    let nz = y1 - y0;
-    let ny = -(z1 - z0);
-    const l = Math.hypot(nz, ny) || 1;
-    nz /= l;
-    ny /= l;
-    const x0 = -halfWidth;
-    const x1 = halfWidth;
-    const v = (x: number, y: number, z: number) => out.push(x, y, z, 0, ny, nz, region);
-    v(x0, y0, z0);
-    v(x1, y0, z0);
-    v(x1, y1, z1);
-    v(x0, y0, z0);
-    v(x1, y1, z1);
-    v(x0, y1, z1);
-  }
-  // end caps
-  for (const [x, nx] of [
-    [-halfWidth, -1],
-    [halfWidth, 1],
-  ]) {
-    for (let i = 1; i + 1 < n; i++) {
-      for (const k of [0, i, i + 1]) out.push(x, section[k][1], section[k][0], nx, 0, 0, 0);
-    }
-  }
-  return new Float32Array(out);
-}
-
 /** Triangle strip along a sustain: (s along length 0..1, u across -1..1). */
 export function stripMesh(segments: number): Float32Array {
   const out: number[] = [];
@@ -247,16 +204,29 @@ export function glassButtonMesh(): Float32Array {
   );
 }
 
-/** Crystal: a smooth glass bead, one region; the shader draws the HOPO / tap markings. */
-export function beadMesh(): Float32Array {
+/** Crystal bead radius (before the front-to-back squash) and squash. */
+export const BEAD_R = 0.43;
+export const BEAD_ZS = 0.78;
+
+/** A squashed superellipse profile: flat-ish top, rounded shoulder, flat bottom. */
+function beadProfile(radius: number, height: number): [number, number][] {
   const pts: [number, number][] = [];
-  // a squashed superellipse: flat-ish top, rounded shoulder, flat bottom
-  for (let i = 0; i <= 12; i++) {
-    const a = (i / 12) * (Math.PI / 2);
+  for (let i = 0; i <= 14; i++) {
+    const a = (i / 14) * (Math.PI / 2);
     const c = Math.cos(a);
     const s = Math.sin(a);
-    pts.push([0.43 * Math.sign(s) * Math.abs(s) ** 0.6, 0.11 + 0.15 * Math.sign(c) * Math.abs(c) ** 0.6]);
+    pts.push([radius * Math.abs(s) ** 0.6, height * 0.4 + height * 0.6 * Math.abs(c) ** 0.85]);
   }
-  pts.push([0.43, 0.06], [0.4, 0.01], [0.34, 0], [0, 0]);
-  return lathe(chain(pts, 0), 48, 0.72, false, 0, true);
+  pts.push([radius, height * 0.22], [radius * 0.94, height * 0.03], [radius * 0.8, 0], [0, 0]);
+  return pts;
+}
+
+/** Crystal: a smooth glass bead (0) over a soft shadow disc (4); the shader draws the note markings. */
+export function beadMesh(): Float32Array {
+  return lathe([...chain(beadProfile(BEAD_R, 0.25), 0), ...chain([[0, 0.006], [0.5, 0.006]], 4)], 48, BEAD_ZS, false, 0, true);
+}
+
+/** Crystal open note: a glass bar with the bead's profile and rounded ends. */
+export function glassBarMesh(halfWidth: number): Float32Array {
+  return lathe([...chain(beadProfile(OPEN_R, 0.2), 0), ...chain([[0, 0.006], [OPEN_R + 0.06, 0.006]], 4)], 32, 1, false, halfWidth - OPEN_R, true);
 }

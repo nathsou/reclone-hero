@@ -39,7 +39,7 @@ export const SKINS: Record<SkinId, NoteSkin> = {
   glass: {
     id: 'glass',
     name: 'Crystal',
-    description: 'Glass beads, tubes and a flowing glass highway that bend, split and reflect the light behind them.',
+    description: 'Lit glass beads on a flowing glass highway: coloured for strums, frosted for HOPOs, smoked for taps.',
     style: 1,
     colors: [
       [0.1, 0.85, 0.3],

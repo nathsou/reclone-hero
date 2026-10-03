@@ -54,11 +54,20 @@ export function skinPreviewSvg(id: SkinId): string {
         break;
       }
       case 'glass': {
-        // a clear bead: tinted body, bright rim, a crescent highlight and a coloured caustic below
-        defs += `<radialGradient id="glass-b${idx}" cx=".5" cy=".6" r=".65"><stop offset="0" stop-color="${kind === 1 ? '#f4f4f8' : kind === 2 ? '#1a1a1e' : mixHex(col, '#ffffff', 0.25)}" stop-opacity=".9"/><stop offset=".8" stop-color="${kind === 2 ? '#0a0a0c' : col}" stop-opacity=".55"/><stop offset="1" stop-color="#ffffff" stop-opacity=".9"/></radialGradient>`;
-        body += `<ellipse cx="${x}" cy="${cy + 6}" rx="12" ry="5" fill="${col}" opacity=".35"/>`;
-        body += `<ellipse cx="${x}" cy="${cy}" rx="16" ry="11" fill="url(#glass-b${idx})" stroke="rgba(255,255,255,.8)" stroke-width="1"/>`;
-        body += `<path d="M${x - 10} ${cy - 4} Q${x} ${cy - 11} ${x + 10} ${cy - 4}" fill="none" stroke="#ffffff" stroke-width="2" stroke-linecap="round" opacity=".85"/>`;
+        // a lit glass bead: coloured with a white-hot core (strum), frosted white in a coloured rim (HOPO)
+        // or smoked in a glowing rim (tap); a dark band inside a bright silhouette outlines each one
+        const face =
+          kind === 1
+            ? `<stop offset="0" stop-color="#f2f3f6"/><stop offset=".62" stop-color="#d9dbe0"/><stop offset=".68" stop-color="${col}"/><stop offset="1" stop-color="${col}"/>`
+            : kind === 2
+              ? `<stop offset="0" stop-color="${col}"/><stop offset=".18" stop-color="#101012"/><stop offset=".62" stop-color="#0b0b0d"/><stop offset=".68" stop-color="${col}"/><stop offset="1" stop-color="${col}"/>`
+              : `<stop offset="0" stop-color="#ffffff"/><stop offset=".3" stop-color="${mixHex(col, '#ffffff', 0.45)}"/><stop offset="1" stop-color="${col}"/>`;
+        defs += `<radialGradient id="glass-b${idx}" cx=".5" cy=".5" r=".5">${face}</radialGradient>`;
+        body += `<ellipse cx="${x}" cy="${cy + 3}" rx="18" ry="12" fill="rgba(0,0,0,.45)"/>`;
+        body += `<ellipse cx="${x}" cy="${cy}" rx="16" ry="11" fill="url(#glass-b${idx})"/>`;
+        body += `<ellipse cx="${x}" cy="${cy}" rx="14.3" ry="9.8" fill="none" stroke="rgba(0,0,0,.45)" stroke-width="1.6"/>`;
+        body += `<ellipse cx="${x}" cy="${cy}" rx="16" ry="11" fill="none" stroke="rgba(255,255,255,.75)" stroke-width="1"/>`;
+        body += `<path d="M${x - 9} ${cy - 5} Q${x} ${cy - 9.5} ${x + 9} ${cy - 5}" fill="none" stroke="#ffffff" stroke-width="1.6" stroke-linecap="round" opacity=".8"/>`;
         break;
       }
     }
