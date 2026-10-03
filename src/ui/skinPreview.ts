@@ -15,11 +15,12 @@ function mixHex(a: string, b: string, t: number): string {
   return out;
 }
 
-// Classic dome: per fret colour (green, red, yellow) the light tint, the shade and the deep skirt colour.
+// Classic dome: per fret colour (green, red, yellow) the face, its highlight and its shaded edge
+// (FRET, LIGHT and SHADE in the shaders).
 const DOME = [
-  { tint: '#8dffab', shade: '#15803d', deep: '#0f6b2c' },
-  { tint: '#ff8c96', shade: '#a3162a', deep: '#8c1220' },
-  { tint: '#ffe68a', shade: '#a87f06', deep: '#8f6a05' },
+  { fret: '#1fd14a', light: '#8cffa6', shade: '#08762a' },
+  { fret: '#f2263b', light: '#ff8a94', shade: '#96101f' },
+  { fret: '#ffcc12', light: '#fff08a', shade: '#a37400' },
 ];
 
 export function skinPreviewSvg(id: SkinId): string {
@@ -32,71 +33,47 @@ export function skinPreviewSvg(id: SkinId): string {
   const gem = (x: number, col: string, kind: 0 | 1 | 2, idx: number) => {
     switch (id) {
       case 'dome': {
+        // dark base, a ring of the fret colour, then the face: colour (strum), white (HOPO) or dark (tap)
         const c = DOME[idx];
-        const bodyStops =
+        const faceStops =
           kind === 1
-            ? `<stop offset="0" stop-color="#ffffff"/><stop offset=".55" stop-color="#d9d5cd"/><stop offset="1" stop-color="${mixHex('#d9d5cd', col, 0.6)}"/>`
-            : `<stop offset="0" stop-color="${c.tint}"/><stop offset=".55" stop-color="${col}"/><stop offset="1" stop-color="${c.shade}"/>`;
-        const capStops =
+            ? `<stop offset="0" stop-color="#ffffff"/><stop offset=".7" stop-color="#e4e0da"/><stop offset=".8" stop-color="${c.fret}"/><stop offset="1" stop-color="${c.shade}"/>`
+            : kind === 2
+              ? '<stop offset="0" stop-color="#24232a"/><stop offset="1" stop-color="#08080a"/>'
+              : `<stop offset="0" stop-color="${mixHex(c.fret, c.light, 0.45)}"/><stop offset=".6" stop-color="${c.fret}"/><stop offset="1" stop-color="${c.shade}"/>`;
+        defs += `<radialGradient id="dome-f${idx}" cx=".42" cy=".45" r=".62">${faceStops}</radialGradient>`;
+        const ring = kind === 0 ? mixHex(c.shade, c.fret, 0.55) : mixHex(c.fret, c.light, 0.2);
+        body += `<ellipse cx="${x}" cy="${cy + 4}" rx="17" ry="11.5" fill="#0b0b0c"/>`;
+        body += `<ellipse cx="${x}" cy="${cy}" rx="17" ry="11.5" fill="#26252a"/>`;
+        body += `<ellipse cx="${x}" cy="${cy - 0.4}" rx="14.8" ry="10" fill="${ring}"/>`;
+        body += `<ellipse cx="${x}" cy="${cy - 0.8}" rx="12.6" ry="8.4" fill="url(#dome-f${idx})"/>`;
+        body +=
           kind === 2
-            ? '<stop offset="0" stop-color="#4a4641"/><stop offset="1" stop-color="#0d0c0b"/>'
-            : '<stop offset="0" stop-color="#ffffff"/><stop offset="1" stop-color="#e8e4dd"/>';
-        defs += `<radialGradient id="dome-b${idx}" cx=".5" cy=".28" r=".8">${bodyStops}</radialGradient>`;
-        defs += `<radialGradient id="dome-c${idx}" cx=".4" cy=".35" r=".8">${capStops}</radialGradient>`;
-        body += `<ellipse cx="${x}" cy="${cy + 5}" rx="16" ry="11" fill="${c.deep}"/>`;
-        body += `<ellipse cx="${x}" cy="${cy}" rx="16" ry="11" fill="${mixHex('#9c978e', col, 0.4)}"/>`;
-        body += `<ellipse cx="${x}" cy="${cy - 0.5}" rx="13" ry="8.6" fill="url(#dome-b${idx})"/>`;
-        body += `<ellipse cx="${x}" cy="${cy - 1.6}" rx="6.8" ry="4.4" fill="url(#dome-c${idx})"/>`;
-        break;
-      }
-      case 'studio': {
-        // chrome bezel, glass lens with a glowing core and a softbox reflection
-        defs += `<linearGradient id="studio-m${idx}" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#f4f2ee"/><stop offset=".45" stop-color="#8a8781"/><stop offset=".55" stop-color="#2b2a28"/><stop offset="1" stop-color="#c9c6c0"/></linearGradient>`;
-        const core = kind === 1 ? '#e9e4da' : kind === 2 ? '#0b0b0c' : mixHex(col, '#ffffff', 0.35);
-        const edge = kind === 2 ? '#000000' : mixHex(col, '#000000', 0.55);
-        defs += `<radialGradient id="studio-g${idx}" cx=".5" cy=".62" r=".7"><stop offset="0" stop-color="${core}"/><stop offset="1" stop-color="${edge}"/></radialGradient>`;
-        body += `<ellipse cx="${x}" cy="${cy + 4}" rx="17" ry="10" fill="rgba(0,0,0,.35)"/>`;
-        body += `<ellipse cx="${x}" cy="${cy}" rx="16" ry="11" fill="url(#studio-m${idx})"/>`;
-        body += `<ellipse cx="${x}" cy="${cy - 0.8}" rx="11" ry="7.4" fill="url(#studio-g${idx})"/>`;
-        body += `<rect x="${x - 6}" y="${cy - 6.6}" width="12" height="2.6" rx="1.3" fill="rgba(255,255,255,.75)"/>`;
+            ? `<ellipse cx="${x}" cy="${cy - 1.6}" rx="5.4" ry="3.6" fill="#2a2930"/><ellipse cx="${x}" cy="${cy - 1.6}" rx="2.6" ry="1.8" fill="${c.light}"/>`
+            : `<ellipse cx="${x}" cy="${cy - 1.6}" rx="5.4" ry="3.6" fill="#ffffff"/>`;
         break;
       }
       case 'glass': {
-        // a clear bead: tinted body, bright rim, a crescent highlight and a coloured caustic below
-        defs += `<radialGradient id="glass-b${idx}" cx=".5" cy=".6" r=".65"><stop offset="0" stop-color="${kind === 1 ? '#f4f4f8' : kind === 2 ? '#1a1a1e' : mixHex(col, '#ffffff', 0.25)}" stop-opacity=".9"/><stop offset=".8" stop-color="${kind === 2 ? '#0a0a0c' : col}" stop-opacity=".55"/><stop offset="1" stop-color="#ffffff" stop-opacity=".9"/></radialGradient>`;
-        body += `<ellipse cx="${x}" cy="${cy + 6}" rx="12" ry="5" fill="${col}" opacity=".35"/>`;
-        body += `<ellipse cx="${x}" cy="${cy}" rx="16" ry="11" fill="url(#glass-b${idx})" stroke="rgba(255,255,255,.8)" stroke-width="1"/>`;
-        body += `<path d="M${x - 10} ${cy - 4} Q${x} ${cy - 11} ${x + 10} ${cy - 4}" fill="none" stroke="#ffffff" stroke-width="2" stroke-linecap="round" opacity=".85"/>`;
+        // a lit glass bead: coloured with a white-hot core (strum), frosted white in a coloured rim (HOPO)
+        // or smoked in a glowing rim (tap); a dark band inside a bright silhouette outlines each one
+        const face =
+          kind === 1
+            ? `<stop offset="0" stop-color="#f2f3f6"/><stop offset=".62" stop-color="#d9dbe0"/><stop offset=".68" stop-color="${col}"/><stop offset="1" stop-color="${col}"/>`
+            : kind === 2
+              ? `<stop offset="0" stop-color="${col}"/><stop offset=".18" stop-color="#101012"/><stop offset=".62" stop-color="#0b0b0d"/><stop offset=".68" stop-color="${col}"/><stop offset="1" stop-color="${col}"/>`
+              : `<stop offset="0" stop-color="#ffffff"/><stop offset=".3" stop-color="${mixHex(col, '#ffffff', 0.45)}"/><stop offset="1" stop-color="${col}"/>`;
+        defs += `<radialGradient id="glass-b${idx}" cx=".5" cy=".5" r=".5">${face}</radialGradient>`;
+        body += `<ellipse cx="${x}" cy="${cy + 3}" rx="18" ry="12" fill="rgba(0,0,0,.45)"/>`;
+        body += `<ellipse cx="${x}" cy="${cy}" rx="16" ry="11" fill="url(#glass-b${idx})"/>`;
+        body += `<ellipse cx="${x}" cy="${cy}" rx="14.3" ry="9.8" fill="none" stroke="rgba(0,0,0,.45)" stroke-width="1.6"/>`;
+        body += `<ellipse cx="${x}" cy="${cy}" rx="16" ry="11" fill="none" stroke="rgba(255,255,255,.75)" stroke-width="1"/>`;
+        body += `<path d="M${x - 9} ${cy - 5} Q${x} ${cy - 9.5} ${x + 9} ${cy - 5}" fill="none" stroke="#ffffff" stroke-width="1.6" stroke-linecap="round" opacity=".8"/>`;
         break;
-      }
-      case 'baroque': {
-        const oct = (rx: number, ry: number, fill: string, extra = '') => {
-          const pts = Array.from({ length: 8 }, (_, i) => {
-            const a = (i / 8) * Math.PI * 2 + Math.PI / 8;
-            return `${(x + Math.cos(a) * rx).toFixed(1)},${(cy + Math.sin(a) * ry).toFixed(1)}`;
-          }).join(' ');
-          body += `<polygon points="${pts}" fill="${fill}" ${extra}/>`;
-        };
-        oct(17, 12, '#c2892f', 'stroke="#f0cf7a" stroke-width="1.2"');
-        oct(12, 8, kind === 2 ? '#141010' : col);
-        body += `<ellipse cx="${x}" cy="${cy}" rx="4.5" ry="3" fill="${kind === 1 ? '#f1ece2' : 'rgba(255,255,255,.55)'}"/>`;
-        break;
-      }
-      case 'pixel': {
-        body += `<rect x="${x - 15}" y="${cy - 10}" width="30" height="20" fill="${kind === 2 ? '#1a1a1a' : col}" stroke="${col}" stroke-width="3"/>`;
-        body += `<rect x="${x - 5}" y="${cy - 3.5}" width="10" height="7" fill="${kind === 1 ? '#fafafa' : 'rgba(0,0,0,.55)'}"/>`;
-        break;
-      }
-      default: {
-        body += `<ellipse cx="${x}" cy="${cy}" rx="16" ry="11" fill="${kind === 2 ? '#101010' : col}" filter="url(#glow-${id})"/>`;
-        body += `<ellipse cx="${x}" cy="${cy}" rx="10" ry="6.5" fill="none" stroke="${kind === 0 ? '#f2f2f2' : col}" stroke-width="3"/>`;
-        body += `<ellipse cx="${x}" cy="${cy}" rx="5" ry="3.2" fill="${kind === 1 ? '#ffffff' : '#101010'}"/>`;
       }
     }
   };
   gem(cx[0], g, 0, 0);
   gem(cx[1], r, 1, 1);
   gem(cx[2], y, 2, 2);
-  const glow = `<defs>${defs}<filter id="glow-${id}" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="2.2" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter></defs>`;
-  return `<svg viewBox="0 0 120 52" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">${glow}${body}</svg>`;
+  return `<svg viewBox="0 0 120 52" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><defs>${defs}</defs>${body}</svg>`;
 }

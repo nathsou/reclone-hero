@@ -18,7 +18,7 @@ const ini = files.find((f) => f.toLowerCase() === 'song.ini');
 const song = makeSongEntry({ path: 'bench', files, ini: ini ? readFileSync(`${DIR}/${ini}`) : null, chartHead: null })!;
 const chart = loadChart(song.chartFile, readFileSync(`${DIR}/${song.chartFile}`), song.chartOptions);
 const track = chart.tracks.get('guitar:expert')!;
-updateSettings({ showFps: false, noteStyle: (process.env.BENCH_SKIN ?? 'neon') as 'neon' });
+updateSettings({ showFps: false, noteStyle: (process.env.BENCH_SKIN ?? 'dome') as 'dome' });
 const { initTheme } = await import('../../src/ui/theme.ts');
 initTheme();
 

@@ -79,6 +79,9 @@ export interface RawChart {
   tempos: RawTempo[];
   timeSigs: RawTimeSig[];
   sections: { tick: number; name: string }[];
+  /** lyric syllables and vocal phrases (lines) */
+  lyrics: { tick: number; text: string }[];
+  phrases: TickRange[];
   tracks: Map<string, RawTrack>;
   /** metadata from the .chart [Song] section, if any */
   meta: Record<string, string>;

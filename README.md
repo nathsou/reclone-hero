@@ -74,8 +74,14 @@ before the next notes, which helps on a phone.
 
 - **Charts:** `.chart` and `.mid` for guitar, bass, rhythm, keys and guitar co-op on all four difficulties:
   chords, sustains (including extended sustains), natural and forced HOPOs, tap notes, open notes, star power
-  phrases, solos, sections, tempo and time-signature changes, and `song.ini` options (`hopo_frequency`,
+  phrases, solos, sections, lyrics, tempo and time-signature changes, and `song.ini` options (`hopo_frequency`,
   `eighthnote_hopo`, `sustain_cutoff_threshold`, `multiplier_note`, `delay`).
+- **Readable highway:** notes travel at 1.4× by default (about 1.7 s of notes ahead), so even dense passages
+  stay spread out, and the camera is steep enough that far gems stay round. **Note speed** sets how far
+  apart notes are; **Highway length** (Settings › Gameplay) sets how far ahead you see, independently.
+- **Lyrics:** on charts that have them (`.chart` lyric events, or the `PART VOCALS` track of a `.mid`), the
+  line being sung shows in the top bar a moment before it starts, sung syllables lit, with the next line
+  below. Settings › Gameplay › Lyrics turns them off.
 - **Gameplay:** Clone Hero–style rules. ±90 ms window (adjustable), strum leniency, anchoring, HOPO/tap hammer-ons and
   pull-offs, overstrums, sustain drops, 1–4× multiplier, star power (tilt or select, whammy fills the bar),
   solo bonuses, stars and best scores. Each best score remembers what it was played with (guitar,
@@ -98,11 +104,10 @@ before the next notes, which helps on a phone.
 - **Themes:** Classic dark (the default: a textured board, steel rails, domed gems and wheel frets) and
   Daylight ink (a paper highway with inked outlines). "Match system" switches between the two. The earlier
   colour schemes (Swiss, Baroque, Synthwave, Terminal, Paper, Midnight) are still there under Settings › Display.
-- **Note styles**, independent of the theme: Classic dome (the default), Studio (glass lenses in chrome
-  bezels on a lacquered board, with ray-traced reflections), Crystal (glass beads, tubes and a flowing glass
-  highway that refract what is behind them; see [Graphics](#graphics)), Neon (glowing pucks), Baroque (faceted
-  jewels in gold, pearls for HOPOs) and Pixel (8-bit blocks). Each keeps the same strum / HOPO / tap language and has its own sustains, fret buttons and
-  hit particles.
+- **Note styles**, independent of the theme: Classic dome (the default) and Crystal (lit glass beads on a
+  flowing glass highway that refracts what is behind it; see [Graphics](#graphics)). Both read the same way
+  at a glance: strums are the fret colour with a bright centre, HOPOs are white inside a coloured ring, taps
+  are dark inside a glowing coloured ring, and every gem has a dark outline that holds up on any board.
 - **Backups:** Settings › Data exports settings, key and controller mappings, favourites and best scores to a
   file, to import on another computer (scores merge, keeping the best; favourites are combined).
 - **Controls:** remap any single guitar input (Settings › Controls › Change) without redoing the rest.
@@ -233,22 +238,27 @@ beat lines, fret buttons, particles), so the CPU only uploads the handful of not
 scene renders to an HDR (half-float), multisampled target, then goes through a bloom chain and an ACES tonemap.
 The look is neon-on-dark, emissive shapes carry most of the meaning, and a miss reads as missing light.
 
-The **Studio** note style is lit like a product shot: a procedural studio environment (a large softbox over
-the far end of the highway, strip lights at the sides, a warm kicker behind the player) with Fresnel
-reflections on glass lenses, polished and anodised metal, and clear-coated bodies. Reflections are ray-traced in
-the fragment shaders: each frame the 32 nearest gems are uploaded as spheres, reflection rays from gems and fret
-buttons are traced against them and against the highway plane, and the highway itself becomes lacquer that
-traces the mirror images of the approaching gems and darkens under them with soft contact shadows.
+The gems are designed to be read at a glance, at any distance. **Classic dome** gems sit in a dark graphite
+base that outlines them against the board; a rounded bezel ring of the fret colour frames a saturated domed
+face, and a small white cap glows just enough to bloom. HOPOs swap the face for white and taps for dark
+glass, so the type survives even when a gem is a few pixels wide; open notes, star power (ice blue) and
+misses (grey) keep the same structure. Sustains are ribbons of the fret colour with a light core and the
+same dark outline. The colours are authored in sRGB and mapped through the inverse of the tone curve, so they
+land on screen as designed instead of washing out.
 
-**Crystal** refracts for real, in screen space: the frame is copied just before the highway is drawn and
+**Crystal** gems are solid lit glass: strums glow from a white-hot core, HOPOs are frosted, taps are smoked,
+and a dark band inside a bright silhouette outlines each bead. They refract for real, in screen space: the frame is copied just before the highway is drawn and
 again just before the gems, and each glass surface samples the copy of what is behind it, offset by its
 surface normal. The three colour channels are offset by slightly different amounts, so edges split into
 rainbow fringes (dispersion). The highway is a glass slab with slow swells that travel with the chart, lens-like
-bevelled edges and a light frost; the beads magnify the lane lines under them, reflect the room and each other,
-glow at the rim and cast coloured caustics on the glass below; sustains are clear tubes and the fret buttons
-are glass rings that fill with colour.
+bevelled edges and a light frost. Reflections are ray-traced in the fragment shaders against a procedural
+studio environment: each frame the 32 nearest gems are uploaded as spheres, and reflection rays from gems and
+fret buttons are traced against them and the highway plane. The beads bend the lane lines under them, reflect
+the room and each other and cast coloured caustics on the glass below; sustains are tinted glass tubes with a
+glowing core and the fret buttons are glass rings that fill with colour.
 
-`visual-test.html` (dev server only) shows every gem and sustain state in a frozen scene for tuning.
+`visual-test.html` (dev server only) shows every gem and sustain state in a frozen scene for tuning;
+`?stream` swaps in a gameplay-like passage at the default note speed, for judging readability.
 
 ## Performance
 

@@ -4,11 +4,14 @@ import type { GenreFilter } from './library/genres.ts';
 export type MissFeedback = 'auto' | 'mute' | 'muffle' | 'off';
 export type Quality = 'high' | 'medium' | 'low';
 export type Theme = 'system' | 'classic' | 'ink' | 'swiss' | 'baroque' | 'synthwave' | 'terminal' | 'paper' | 'midnight';
-export type NoteStyle = 'theme' | 'dome' | 'studio' | 'glass' | 'neon' | 'baroque' | 'pixel';
+export type NoteStyle = 'theme' | 'dome' | 'glass';
 export type SongView = 'list' | 'covers';
 
 export interface Settings {
+  /** how fast notes travel toward you: their spacing on the highway */
   noteSpeed: number;
+  /** share of the highway drawn ahead of the strike line: how far ahead you see */
+  highwayLength: number;
   /** ms; positive when audio reaches your ears late (Bluetooth etc.) */
   audioOffsetMs: number;
   /** ms; positive when the display lags */
@@ -27,6 +30,8 @@ export interface Settings {
   /** song list: only starred songs */
   favouritesOnly: boolean;
   timingBar: boolean;
+  /** words at the top of the screen on charts that have lyrics */
+  lyrics: boolean;
   missFeedback: MissFeedback;
   missSounds: boolean;
   volMaster: number;
@@ -49,7 +54,8 @@ export interface Settings {
 }
 
 export const DEFAULT_SETTINGS: Settings = {
-  noteSpeed: 1,
+  noteSpeed: 1.4,
+  highwayLength: 1,
   audioOffsetMs: 0,
   videoOffsetMs: 0,
   hitWindowMs: 90,
@@ -61,6 +67,7 @@ export const DEFAULT_SETTINGS: Settings = {
   builtinSongs: true,
   favouritesOnly: false,
   timingBar: true,
+  lyrics: true,
   missFeedback: 'auto',
   missSounds: true,
   volMaster: 0.9,
@@ -101,6 +108,8 @@ function load(): Settings {
       // Neon and Light were replaced by Classic dark and Daylight ink.
       if (stored.theme === 'dark' || stored.theme === 'neon') stored.theme = 'classic';
       else if (stored.theme === 'light') stored.theme = 'ink';
+      // Only the Classic dome and Crystal note styles are left.
+      if (stored.noteStyle !== undefined && stored.noteStyle !== 'dome' && stored.noteStyle !== 'glass') delete stored.noteStyle;
       delete stored.v;
       return { ...DEFAULT_SETTINGS, ...(stored as Partial<Settings>) };
     }

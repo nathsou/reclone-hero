@@ -1,3 +1,5 @@
+import { buildLyrics } from './lyrics.ts';
+import type { LyricLine } from './lyrics.ts';
 import { foldToTouch } from './touch.ts';
 import { TempoMap } from './tempo.ts';
 import type { BeatList, ChartOptions, Difficulty, Instrument, NoteList, NoteType, Phrase, RawChart, RawTrack, Section, TickRange, Track } from './types.ts';
@@ -65,6 +67,8 @@ export interface Chart {
   tempo: TempoMap;
   beats: BeatList;
   sections: Section[];
+  /** lyric lines, empty when the chart has none */
+  lyrics: LyricLine[];
   /** instrument:difficulty -> track, built on first access */
   tracks: Map<string, Track>;
   /** Number of notes (chords count once) in a track, without building it. 0 when absent. */
@@ -121,6 +125,7 @@ export function buildChart(raw: RawChart, opts: ChartOptions = {}): Chart {
     tempo,
     beats: buildBeats(raw, tempo, lastTick + res * 8),
     sections,
+    lyrics: buildLyrics(raw.lyrics, raw.phrases, (t) => tempo.tickToTime(t)),
     tracks,
     noteCount: (key) => counts.get(key) ?? 0,
     lastNoteTime: tempo.tickToTime(lastTick),

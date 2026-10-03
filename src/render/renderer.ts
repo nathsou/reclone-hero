@@ -2,28 +2,12 @@ import type { BeatList, NoteList } from '../chart/types.ts';
 import { HOPO, TAP, noteListOf } from '../chart/types.ts';
 import { HIT, MISSED } from '../engine/engine.ts';
 import type { Quality } from '../settings.ts';
-import {
-  OPEN_R,
-  QUAD,
-  blockMesh,
-  domeBarMesh,
-  domeMesh,
-  fretButtonMesh,
-  gemMesh,
-  goldButtonMesh,
-  jewelMesh,
-  openBarMesh,
-  lensMesh,
-  beadMesh,
-  bezelButtonMesh,
-  squareButtonMesh,
-  stripMesh,
-  wheelMesh,
-} from './geometry.ts';
+import { OPEN_R, QUAD, beadMesh, domeBarMesh, domeMesh, glassBarMesh, glassButtonMesh, stripMesh, wheelMesh } from './geometry.ts';
 import { InstanceBuffer, deleteTarget, program, staticBuffer, target } from './gl.ts';
 import type { GL, Program, Target } from './gl.ts';
 import { lookAt, multiply, perspective, project } from './math.ts';
 import type { Mat4 } from './math.ts';
+import { BEHIND, HALF, LEN } from './highway.ts';
 import { Particles } from './particles.ts';
 import * as S from './shaders.ts';
 import type { RenderTheme } from '../ui/themes.ts';
@@ -51,7 +35,7 @@ interface ParticleFx {
   gravity: number;
   gain: number;
   add: number;
-  /** tint towards gold (Baroque glitter) */
+  /** tint towards gold (Crystal glitter) */
   gold: number;
   sustainRate: number;
 }
@@ -59,7 +43,6 @@ interface ParticleFx {
 const FX: Record<NoteSkin['particles'], ParticleFx> = {
   sparks: { flare: true, count: 12, openCount: 26, speed: 1, size: 0.05, sizeVar: 0.05, life: 0.3, lifeVar: 0.35, shape: 0, gravity: -9, gain: 1.8, add: 0.3, gold: 0, sustainRate: 60 },
   glitter: { flare: true, count: 16, openCount: 30, speed: 0.8, size: 0.035, sizeVar: 0.04, life: 0.4, lifeVar: 0.4, shape: 0, gravity: -5, gain: 1.7, add: 0.15, gold: 0.65, sustainRate: 45 },
-  squares: { flare: false, count: 8, openCount: 16, speed: 0.9, size: 0.07, sizeVar: 0.03, life: 0.3, lifeVar: 0.2, shape: 2, gravity: -12, gain: 1.15, add: 0.05, gold: 0, sustainRate: 22 },
 };
 const GOLD = [1.0, 0.66, 0.22];
 /** Rail colour by multiplier (index 1-4). */
@@ -75,10 +58,11 @@ const TINT_SP = new Float32Array([0.2, 0.6, 1]);
 const TINT_NONE = new Float32Array([0, 0, 0]);
 const BEAT_SP = new Float32Array([0.4, 0.8, 1.2]);
 
-const HALF = 2.65;
-const LEN = 26;
-const BEHIND = 3;
-const SUSTAIN_W = 0.13;
+/** NoteSkin.style values */
+const DOME = 0;
+const CRYSTAL = 1;
+
+const SUSTAIN_W = 0.14;
 
 export interface RenderState {
   /** song time to draw (already video-calibrated) */
@@ -88,6 +72,8 @@ export interface RenderState {
   dt: number;
   /** world units per second */
   speed: number;
+  /** share of the full highway length that is drawn (Highway length setting). Default 1. */
+  length?: number;
   notes: NoteList;
   noteState: Uint8Array;
   spBroken: Uint8Array;
@@ -141,13 +127,11 @@ export class Renderer {
   private emptyVao!: WebGLVertexArrayObject;
   private highwayVao!: WebGLVertexArrayObject;
   private gems!: Mesh;
-  private gemMeshes!: Record<NoteSkin['gem'], Mesh>;
-  private buttonMeshes!: Record<NoteSkin['button'], Mesh>;
+  /** per skin style: gems, open bars and fret buttons */
+  private styleMeshes!: { gems: Mesh; opens: Mesh; buttons: Mesh }[];
   private skin: NoteSkin = SKINS.dome;
   private colorsFlat = new Float32Array(SKINS.dome.colors.flat());
   private opens!: Mesh;
-  private opensStd!: Mesh;
-  private opensDome!: Mesh;
   private buttons!: Mesh;
   private sustains!: Mesh;
   private beatLines!: Mesh;
@@ -189,6 +173,8 @@ export class Renderer {
   readonly particles = new Particles(1800);
   private buttonPress = new Float32Array(5);
   private time = 0;
+  /** drawn highway length in world units */
+  private len = LEN;
   private lefty = false;
   /** 1 while the inked dome look is on (Daylight ink theme with the dome note style) */
   private inkGems = 0;
@@ -287,27 +273,12 @@ export class Renderer {
       const inst = new InstanceBuffer(gl, instLayout, 3, cap);
       return { vao, count: mesh.length / 7, inst };
     };
-    // Every skin's meshes are small; build them all now so switching skins costs nothing.
-    this.gemMeshes = {
-      dome: lit(domeMesh(), 1024, [4, 4]),
-      puck: lit(gemMesh(), 1024, [4, 4]),
-      jewel: lit(jewelMesh(), 1024, [4, 4]),
-      block: lit(blockMesh(), 1024, [4, 4]),
-      lens: lit(lensMesh(), 1024, [4, 4]),
-      bead: lit(beadMesh(), 1024, [4, 4]),
-    };
-    this.buttonMeshes = {
-      wheel: lit(wheelMesh(), 5, [4, 4]),
-      ring: lit(fretButtonMesh(), 5, [4, 4]),
-      gold: lit(goldButtonMesh(), 5, [4, 4]),
-      square: lit(squareButtonMesh(), 5, [4, 4]),
-      bezel: lit(bezelButtonMesh(), 5, [4, 4]),
-    };
-    this.gems = this.gemMeshes.dome;
-    this.buttons = this.buttonMeshes.wheel;
-    this.opensStd = lit(openBarMesh(HALF - 0.28), 128, [4, 4]);
-    this.opensDome = lit(domeBarMesh(HALF - 0.28), 128, [4, 4]);
-    this.opens = this.opensDome;
+    // Both skins' meshes are small; build them all now so switching skins costs nothing.
+    this.styleMeshes = [
+      { gems: lit(domeMesh(), 1024, [4, 4]), opens: lit(domeBarMesh(HALF - 0.28), 128, [4, 4]), buttons: lit(wheelMesh(), 5, [4, 4]) },
+      { gems: lit(beadMesh(), 1024, [4, 4]), opens: lit(glassBarMesh(HALF - 0.28), 128, [4, 4]), buttons: lit(glassButtonMesh(), 5, [4, 4]) },
+    ];
+    ({ gems: this.gems, opens: this.opens, buttons: this.buttons } = this.styleMeshes[this.skin.style]);
 
     const strip = stripMesh(64);
     this.stripVerts = strip.length / 2;
@@ -430,8 +401,11 @@ export class Renderer {
     this.buildTargets();
   }
 
-  /** Camera tuning: eye height/distance and look-at point along the highway. */
-  camera = { height: 5.6, back: 7.4, lookZ: -5.2, fov: 0.74 };
+  /**
+   * Camera tuning: eye height/distance and look-at point along the highway. Steep enough that the far
+   * half of the highway is not squashed: distant gems stay round and readable.
+   */
+  camera = { height: 6.6, back: 6.4, lookZ: -5.4, fov: 0.8 };
 
   private camHeight = NaN;
   private camBack = NaN;
@@ -546,9 +520,7 @@ export class Renderer {
   private applySkin() {
     const skin = this.skin;
     this.colorsFlat = new Float32Array(skin.colors.flat());
-    this.gems = this.gemMeshes[skin.gem];
-    this.buttons = this.buttonMeshes[skin.button];
-    this.opens = skin.style === 5 ? this.opensDome : this.opensStd;
+    ({ gems: this.gems, opens: this.opens, buttons: this.buttons } = this.styleMeshes[skin.style]);
   }
 
   hitBurst(mask: number, sp: boolean): void {
@@ -695,8 +667,9 @@ export class Renderer {
     const gl = this.gl;
     this.lefty = s.lefty;
     this.time = s.time;
+    this.len = LEN * Math.min(1, Math.max(0.2, s.length ?? 1));
     this.setSkin(s.skin);
-    this.inkGems = s.theme.ink > 0.5 && s.skin.style === 5 ? 1 : 0;
+    this.inkGems = s.theme.ink > 0.5 && s.skin.style === DOME ? 1 : 0;
     this.inkCol = s.theme.inkColor;
     this.lightBg = s.theme.light ? 1 : 0;
     this.resize();
@@ -709,7 +682,7 @@ export class Renderer {
     gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
     gl.disable(gl.CULL_FACE);
 
-    const glass = this.skin.style === 7;
+    const glass = this.skin.style === CRYSTAL;
     this.fillNotes(s);
     this.drawBackground(s);
     // Crystal refracts what is behind it: copy the frame before the highway and before the gems.
@@ -752,7 +725,7 @@ export class Renderer {
   private bindGrab(p: Program, i: number) {
     if (!p.u.u_grab) return;
     const gl = this.gl;
-    const t = this.skin.style === 7 ? this.grabs[i] : null;
+    const t = this.skin.style === CRYSTAL ? this.grabs[i] : null;
     gl.activeTexture(gl.TEXTURE1);
     gl.bindTexture(gl.TEXTURE_2D, t ? t.tex : this.bgTex);
     gl.uniform1i(p.u.u_grab, 1);
@@ -763,7 +736,7 @@ export class Renderer {
     const gl = this.gl;
     gl.useProgram(p.prog);
     if (p.u.u_vp) gl.uniformMatrix4fv(p.u.u_vp, false, this.vp);
-    if (p.u.u_len) gl.uniform1f(p.u.u_len, LEN);
+    if (p.u.u_len) gl.uniform1f(p.u.u_len, this.len);
     if (p.u.u_time) gl.uniform1f(p.u.u_time, this.time);
     if (p.u.u_cam) gl.uniform3fv(p.u.u_cam, this.cam);
     if (p.u.u_colors) gl.uniform3fv(p.u.u_colors, this.colorsFlat);
@@ -827,8 +800,7 @@ export class Renderer {
     else gl.uniform3fv(p.u.u_rail, RAIL_COLORS[Math.min(4, s.multiplier)]);
     gl.uniform1f(p.u.u_railMode, railMode(th));
     gl.uniform1f(p.u.u_board, th.board);
-    gl.uniform1f(p.u.u_gloss, this.skin.style === 6 ? 1 : 0);
-    gl.uniform1f(p.u.u_glass, this.skin.style === 7 ? 1 : 0);
+    gl.uniform1f(p.u.u_glass, this.skin.style === CRYSTAL ? 1 : 0);
     this.bindGrab(p, 0);
     gl.uniform1f(p.u.u_sp, s.spActive ? 1 : 0);
     gl.uniform1f(p.u.u_miss, s.missPulse);
@@ -860,7 +832,7 @@ export class Renderer {
     const inst = this.beatLines.inst;
     inst.count = 0;
     const tMin = s.time - BEHIND / s.speed;
-    const tMax = s.time + LEN / s.speed;
+    const tMax = s.time + this.len / s.speed;
     const B = s.beats;
     for (let i = lowerBound(B.time, B.length, tMin); i < B.length && B.time[i] <= tMax; i++) {
       const o = inst.push();
@@ -888,7 +860,7 @@ export class Renderer {
     gl.drawArraysInstanced(gl.TRIANGLE_STRIP, 0, 4, inst.count);
   }
 
-  /** Studio skin: the nearest gems as spheres (x, y, z, colour), for reflections traced in the shaders. */
+  /** Crystal: the nearest gems as spheres (x, y, z, colour), for reflections and caustics traced in the shaders. */
   private readonly gemList = new Float32Array(32 * 4);
   private gemCount = 0;
 
@@ -897,13 +869,14 @@ export class Renderer {
     const opens = this.opens.inst;
     const sus = this.sustains.inst;
     gems.count = opens.count = sus.count = 0;
-    const traced = this.skin.style >= 6;
+    const traced = this.skin.style === CRYSTAL;
     const list = this.gemList;
     this.gemCount = 0;
     const notes = s.notes;
     const speed = s.speed;
     const t = s.time;
-    const tMax = t + LEN / speed;
+    const len = this.len;
+    const tMax = t + len / speed;
     const tBehind = t - BEHIND / speed;
 
     // Sustains can start well before the visible window, so walk back a little.
@@ -931,7 +904,7 @@ export class Renderer {
             state = 2;
           } else draw = false;
         } else if (st === MISSED) state = 2;
-        const z1 = Math.max(-(endTime - t) * speed, -LEN);
+        const z1 = Math.max(-(endTime - t) * speed, -len);
         if (draw && z0 > z1) {
           for (let lane = 0; lane < 5; lane++) {
             if (mask !== 0 && !(mask & (1 << lane))) continue;
@@ -980,7 +953,7 @@ export class Renderer {
           d[o + 5] = type === TAP ? 2 : type === HOPO ? 1 : 0;
           d[o + 6] = flags;
           d[o + 7] = 0;
-          if (traced && st !== MISSED && this.gemCount < 32 && z > -LEN * 0.8) {
+          if (traced && st !== MISSED && this.gemCount < 32 && z > -len * 0.8) {
             const k = this.gemCount++ * 4;
             list[k] = d[o];
             list[k + 1] = 0.13;
@@ -1115,11 +1088,9 @@ export class Renderer {
     if (B.length) {
       this.fullscreen(this.pBright, scene.tex, B[0]);
       gl.uniform2f(this.pBright.u.u_texel, 1 / scene.w, 1 / scene.h);
-      // A light background sits near 1.0 and must not bloom; the neon on the highway still does.
-      // The dome look is authored to sit at its design colours, so only real emission (pressed wheels, star power, held sustains) blooms.
-      // Studio's chrome catches the softboxes at several times white: bloom only the brightest glints.
-      const dome = s.skin.style >= 5;
-      gl.uniform1f(this.pBright.u.u_threshold, s.theme.light ? (this.hdr ? 1.35 : 0.95) : dome ? (this.hdr ? 1.5 : 0.95) : this.hdr ? 1.0 : 0.75);
+      // A light background sits near 1.0 and must not bloom. The gems are authored to sit at their
+      // design colours, so only real emission (caps, pressed frets, star power, held sustains) blooms.
+      gl.uniform1f(this.pBright.u.u_threshold, s.theme.light ? (this.hdr ? 1.35 : 0.95) : this.hdr ? 1.5 : 0.95);
       gl.drawArrays(gl.TRIANGLES, 0, 3);
       for (let i = 1; i < B.length; i++) {
         this.fullscreen(this.pDown, B[i - 1].tex, B[i]);

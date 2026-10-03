@@ -82,74 +82,6 @@ function chain(points: [number, number][], region: number): ProfileSeg[] {
   return segs;
 }
 
-/** Note gem: body (region 0), raised rim (1), center cap (2). */
-export function gemMesh(): Float32Array {
-  return lathe(
-    [
-      ...chain([[0, 0.2], [0.16, 0.2]], 2),
-      ...chain([[0.16, 0.2], [0.2, 0.235], [0.32, 0.235], [0.36, 0.205]], 1),
-      ...chain([[0.36, 0.205], [0.42, 0.15], [0.44, 0.08], [0.42, 0.02], [0.38, 0], [0, 0]], 0),
-    ],
-    40,
-    0.72,
-  );
-}
-
-/** Strike-line fret button: outer ring (0), inner well (1). */
-export function fretButtonMesh(): Float32Array {
-  return lathe(
-    [
-      ...chain([[0, 0.012], [0.29, 0.012]], 1),
-      ...chain([[0.29, 0.012], [0.33, 0.06], [0.43, 0.065], [0.47, 0.03], [0.47, 0]], 0),
-    ],
-    40,
-    0.72,
-  );
-}
-
-/** Open note: a bar spanning all lanes. Top face is region 1. */
-export function openBarMesh(halfWidth: number): Float32Array {
-  const section: [number, number, number][] = [
-    // z, y, region of the segment starting here
-    [0.17, 0.0, 0],
-    [0.21, 0.08, 0],
-    [0.16, 0.16, 1],
-    [-0.16, 0.16, 0],
-    [-0.21, 0.08, 0],
-    [-0.17, 0.0, 0],
-  ];
-  const out: number[] = [];
-  const n = section.length;
-  for (let i = 0; i < n; i++) {
-    const [z0, y0, region] = section[i];
-    const [z1, y1] = section[(i + 1) % n];
-    let nz = y1 - y0;
-    let ny = -(z1 - z0);
-    const l = Math.hypot(nz, ny) || 1;
-    nz /= l;
-    ny /= l;
-    const x0 = -halfWidth;
-    const x1 = halfWidth;
-    const v = (x: number, y: number, z: number) => out.push(x, y, z, 0, ny, nz, region);
-    v(x0, y0, z0);
-    v(x1, y0, z0);
-    v(x1, y1, z1);
-    v(x0, y0, z0);
-    v(x1, y1, z1);
-    v(x0, y1, z1);
-  }
-  // end caps
-  for (const [x, nx] of [
-    [-halfWidth, -1],
-    [halfWidth, 1],
-  ]) {
-    for (let i = 1; i + 1 < n; i++) {
-      for (const k of [0, i, i + 1]) out.push(x, section[k][1], section[k][0], nx, 0, 0, 0);
-    }
-  }
-  return new Float32Array(out);
-}
-
 /** Triangle strip along a sustain: (s along length 0..1, u across -1..1). */
 export function stripMesh(segments: number): Float32Array {
   const out: number[] = [];
@@ -162,90 +94,46 @@ export function stripMesh(segments: number): Float32Array {
 
 export const QUAD = new Float32Array([-1, -1, 1, -1, -1, 1, 1, 1]);
 
-// ---------------------------------------------------------------- skin variants
-
-
-/** Baroque: a faceted cabochon (0) with a table (2) in a gold bezel (1). */
-export function jewelMesh(): Float32Array {
-  return lathe(
-    [
-      ...chain([[0, 0.28], [0.15, 0.28]], 2),
-      ...chain([[0.15, 0.28], [0.27, 0.25], [0.36, 0.18]], 0),
-      ...chain([[0.36, 0.18], [0.385, 0.205], [0.425, 0.195], [0.45, 0.13], [0.43, 0.03], [0, 0]], 1),
-    ],
-    12,
-    0.72,
-    true,
-  );
-}
-
-
-type V3 = [number, number, number];
-function quad(out: number[], a: V3, b: V3, c: V3, d: V3, n: V3, region: number) {
-  for (const p of [a, b, c, a, c, d]) out.push(p[0], p[1], p[2], n[0], n[1], n[2], region);
-}
-
-/** Axis-aligned box: top face given region `top`, sides region `side`. */
-function box(out: number[], x0: number, x1: number, y0: number, y1: number, z0: number, z1: number, top: number, side: number) {
-  quad(out, [x0, y1, z0], [x1, y1, z0], [x1, y1, z1], [x0, y1, z1], [0, 1, 0], top);
-  quad(out, [x0, y0, z1], [x1, y0, z1], [x1, y1, z1], [x0, y1, z1], [0, 0, 1], side);
-  quad(out, [x0, y0, z0], [x0, y1, z0], [x1, y1, z0], [x1, y0, z0], [0, 0, -1], side);
-  quad(out, [x1, y0, z0], [x1, y1, z0], [x1, y1, z1], [x1, y0, z1], [1, 0, 0], side);
-  quad(out, [x0, y0, z0], [x0, y0, z1], [x0, y1, z1], [x0, y1, z0], [-1, 0, 0], side);
-}
-
-/** Top-face square ring between half-sizes inner and outer. */
-function squareRing(out: number[], inner: number, outer: number, y: number, zs: number, region: number) {
-  const o = outer;
-  const i = inner;
-  const n: V3 = [0, 1, 0];
-  quad(out, [-o, y, -o * zs], [o, y, -o * zs], [o, y, -i * zs], [-o, y, -i * zs], n, region);
-  quad(out, [-o, y, i * zs], [o, y, i * zs], [o, y, o * zs], [-o, y, o * zs], n, region);
-  quad(out, [-o, y, -i * zs], [-i, y, -i * zs], [-i, y, i * zs], [-o, y, i * zs], n, region);
-  quad(out, [i, y, -i * zs], [o, y, -i * zs], [o, y, i * zs], [i, y, i * zs], n, region);
-}
-
-/** Pixel: a chunky block with a bevel frame (1), body band (0) and centre square (2) on top. */
-export function blockMesh(): Float32Array {
-  const out: number[] = [];
-  const zs = 0.72;
-  const h = 0.22;
-  box(out, -0.39, 0.39, 0, h - 0.001, -0.39 * zs, 0.39 * zs, 0, 0);
-  squareRing(out, 0.27, 0.39, h, zs, 1);
-  squareRing(out, 0.14, 0.27, h, zs, 0);
-  quad(out, [-0.14, h, -0.14 * zs], [0.14, h, -0.14 * zs], [0.14, h, 0.14 * zs], [-0.14, h, 0.14 * zs], [0, 1, 0], 2);
-  return new Float32Array(out);
-}
-
 // ---------------------------------------------------------------- Classic dome
 
 /** Front-to-back squash of dome gems and wheels (the shader needs it to recover radial coordinates). */
 export const DOME_ZS = 0.85;
-/** Rim, body and cap radii of a dome gem. */
-export const DOME_RIM = 0.43;
-export const DOME_BODY = 0.365;
-export const DOME_CAP = 0.19;
-/** Half depth of the open-note bar and of its body. */
-export const OPEN_R = 0.19;
+/** Dome gem radii: outer edge of the dark base, the silver bezel ring (inner, outer), the body, the cap. */
+export const DOME_RIM = 0.445;
+export const DOME_BEZEL_IN = 0.335;
+export const DOME_BEZEL_OUT = 0.392;
+export const DOME_BODY = 0.345;
+export const DOME_CAP = 0.145;
+/** Half depth of the open-note bar. */
+export const OPEN_R = 0.2;
+/** Half length of the straight part of the open-note cap stripe. */
+export const OPEN_CAP_L = 0.75;
+
+/** Points along a dome: y = base + rise * (1 - (r / radius)^2), from the centre out to `radius`. */
+function domeCurve(radius: number, base: number, rise: number, steps: number, from = 0): [number, number][] {
+  const pts: [number, number][] = [];
+  for (let i = 0; i <= steps; i++) {
+    const r = from + (radius - from) * (i / steps);
+    pts.push([r, base + rise * (1 - (r / radius) ** 2)]);
+  }
+  return pts;
+}
 
 /**
- * Classic dome gem. Regions: skirt (0), muted rim (1), white/dark cap (2), domed body (3) and a flat
- * shadow disc under everything (4, only drawn by the inked look).
+ * Classic dome gem, built to read at a glance: a dark base (0) gives every gem a crisp outline against
+ * the board, a raised silver bezel (1) catches the light around a saturated domed body (3), and a bright
+ * cap (2) sits on top. A flat shadow disc (4) lies under everything.
  */
 export function domeMesh(): Float32Array {
   // profiles run from the top centre outwards and down, so their normals point away from the solid
-  const body: [number, number][] = [];
-  for (let i = 0; i <= 8; i++) {
-    const r = DOME_BODY * (i / 8);
-    body.push([r, 0.176 + 0.09 * (1 - (r / DOME_BODY) ** 2)]);
-  }
   return lathe(
     [
-      ...chain([[0, 0.28], [0.04, 0.279], [0.1, 0.273], [0.16, 0.262], [0.185, 0.248], [0.19, 0.234]], 2),
-      ...chain(body, 3),
-      ...chain([[DOME_BODY, 0.176], [0.385, 0.179], [0.405, 0.175], [0.425, 0.16], [0.43, 0.135]], 1),
-      ...chain([[0.43, 0.135], [0.43, 0.02], [0.415, 0]], 0),
-      ...chain([[0, 0.012], [0.47, 0.012]], 4),
+      ...chain(domeCurve(DOME_CAP + 0.012, 0.262, 0.05, 6), 2),
+      ...chain([[DOME_CAP + 0.012, 0.262], [DOME_CAP + 0.012, 0.24]], 2),
+      ...chain(domeCurve(DOME_BODY, 0.17, 0.11, 10), 3),
+      ...chain([[DOME_BEZEL_IN, 0.168], [0.344, 0.186], [0.356, 0.196], [0.372, 0.196], [0.385, 0.186], [DOME_BEZEL_OUT, 0.168]], 1),
+      ...chain([[DOME_BEZEL_OUT, 0.168], [0.425, 0.162], [0.44, 0.15], [DOME_RIM, 0.132], [DOME_RIM, 0.025], [0.43, 0]], 0),
+      ...chain([[0, 0.012], [0.5, 0.012]], 4),
     ],
     48,
     DOME_ZS,
@@ -261,10 +149,10 @@ export function domeBarMesh(halfWidth: number): Float32Array {
   const len = halfWidth - R;
   const bar = lathe(
     [
-      ...chain([[0, 0.19], [0.07, 0.186], [0.12, 0.172], [R - 0.04, 0.156]], 3),
-      ...chain([[R - 0.04, 0.156], [R - 0.025, 0.155], [R - 0.005, 0.14], [R, 0.12]], 1),
-      ...chain([[R, 0.12], [R, 0]], 0),
-      ...chain([[0, 0.012], [R + 0.03, 0.012]], 4),
+      ...chain(domeCurve(0.13, 0.15, 0.045, 6), 3),
+      ...chain([[0.125, 0.15], [0.132, 0.168], [0.142, 0.176], [0.155, 0.176], [0.165, 0.166], [0.17, 0.15]], 1),
+      ...chain([[0.17, 0.15], [0.19, 0.144], [R, 0.13], [R, 0.02], [R - 0.01, 0]], 0),
+      ...chain([[0, 0.012], [R + 0.05, 0.012]], 4),
     ],
     32,
     1,
@@ -272,7 +160,7 @@ export function domeBarMesh(halfWidth: number): Float32Array {
     len,
     true,
   );
-  const cap = lathe(chain([[0, 0.204], [0.02, 0.202], [0.04, 0.195], [0.045, 0.184]], 2), 32, 1, false, 0.27, true);
+  const cap = lathe(chain(domeCurve(0.05, 0.19, 0.016, 4), 2), 32, 1, false, OPEN_CAP_L, true);
   const all = new Float32Array(bar.length + cap.length);
   all.set(bar);
   all.set(cap, bar.length);
@@ -299,64 +187,10 @@ export function wheelMesh(): Float32Array {
   );
 }
 
-// ---------------------------------------------------------------- fret buttons per skin (ring 0, well 1)
+// ---------------------------------------------------------------- Crystal
 
-
-export function goldButtonMesh(): Float32Array {
-  return lathe(
-    [
-      ...chain([[0, 0.012], [0.28, 0.012]], 1),
-      ...chain([[0.28, 0.012], [0.3, 0.05], [0.34, 0.075], [0.37, 0.055], [0.41, 0.08], [0.45, 0.065], [0.48, 0.025], [0.48, 0]], 0),
-    ],
-    12,
-    0.72,
-    true,
-  );
-}
-
-export function squareButtonMesh(): Float32Array {
-  const out: number[] = [];
-  const zs = 0.72;
-  const o = 0.45;
-  const i = 0.31;
-  const hh = 0.06;
-  box(out, -o, o, 0, hh, -o * zs, -i * zs, 0, 0);
-  box(out, -o, o, 0, hh, i * zs, o * zs, 0, 0);
-  box(out, -o, -i, 0, hh, -i * zs, i * zs, 0, 0);
-  box(out, i, o, 0, hh, -i * zs, i * zs, 0, 0);
-  quad(out, [-i, 0.01, -i * zs], [i, 0.01, -i * zs], [i, 0.01, i * zs], [-i, 0.01, i * zs], [0, 1, 0], 1);
-  return new Float32Array(out);
-}
-
-
-/**
- * Studio: a glass lens (2) in a polished bezel (1) on a lacquered body (0). Smooth normals, so
- * reflections glide across it rather than breaking into facets.
- */
-export function lensMesh(): Float32Array {
-  const lens: [number, number][] = [];
-  for (let i = 0; i <= 6; i++) {
-    const r = (i / 6) * 0.29;
-    lens.push([r, 0.19 + 0.065 * (1 - (r / 0.29) ** 2)]);
-  }
-  const bezel: [number, number][] = [[0.29, 0.19]];
-  for (let i = 0; i <= 6; i++) {
-    const a = (i / 6) * Math.PI;
-    bezel.push([0.355 - Math.cos(a) * 0.065, 0.19 + Math.sin(a) * 0.04]);
-  }
-  bezel.push([0.43, 0.15], [0.44, 0.12]);
-  return lathe(
-    [...chain(lens, 2), ...chain(bezel, 1), ...chain([[0.44, 0.12], [0.44, 0.04], [0.42, 0.01], [0.39, 0], [0, 0]], 0)],
-    48,
-    0.72,
-    false,
-    0,
-    true,
-  );
-}
-
-/** Studio fret button: an anodised ring (0) around a smoked-glass well that lights up (1). */
-export function bezelButtonMesh(): Float32Array {
+/** Crystal fret button: a glass ring (0) around a clear well that lights up (1). */
+export function glassButtonMesh(): Float32Array {
   return lathe(
     [
       ...chain([[0, 0.018], [0.27, 0.022]], 1),
@@ -370,16 +204,29 @@ export function bezelButtonMesh(): Float32Array {
   );
 }
 
-/** Crystal: a smooth glass bead, one region; the shader draws the HOPO / tap markings. */
-export function beadMesh(): Float32Array {
+/** Crystal bead radius (before the front-to-back squash) and squash. */
+export const BEAD_R = 0.43;
+export const BEAD_ZS = 0.78;
+
+/** A squashed superellipse profile: flat-ish top, rounded shoulder, flat bottom. */
+function beadProfile(radius: number, height: number): [number, number][] {
   const pts: [number, number][] = [];
-  // a squashed superellipse: flat-ish top, rounded shoulder, flat bottom
-  for (let i = 0; i <= 12; i++) {
-    const a = (i / 12) * (Math.PI / 2);
+  for (let i = 0; i <= 14; i++) {
+    const a = (i / 14) * (Math.PI / 2);
     const c = Math.cos(a);
     const s = Math.sin(a);
-    pts.push([0.43 * Math.sign(s) * Math.abs(s) ** 0.6, 0.11 + 0.15 * Math.sign(c) * Math.abs(c) ** 0.6]);
+    pts.push([radius * Math.abs(s) ** 0.6, height * 0.4 + height * 0.6 * Math.abs(c) ** 0.85]);
   }
-  pts.push([0.43, 0.06], [0.4, 0.01], [0.34, 0], [0, 0]);
-  return lathe(chain(pts, 0), 48, 0.72, false, 0, true);
+  pts.push([radius, height * 0.22], [radius * 0.94, height * 0.03], [radius * 0.8, 0], [0, 0]);
+  return pts;
+}
+
+/** Crystal: a smooth glass bead (0) over a soft shadow disc (4); the shader draws the note markings. */
+export function beadMesh(): Float32Array {
+  return lathe([...chain(beadProfile(BEAD_R, 0.25), 0), ...chain([[0, 0.006], [0.5, 0.006]], 4)], 48, BEAD_ZS, false, 0, true);
+}
+
+/** Crystal open note: a glass bar with the bead's profile and rounded ends. */
+export function glassBarMesh(halfWidth: number): Float32Array {
+  return lathe([...chain(beadProfile(OPEN_R, 0.2), 0), ...chain([[0, 0.006], [OPEN_R + 0.06, 0.006]], 4)], 32, 1, false, halfWidth - OPEN_R, true);
 }

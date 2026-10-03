@@ -81,7 +81,7 @@ export const THEMES: Record<ThemeId, ThemeDef> = {
       railColor: [0.55, 0.53, 0.5],
       hwFar: [0.004, 0.003, 0.0026],
       hwNear: [0.0095, 0.0068, 0.0056],
-      laneLine: [0.03, 0.028, 0.026],
+      laneLine: [0.075, 0.07, 0.064],
       strike: [0.55, 0.53, 0.5],
       beat: [0.72, 0.7, 0.66],
       bloom: 0.45,
@@ -138,7 +138,7 @@ export const THEMES: Record<ThemeId, ThemeDef> = {
     name: 'Baroque',
     description: 'Oxblood velvet, gilded frames and engraved type.',
     swatch: ['#140a0b', '#2e1614', '#d4a24c', '#f3e6c8'],
-    skin: 'baroque',
+    skin: 'dome',
     render: scene({
       light: false,
       bgBottom: [0.05, 0.008, 0.01],
@@ -158,7 +158,7 @@ export const THEMES: Record<ThemeId, ThemeDef> = {
     name: 'Synthwave',
     description: 'Retro sunset, horizon grid, hot pink.',
     swatch: ['#13051f', '#2c0f48', '#ff4fd8', '#ffe9fb'],
-    skin: 'neon',
+    skin: 'glass',
     render: scene({ light: false, bgBottom: [0.05, 0.004, 0.06], bgTop: [0.02, 0.004, 0.06], art: 0.3, highwayTint: [1.3, 0.7, 1.7], grid: 1, bloom: 0.7, vignette: 0.3 }),
   },
   terminal: {
@@ -166,7 +166,7 @@ export const THEMES: Record<ThemeId, ThemeDef> = {
     name: 'Terminal',
     description: 'Phosphor green, monospace, scanlines.',
     swatch: ['#030a04', '#0a1c0d', '#39ff6a', '#b8ffc4'],
-    skin: 'pixel',
+    skin: 'dome',
     render: scene({ light: false, bgBottom: [0, 0.03, 0.006], bgTop: [0, 0.008, 0], art: 0.2, highwayTint: [0.55, 1.35, 0.65], scanlines: 1, bloom: 0.75, vignette: 0.45 }),
   },
   paper: {
@@ -182,7 +182,7 @@ export const THEMES: Record<ThemeId, ThemeDef> = {
     name: 'Midnight',
     description: 'Deep navy and cool cyan.',
     swatch: ['#050d1a', '#10223b', '#4cc9f0', '#e4efff'],
-    skin: 'neon',
+    skin: 'glass',
     render: scene({ light: false, bgBottom: [0.01, 0.035, 0.08], bgTop: [0.003, 0.01, 0.035], art: 0.8, highwayTint: [0.8, 1.0, 1.4], bloom: 0.6 }),
   },
 };

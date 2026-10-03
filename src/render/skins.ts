@@ -1,20 +1,18 @@
 // Note skins: how gems, sustains, fret buttons and hit particles look. Independent of the page theme.
 // Colour order: green, red, yellow, blue, orange, open, star power, missed (linear light).
 
-export const SKIN_IDS = ['dome', 'studio', 'glass', 'neon', 'baroque', 'pixel'] as const;
+export const SKIN_IDS = ['dome', 'glass'] as const;
 export type SkinId = (typeof SKIN_IDS)[number];
 
 export interface NoteSkin {
   id: SkinId;
   name: string;
   description: string;
-  /** index passed to shaders to pick a shading style */
+  /** index passed to shaders to pick a shading style: 0 dome, 1 crystal */
   style: number;
   colors: number[][];
-  gem: 'dome' | 'puck' | 'jewel' | 'block' | 'lens' | 'bead';
-  button: 'wheel' | 'ring' | 'gold' | 'square' | 'bezel';
-  particles: 'sparks' | 'glitter' | 'squares';
-  /** scale on HOPO gems (smaller in Neon, like Guitar Hero) */
+  particles: 'sparks' | 'glitter';
+  /** scale on HOPO gems */
   hopoScale: number;
 }
 
@@ -22,48 +20,27 @@ export const SKINS: Record<SkinId, NoteSkin> = {
   dome: {
     id: 'dome',
     name: 'Classic dome',
-    description: 'Domed gems with a muted rim and a cap, wheel frets.',
-    style: 5,
+    description: 'Domed gems in a dark outline: colour for strums, white for HOPOs, dark for taps. Wheel frets.',
+    style: 0,
+    // the gem faces' colours (FRET in the shaders), in linear light
     colors: [
-      [0.041, 0.875, 0.145],
-      [1.0, 0.04, 0.066],
-      [1.0, 0.652, 0.038],
-      [0.038, 0.263, 1.0],
-      [1.0, 0.259, 0.01],
-      [0.442, 0.072, 1.0],
-      [0.334, 0.867, 1.0],
+      [0.01, 0.646, 0.066],
+      [0.891, 0.015, 0.04],
+      [1.0, 0.612, 0.003],
+      [0.012, 0.167, 1.0],
+      [1.0, 0.198, 0.002],
+      [0.389, 0.072, 1.0],
+      [0.076, 0.774, 1.0],
       [0.28, 0.259, 0.227],
     ],
-    gem: 'dome',
-    button: 'wheel',
     particles: 'sparks',
-    hopoScale: 0.94,
-  },
-  studio: {
-    id: 'studio',
-    name: 'Studio',
-    description: 'Glass lenses in chrome bezels on a lacquered board, with ray-traced reflections and soft shadows.',
-    style: 6,
-    colors: [
-      [0.03, 0.46, 0.13],
-      [0.66, 0.025, 0.035],
-      [0.92, 0.52, 0.035],
-      [0.025, 0.15, 0.7],
-      [0.86, 0.2, 0.02],
-      [0.32, 0.07, 0.62],
-      [0.6, 0.88, 1.0],
-      [0.22, 0.21, 0.2],
-    ],
-    gem: 'lens',
-    button: 'bezel',
-    particles: 'sparks',
-    hopoScale: 0.92,
+    hopoScale: 0.95,
   },
   glass: {
     id: 'glass',
     name: 'Crystal',
-    description: 'Glass beads, tubes and a flowing glass highway that bend, split and reflect the light behind them.',
-    style: 7,
+    description: 'Lit glass beads on a flowing glass highway: coloured for strums, frosted for HOPOs, smoked for taps.',
+    style: 1,
     colors: [
       [0.1, 0.85, 0.3],
       [1.0, 0.1, 0.14],
@@ -74,73 +51,9 @@ export const SKINS: Record<SkinId, NoteSkin> = {
       [0.55, 0.9, 1.0],
       [0.4, 0.4, 0.42],
     ],
-    gem: 'bead',
-    button: 'bezel',
     particles: 'glitter',
     hopoScale: 0.9,
   },
-  neon: {
-    id: 'neon',
-    name: 'Neon',
-    description: 'Glowing pucks, light trails and sparks.',
-    style: 0,
-    colors: [
-      [0.12, 1.0, 0.22],
-      [1.0, 0.1, 0.12],
-      [1.0, 0.82, 0.08],
-      [0.12, 0.42, 1.0],
-      [1.0, 0.26, 0.02],
-      [0.62, 0.2, 1.0],
-      [0.62, 0.92, 1.05],
-      [0.3, 0.3, 0.33],
-    ],
-    gem: 'puck',
-    button: 'ring',
-    particles: 'sparks',
-    hopoScale: 0.86,
-  },
-
-  baroque: {
-    id: 'baroque',
-    name: 'Baroque',
-    description: 'Faceted jewels set in gold, pearls for HOPOs, gilded sustains.',
-    style: 2,
-    colors: [
-      [0.02, 0.5, 0.14],
-      [0.65, 0.01, 0.05],
-      [1.0, 0.62, 0.06],
-      [0.03, 0.13, 0.75],
-      [0.95, 0.28, 0.02],
-      [0.38, 0.05, 0.55],
-      [0.92, 0.96, 1.05],
-      [0.3, 0.28, 0.26],
-    ],
-    gem: 'jewel',
-    button: 'gold',
-    particles: 'glitter',
-    hopoScale: 0.92,
-  },
-  pixel: {
-    id: 'pixel',
-    name: 'Pixel',
-    description: '8-bit blocks, stepped sustains and square sparks.',
-    style: 3,
-    colors: [
-      [0.04, 0.72, 0.04],
-      [0.86, 0.04, 0.04],
-      [1.0, 0.82, 0.08],
-      [0.05, 0.22, 0.95],
-      [1.0, 0.32, 0.02],
-      [0.55, 0.08, 0.8],
-      [0.35, 0.9, 1.0],
-      [0.3, 0.3, 0.3],
-    ],
-    gem: 'block',
-    button: 'square',
-    particles: 'squares',
-    hopoScale: 0.9,
-  },
-
 };
 
 /** sRGB hex for a skin colour (for the DOM: results bars, pickers). */
