@@ -80,7 +80,7 @@ export const afterglow: SongDef = {
   ],
   player: [
     { inst: 'pluck', tone: 0.6, gain: 1, verb: 0.3, echo: 0.25, notes: [...comp(H.slice(4), 4, INTRO + bar(4), '..x...x...x...x.', (c) => nearVoicing(c, 'C4'), { v: 0.45 }), ...eightBars(INTRO + bar(8), 1).flatMap(stabs), ...eightBars(ARPS, 2).flatMap((b) => arp16(b)), ...melody(BUILD), ...eightBars(OUTRO, 1).flatMap((b) => arp16(b, 0.6))] },
-    { inst: 'piano', gain: 1.5, verb: 0.5, echo: 0.2, notes: melody(BREAK).map((n) => ({ ...n, p: n.p.map((p) => p + 12) })) },
+    { inst: 'epiano', gain: 1.5, verb: 0.5, echo: 0.2, notes: melody(BREAK).map((n) => ({ ...n, p: n.p.map((p) => p + 12) })) },
     { inst: 'supersaw', tone: 0.65, gain: 1.4, verb: 0.35, echo: 0.2, notes: [...melody(DROP), ...harmony(melody(DROP + bar(8)).map((n) => ({ ...n, p: n.p.map((p) => p + 12) })))] },
   ],
   backing: [

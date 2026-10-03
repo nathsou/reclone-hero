@@ -40,7 +40,7 @@ export const prismParade: SongDef = {
   player: [
     { inst: 'clean', gain: 1.1, verb: 0.1, pump: 0.3, notes: [0, 32, 128, 192].flatMap(at => rhythm(D, at, '..x..x....x..x..')) },
     { inst: 'supersaw', tone: 0.45, gain: 0.85, verb: 0.25, echo: 0.1, notes: [...seq(prismHook, 64), ...seq(prismHook, 160, { transpose: 12, v: 0.65 })] },
-    { inst: 'piano', gain: 1.5, verb: 0.35, echo: 0.1, notes: comp(D, 4, 96, 'x.x...x.x...x.x.', c => voicing(c, 'D4'), { arp: [0, 2, 1, 3, 2, 1], v: 0.7 }) },
+    { inst: 'epiano', gain: 1.5, verb: 0.35, echo: 0.1, notes: comp(D, 4, 96, 'x.x...x.x...x.x.', c => voicing(c, 'D4'), { arp: [0, 2, 1, 3, 2, 1], v: 0.7 }) },
   ],
   backing: [
     { inst: 'synthbass', gain: 0.9, tone: 0.5, verb: 0, pump: 0.25, notes: [32, 64, 128, 160, 192].flatMap(at => bass(D, at, 'x..x..x.x..x..x.')) },
@@ -61,12 +61,12 @@ export const assemblyLine: SongDef = {
   ...meta('assembly-line', 'Assembly Line', 'Electro Rock', 110, ['#282b2f', '#d9d6c7'], 'shards'),
   sections: [section(0, 'Boot'), section(32, 'Pistons'), section(64, 'Human Override'), section(96, 'Power Cut'), section(128, 'Restart'), section(160, 'Overdrive'), section(192, 'Shutdown')],
   player: [
-    { inst: 'drive', gain: 2.1, verb: 0.08, notes: [0, 32, 128, 192].flatMap(pistons) },
-    { inst: 'drive', gain: 2, tone: 0.7, verb: 0.08, notes: [64, 160].flatMap(at => comp(A, 4, at, 'mm.m..m.mm.m..m.', c => voicing(c, 'E2'), { v: 0.8 })) },
-    { inst: 'chip', tone: 0.3, gain: 1.5, verb: 0.12, echo: 0.1, notes: [...loop(seq('E4:2 .:2 B4:2 G4:2 E4:4 D4:2 B3:2'), 8, 4, 96)] },
+    { inst: 'drive', gain: 1.45, verb: 0.08, notes: [0, 32, 128, 192].flatMap(pistons) },
+    { inst: 'drive', gain: 1.3, tone: 0.5, verb: 0.08, notes: [64, 160].flatMap(at => comp(A, 4, at, 'mm.m..m.mm.m..m.', c => voicing(c, 'E2'), { v: 0.8 })) },
+    { inst: 'chip', tone: 0.3, gain: 0.85, verb: 0.12, echo: 0.1, notes: [...loop(seq('E4:2 .:2 B4:2 G4:2 E4:4 D4:2 B3:2'), 8, 4, 96)] },
   ],
   backing: [
-    { inst: 'synthbass', tone: 0.65, gain: 0.65, verb: 0, notes: [0, 32, 64, 128, 160, 192].flatMap(at => bass(A, at, 'x.x.x.x.x.x.x.x.')) },
+    { inst: 'synthbass', tone: 0.5, gain: 0.5, verb: 0, notes: [0, 32, 64, 128, 160, 192].flatMap(at => bass(A, at, 'x.x.x.x.x.x.x.x.')) },
     { inst: 'organ', gain: 0.45, verb: 0.1, pump: 0.5, notes: [64, 160].flatMap(at => rhythm(A, at, 'x---....x---....', 'E3')) },
     { inst: 'subbass', gain: 0.5, verb: 0, notes: bass(A, 96, 'x---------------') },
   ],
@@ -82,7 +82,7 @@ export const photonRun: SongDef = {
   player: [
     { inst: 'pluck', gain: 0.9, tone: 0.35, verb: 0.2, echo: 0.18, notes: [...pulse(0, 0.5).filter((_, i) => i % 2 === 0), ...pulse(32), ...pulse(128, 0.75), ...pulse(192, 0.45).filter((_, i) => i % 2 === 0)] },
     { inst: 'strings', tone: 0.5, gain: 0.95, verb: 0.35, notes: [...seq(horizon, 64), ...seq(horizon, 160, { transpose: 12, v: 0.7 })] },
-    { inst: 'piano', gain: 1.3, verb: 0.5, notes: seq(horizon, 96, { v: 0.6 }) },
+    { inst: 'epiano', gain: 1.3, verb: 0.5, notes: seq(horizon, 96, { v: 0.6 }) },
   ],
   backing: [
     { inst: 'synthbass', tone: 0.45, gain: 0.8, verb: 0, pump: 0.35, notes: [32, 64, 128, 160].flatMap(at => bass(T, at, 'x.x.x.x.x.x.x.x.')) },

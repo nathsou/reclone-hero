@@ -38,7 +38,8 @@ export type InstrumentKind =
   | 'pluck'
   | 'pad'
   | 'organ'
-  | 'piano'
+  | 'piano' // acoustic hammered strings
+  | 'epiano' // FM electric piano
   | 'harpsichord'
   | 'strings'
   | 'bell'

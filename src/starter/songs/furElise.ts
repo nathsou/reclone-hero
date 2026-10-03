@@ -80,7 +80,7 @@ export const furElise: SongDef = {
     { beat: bar(88), name: 'Coda' },
   ],
   player: [
-    { inst: 'piano', gain: 1, verb: 0.35, notes: [...seq(PICKUP, bar(4) - 0.5), ...seq(THEME, bar(4))] },
+    { inst: 'epiano', gain: 1, verb: 0.35, notes: [...seq(PICKUP, bar(4) - 0.5), ...seq(THEME, bar(4))] },
     { inst: 'pluck', tone: 0.6, gain: 1, verb: 0.25, echo: 0.2, notes: [...seq(PICKUP, bar(20) - 0.5), ...seq(THEME, bar(20)), ...development(48)] },
     {
       inst: 'supersaw',
@@ -92,7 +92,7 @@ export const furElise: SongDef = {
     },
   ],
   backing: [
-    { inst: 'piano', gain: 0.8, pan: -0.15, verb: 0.3, notes: [...perBar(0, ['Am', 'E', 'Am', 'E'], (h) => LH[h]), ...perBar(4, THEME_H, (h) => LH[h]), ...perBar(20, THEME_H, (h) => LH[h], 0.6)] },
+    { inst: 'epiano', gain: 0.8, pan: -0.15, verb: 0.3, notes: [...perBar(0, ['Am', 'E', 'Am', 'E'], (h) => LH[h]), ...perBar(4, THEME_H, (h) => LH[h]), ...perBar(20, THEME_H, (h) => LH[h], 0.6)] },
     {
       inst: 'pad',
       tone: 0.4,

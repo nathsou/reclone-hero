@@ -240,8 +240,12 @@ export function pluck(
   const bendFrom = opts.bendFrom ?? 0;
   const vib = opts.vibrato ?? 0;
   const moving = vib > 0 || bendFrom > 0;
-  // The two-point average in the loop adds half a sample of delay.
-  const loop = sr / freq - 0.5;
+  // Compensate the actual damping filter's phase at the fundamental. Its delay is
+  // only half a sample at a 50/50 blend; brighter strings use a smaller blend.
+  const s = 0.5 * (0.35 + 0.65 * (1 - opts.bright));
+  const omega = 2 * Math.PI * freq / sr;
+  const dampingDelay = Math.atan2(s * Math.sin(omega), 1 - s + s * Math.cos(omega)) / omega;
+  const loop = sr / freq - dampingDelay;
   const n = Math.max(2, Math.floor(loop));
   const frac = loop - n;
   const size = Math.ceil(loop * 2 ** ((bendFrom + vib + 0.2) / 12)) + 4;
@@ -262,12 +266,12 @@ export function pluck(
 
   // Loop gain per period for the requested T60, and a damping blend (0.5 = classic average).
   const g = 0.001 ** (1 / (freq * opts.decay));
-  const s = 0.5 * (0.35 + 0.65 * (1 - opts.bright));
   const rel = opts.release ?? 0.05;
   const total = Math.min(out.length - start, Math.round((opts.len + rel * 4) * sr));
   const relStart = Math.round(opts.len * sr);
   const relCoef = Math.exp(-1 / Math.max(1, rel * sr));
-  const C = (1 - frac) / (1 + frac);
+  const phaseRatio = Math.tan(omega * frac / 2) / Math.tan(omega / 2);
+  const C = (1 - phaseRatio) / (1 + phaseRatio);
   const bendLen = 0.08 * sr;
   const vibStart = 0.22 * sr;
   const vibW = (2 * Math.PI * 5.4) / sr;

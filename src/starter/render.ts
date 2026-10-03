@@ -5,7 +5,7 @@ import { Tempo } from './score.ts';
 import type { DrumPart, DrumVoice, Note, Part, SongDef } from './score.ts';
 
 /** Samples per render block. */
-const BLOCK = 1 << 15;
+const BLOCK = 1 << 13;
 
 export interface Block {
   /** player stem, stereo */
@@ -27,6 +27,7 @@ interface NoteTrack {
   starts: Int32Array;
   lens: Float32Array;
   next: number;
+  activeEnd: number;
   L: Float32Array;
   R: Float32Array | null;
   gl: number;
@@ -113,7 +114,7 @@ export function* renderSong(def: SongDef, sr: number, from = 0, to = songSeconds
     });
     const size = BLOCK + Math.ceil((Math.min(maxLen, 16) + voice.tail + 0.3) * sr);
     const [gl, gr] = panGains(part.pan ?? 0);
-    const t: NoteTrack = { voice, part, notes, player, starts, lens, next: 0, L: new Float32Array(size), R: voice.stereo ? new Float32Array(size) : null, gl, gr };
+    const t: NoteTrack = { voice, part, notes, player, starts, lens, next: 0, activeEnd: 0, L: new Float32Array(size), R: voice.stereo ? new Float32Array(size) : null, gl, gr };
     // Notes that start before the render window are skipped.
     while (t.next < notes.length && starts[t.next] < renderStart) t.next++;
     tracks.push(t);
@@ -158,6 +159,11 @@ export function* renderSong(def: SongDef, sr: number, from = 0, to = songSeconds
   const sendEP = new Float32Array(BLOCK);
   const sendEB = new Float32Array(BLOCK);
   const pump = new Float32Array(BLOCK);
+  const hasPump = tracks.some(t => (t.part.pump ?? 0) > 0);
+  const hasVerbP = tracks.some(t => t.player && (t.part.verb ?? 0.15) > 0);
+  const hasVerbB = tracks.some(t => !t.player && (t.part.verb ?? 0.15) > 0) || drums.some(d => d.verb > 0);
+  const hasEchoP = tracks.some(t => t.player && (t.part.echo ?? 0) > 0);
+  const hasEchoB = tracks.some(t => !t.player && (t.part.echo ?? 0) > 0);
   const lim = { env: 0 };
   const trim = dbToGain(def.levelDb ?? 0);
   const att = Math.exp(-1 / (0.0015 * sr));
@@ -169,8 +175,6 @@ export function* renderSong(def: SongDef, sr: number, from = 0, to = songSeconds
     for (const b of [pl, pr, bl, br, sendVP, sendVB, sendEP, sendEB]) b.fill(0, 0, n);
 
     // pump envelope for this block
-    let hasPump = false;
-    for (const t of tracks) if ((t.part.pump ?? 0) > 0) hasPump = true;
     if (hasPump) {
       while (kickIdx + 1 < kicks.length && kicks[kickIdx + 1] <= c) kickIdx++;
       let k = kickIdx;
@@ -184,9 +188,13 @@ export function* renderSong(def: SongDef, sr: number, from = 0, to = songSeconds
     }
 
     for (const t of tracks) {
+      // Keep processing through note releases and filter/chorus ring-out, but skip
+      // tracks that have not entered yet or have finished their arrangement section.
+      if (c >= t.activeEnd && (t.next >= t.notes.length || t.starts[t.next] >= c + n)) continue;
       while (t.next < t.notes.length && t.starts[t.next] < c + n) {
         const i = t.next++;
         t.voice.note(t.notes[i], i, t.lens[i], t.L, t.R, t.starts[i] - c);
+        t.activeEnd = Math.max(t.activeEnd, t.starts[i] + Math.ceil((t.lens[i] + t.voice.tail + 0.3) * sr));
       }
       t.voice.process(t.L, t.R, n);
       const g = t.part.gain ?? 1;
@@ -249,10 +257,10 @@ export function* renderSong(def: SongDef, sr: number, from = 0, to = songSeconds
 
     const vp = sendVP.subarray(0, n);
     const vb = sendVB.subarray(0, n);
-    verbP.process(vp, pl.subarray(0, n), pr.subarray(0, n), 1);
-    verbB.process(vb, bl.subarray(0, n), br.subarray(0, n), 1);
-    echoP.process(sendEP, pl, pr, n);
-    echoB.process(sendEB, bl, br, n);
+    if (hasVerbP) verbP.process(vp, pl.subarray(0, n), pr.subarray(0, n), 1);
+    if (hasVerbB) verbB.process(vb, bl.subarray(0, n), br.subarray(0, n), 1);
+    if (hasEchoP) echoP.process(sendEP, pl, pr, n);
+    if (hasEchoB) echoB.process(sendEB, bl, br, n);
 
     // Master: the song's level trim, then one limiter linked across both stems, so the game's sum
     // of the two never clips.

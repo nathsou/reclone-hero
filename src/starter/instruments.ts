@@ -83,7 +83,7 @@ class DriveGuitar implements Voice {
       const c = this.chains[side];
       for (let i = 0; i < n; i++) {
         let x = c[1].tick(c[0].tick(buf[i]));
-        x = Math.tanh((x + 0.06) * this.gain) - 0.0599;
+        x = Math.tanh(x * this.gain + 0.06) - Math.tanh(0.06);
         x = c[7].tick(c[6].tick(c[5].tick(c[4].tick(c[3].tick(c[2].tick(x))))));
         buf[i] = x * 0.36;
       }
@@ -134,7 +134,7 @@ class LeadGuitar implements Voice {
     const c = this.c;
     for (let i = 0; i < n; i++) {
       let x = c[2].tick(c[1].tick(c[0].tick(L[i])));
-      x = Math.tanh((x + 0.05) * this.gain) - 0.05;
+      x = Math.tanh(x * this.gain + 0.05) - Math.tanh(0.05);
       L[i] = c[6].tick(c[5].tick(c[4].tick(c[3].tick(x)))) * 0.3;
     }
   }
@@ -293,7 +293,8 @@ class SuperSaw implements Voice {
     const [a, d, s, r] =
       k === 'pad' ? [0.35, 0.6, 0.8, 0.9] : k === 'strings' ? [0.14, 0.3, 0.85, 0.5] : k === 'pluck' ? [0.002, 0.18, 0.0, 0.12] : [0.006, 0.25, 0.75, 0.16];
     const rand = rng(index * 977 + 11);
-    const total = Math.min(L.length - at, Math.round((lenSec + r * 2) * sr));
+    const audibleSec = k === 'pluck' ? Math.min(lenSec + r * 2, a + d) : lenSec + r * 2;
+    const total = Math.min(L.length - at, Math.round(audibleSec * sr));
     const amp = (n.v * (k === 'lead' ? 0.24 : k === 'pluck' ? 0.5 : 0.22)) / Math.sqrt(n.p.length);
     for (const p of n.p) {
       const f0 = mtof(p);
@@ -322,12 +323,11 @@ class SuperSaw implements Voice {
           if (ph >= 1) ph -= 1;
           phases[v] = ph;
           const saw = 2 * ph - 1 - blep(ph, dt);
-          if (v & 1) xr += saw;
-          else xl += saw;
           if (v === (voices >> 1)) {
-            xl += saw * 0.5;
-            xr += saw * 0.5;
-          }
+            xl += saw;
+            xr += saw;
+          } else if (v < (voices >> 1)) xl += saw;
+          else xr += saw;
         }
         const g = adsrGain(i, sr, lenSec, a, d, s, r) * amp;
         L[at + i] += svfL.tick(xl) * g;
@@ -386,6 +386,53 @@ class Organ implements Voice {
       R![i] = x * (0.8 - 0.2 * s);
     }
   }
+}
+
+/** Hammered strings: decaying, slightly inharmonic partials and a short damper release.
+ * Recursive oscillators keep the acoustic voice inexpensive even for dense two-hand chords.
+ */
+class AcousticPiano implements Voice {
+  readonly tail = 0.6;
+  readonly stereo = false;
+  private readonly sr: number;
+  constructor(sr: number) { this.sr = sr; }
+
+  note(n: Note, _index: number, lenSec: number, L: Float32Array, _R: Float32Array | null, at: number): void {
+    const sr = this.sr;
+    const held = Math.max(0.025, n.mute ? Math.min(lenSec, 0.12) : lenSec);
+    const total = Math.min(L.length - at, Math.round((held + this.tail) * sr));
+    const releaseAt = Math.round(held * sr);
+    const release = Math.exp(-1 / (0.075 * sr));
+    const attack = Math.max(1, Math.round(0.003 * sr));
+    const amp = n.v * 0.52 / Math.sqrt(n.p.length);
+    for (const p of n.p) {
+      const fundamental = mtof(p);
+      const stiffness = 0.000035 * 2 ** ((p - 60) / 24);
+      const decay = Math.max(0.45, 2.8 * 2 ** ((48 - p) / 36));
+      for (let h = 1; h <= 10; h++) {
+        const f = fundamental * h * Math.sqrt((1 + stiffness * h * h) / (1 + stiffness));
+        if (f >= sr * 0.45) break;
+        const w = TWO_PI * f / sr;
+        const r = Math.exp(-1 / (sr * decay / (1 + 0.22 * (h - 1))));
+        const c = 2 * r * Math.cos(w);
+        const r2 = r * r;
+        // Soft strikes lose upper partials; the fundamental remains clear in the bass.
+        const level = amp * Math.exp(-(h - 1) * (0.3 - 0.18 * n.v)) / h ** 1.35;
+        let previous = -Math.sin(w) * level;
+        let current = 0;
+        let damper = 1;
+        for (let i = 0; i < total; i++) {
+          const next = c * current - r2 * previous;
+          previous = current;
+          current = next;
+          if (i >= releaseAt) damper *= release;
+          L[at + i] += next * Math.min(1, i / attack) * damper;
+        }
+      }
+    }
+  }
+
+  process(): void {}
 }
 
 /** FM electric piano (two-operator, DX-style): cheap enough for dense parts. */
@@ -660,6 +707,8 @@ export function makeVoice(kind: InstrumentKind, sr: number, tone = 0.5): Voice {
     case 'organ':
       return new Organ(sr);
     case 'piano':
+      return new AcousticPiano(sr);
+    case 'epiano':
       return new Piano(sr);
     case 'harpsichord':
       return new Harpsichord(sr);
