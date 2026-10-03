@@ -12,6 +12,7 @@ import { FRET_ACTIONS, keyLabel } from '../input/bindings.ts';
 import { input } from '../input/input.ts';
 import type { InputEvent } from '../input/input.ts';
 import type { SongEntry } from '../library/song.ts';
+import { BASE_SPEED } from '../render/highway.ts';
 import { Renderer } from '../render/renderer.ts';
 import type { RenderState } from '../render/renderer.ts';
 import { settings } from '../settings.ts';
@@ -22,7 +23,6 @@ import { noteSkin, renderTheme } from '../ui/theme.ts';
 
 /** Misses are judged slightly behind real time so late-arriving input events are never pre-empted. */
 const JUDGE_LAG = 0.02;
-const BASE_SPEED = 11;
 /** In keyboard tap mode, fret keys pressed this close together form one chord, i.e. one strum. */
 const TAP_CHORD_WINDOW = 0.04;
 const FRET_INDEX: Record<string, number> = { green: 0, red: 1, yellow: 2, blue: 3, orange: 4, strumUp: -1, strumDown: -1, starPower: -1, tilt: -1, start: -1 };
@@ -179,6 +179,7 @@ export class Game {
       time: 0,
       dt: 0,
       speed: BASE_SPEED,
+      length: 1,
       notes: setup.track.notes,
       noteState: new Uint8Array(0),
       spBroken: new Uint8Array(0),
@@ -521,6 +522,7 @@ export class Game {
     rs.time = t + settings.videoOffsetMs / 1000;
     rs.dt = this.paused ? 0 : dt;
     rs.speed = BASE_SPEED * settings.noteSpeed;
+    rs.length = settings.highwayLength;
     rs.noteState = engine.noteState;
     rs.spBroken = engine.spBroken;
     rs.sustainHeld = this.sustainHeld;

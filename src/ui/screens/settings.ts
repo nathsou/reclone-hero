@@ -11,6 +11,7 @@ import { h, replace } from '../dom.ts';
 import { adjustFocused, canAdjust, controls } from '../focusNav.ts';
 import { THEMES } from '../themes.ts';
 import type { ThemeId } from '../themes.ts';
+import { BASE_SPEED, LEN, lookahead } from '../../render/highway.ts';
 import { SKINS, SKIN_IDS } from '../../render/skins.ts';
 import { skinPreviewSvg } from '../skinPreview.ts';
 import { resolveSkin } from '../theme.ts';
@@ -100,7 +101,8 @@ export class SettingsModal implements Screen {
     replace(
       this.body,
       h('div', { class: 'sec-label' }, 'Timing'),
-      slider('Note speed', 'noteSpeed', 0.5, 2.5, 0.05, (v) => `${v.toFixed(2)}×`, 'How fast notes travel toward you.', preview.redraw),
+      slider('Note speed', 'noteSpeed', 0.5, 3, 0.05, (v) => `${v.toFixed(2)}×`, 'How fast notes travel toward you. Faster spreads them further apart. Default 1.40×.', preview.redraw),
+      slider('Highway length', 'highwayLength', 0.4, 1, 0.05, pct, 'How far ahead the highway reaches. Shorter shows fewer notes at once.', preview.redraw),
       slider('Hit window', 'hitWindowMs', 40, 150, 5, (v) => `±${v} ms`, 'How early or late a note still counts. Default ±90 ms.', preview.redraw),
       slider('Strum leniency', 'strumLeniencyMs', 0, 120, 5, (v) => `${v} ms`, 'How long a strum may come before its fret press.'),
       h('div', { class: 'sec-label' }, 'Feedback'),
@@ -590,13 +592,18 @@ function timingPreview() {
   const reduced = typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches;
   let raf = 0;
   let stopped = false;
-  let colors = { accent: '#fd6a3a', text: '#f2efe9', line: 'rgba(255,255,255,.1)' };
+  let colors = { accent: '#fd6a3a', text: '#f2efe9', line: 'rgba(255,255,255,.1)', bg: '#0d0c0b' };
   const readColors = () => {
     const cs = getComputedStyle(document.documentElement);
-    colors = { accent: cs.getPropertyValue('--accent').trim() || colors.accent, text: cs.getPropertyValue('--text').trim() || colors.text, line: cs.getPropertyValue('--line-soft').trim() || colors.line };
+    colors = {
+      accent: cs.getPropertyValue('--accent').trim() || colors.accent,
+      text: cs.getPropertyValue('--text').trim() || colors.text,
+      line: cs.getPropertyValue('--line-soft').trim() || colors.line,
+      bg: cs.getPropertyValue('--bg').trim() || colors.bg,
+    };
   };
   const redraw = () => {
-    caption.replaceChildren('Hit window ', h('b', null, `±${settings.hitWindowMs} ms`), ` at note speed ${settings.noteSpeed.toFixed(2)}×`);
+    caption.replaceChildren(h('b', null, `${lookahead(settings.noteSpeed, settings.highwayLength).toFixed(2)} s`), ' of notes ahead · hit window ', h('b', null, `±${settings.hitWindowMs} ms`));
   };
   const draw = (now: number) => {
     if (stopped) return;
@@ -614,7 +621,9 @@ function timingPreview() {
     g.clearRect(0, 0, w, hgt);
     const laneW = w / 5;
     const strike = hgt * 0.8;
-    const pps = hgt * 0.34 * settings.noteSpeed;
+    // the canvas above the strike line is the full highway: LEN world units
+    const pps = ((strike / LEN) * BASE_SPEED) * settings.noteSpeed;
+    const top = strike * (1 - settings.highwayLength);
     g.strokeStyle = colors.line;
     g.lineWidth = 1;
     for (let i = 1; i < 5; i++) {
@@ -644,10 +653,17 @@ function timingPreview() {
     g.globalAlpha = 1;
     g.fillStyle = colors.text;
     g.fillRect(0, Math.round(strike) - 1, w, 2);
+    if (top > 0) {
+      // beyond the highway's far end: notes are not shown yet
+      g.fillStyle = colors.bg;
+      g.globalAlpha = 0.85;
+      g.fillRect(0, 0, w, top);
+      g.globalAlpha = 1;
+    }
     const elapsed = reduced ? 1.1 : (now / 1000) % LOOP;
     for (const [lane, at] of NOTES) {
       const y = strike - (at - elapsed) * pps;
-      if (y < -20 || y > hgt + 20) continue;
+      if (y < top - 15 || y > hgt + 20) continue;
       g.fillStyle = FRETS[lane];
       g.beginPath();
       g.arc(lane * laneW + laneW / 2, y, 15, 0, Math.PI * 2);

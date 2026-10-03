@@ -7,6 +7,7 @@ import { InstanceBuffer, deleteTarget, program, staticBuffer, target } from './g
 import type { GL, Program, Target } from './gl.ts';
 import { lookAt, multiply, perspective, project } from './math.ts';
 import type { Mat4 } from './math.ts';
+import { BEHIND, HALF, LEN } from './highway.ts';
 import { Particles } from './particles.ts';
 import * as S from './shaders.ts';
 import type { RenderTheme } from '../ui/themes.ts';
@@ -61,9 +62,6 @@ const BEAT_SP = new Float32Array([0.4, 0.8, 1.2]);
 const DOME = 0;
 const CRYSTAL = 1;
 
-const HALF = 2.65;
-const LEN = 26;
-const BEHIND = 3;
 const SUSTAIN_W = 0.13;
 
 export interface RenderState {
@@ -74,6 +72,8 @@ export interface RenderState {
   dt: number;
   /** world units per second */
   speed: number;
+  /** share of the full highway length that is drawn (Highway length setting). Default 1. */
+  length?: number;
   notes: NoteList;
   noteState: Uint8Array;
   spBroken: Uint8Array;
@@ -173,6 +173,8 @@ export class Renderer {
   readonly particles = new Particles(1800);
   private buttonPress = new Float32Array(5);
   private time = 0;
+  /** drawn highway length in world units */
+  private len = LEN;
   private lefty = false;
   /** 1 while the inked dome look is on (Daylight ink theme with the dome note style) */
   private inkGems = 0;
@@ -499,6 +501,11 @@ export class Renderer {
     return HALF;
   }
 
+  /** Drawn highway length in world units (as of the last frame). */
+  get highwayLength(): number {
+    return this.len;
+  }
+
   laneX(lane: number): number {
     const x = lane - 2;
     return this.lefty ? -x : x;
@@ -662,6 +669,7 @@ export class Renderer {
     const gl = this.gl;
     this.lefty = s.lefty;
     this.time = s.time;
+    this.len = LEN * Math.min(1, Math.max(0.2, s.length ?? 1));
     this.setSkin(s.skin);
     this.inkGems = s.theme.ink > 0.5 && s.skin.style === DOME ? 1 : 0;
     this.inkCol = s.theme.inkColor;
@@ -730,7 +738,7 @@ export class Renderer {
     const gl = this.gl;
     gl.useProgram(p.prog);
     if (p.u.u_vp) gl.uniformMatrix4fv(p.u.u_vp, false, this.vp);
-    if (p.u.u_len) gl.uniform1f(p.u.u_len, LEN);
+    if (p.u.u_len) gl.uniform1f(p.u.u_len, this.len);
     if (p.u.u_time) gl.uniform1f(p.u.u_time, this.time);
     if (p.u.u_cam) gl.uniform3fv(p.u.u_cam, this.cam);
     if (p.u.u_colors) gl.uniform3fv(p.u.u_colors, this.colorsFlat);
@@ -826,7 +834,7 @@ export class Renderer {
     const inst = this.beatLines.inst;
     inst.count = 0;
     const tMin = s.time - BEHIND / s.speed;
-    const tMax = s.time + LEN / s.speed;
+    const tMax = s.time + this.len / s.speed;
     const B = s.beats;
     for (let i = lowerBound(B.time, B.length, tMin); i < B.length && B.time[i] <= tMax; i++) {
       const o = inst.push();
@@ -869,7 +877,8 @@ export class Renderer {
     const notes = s.notes;
     const speed = s.speed;
     const t = s.time;
-    const tMax = t + LEN / speed;
+    const len = this.len;
+    const tMax = t + len / speed;
     const tBehind = t - BEHIND / speed;
 
     // Sustains can start well before the visible window, so walk back a little.
@@ -897,7 +906,7 @@ export class Renderer {
             state = 2;
           } else draw = false;
         } else if (st === MISSED) state = 2;
-        const z1 = Math.max(-(endTime - t) * speed, -LEN);
+        const z1 = Math.max(-(endTime - t) * speed, -len);
         if (draw && z0 > z1) {
           for (let lane = 0; lane < 5; lane++) {
             if (mask !== 0 && !(mask & (1 << lane))) continue;
@@ -946,7 +955,7 @@ export class Renderer {
           d[o + 5] = type === TAP ? 2 : type === HOPO ? 1 : 0;
           d[o + 6] = flags;
           d[o + 7] = 0;
-          if (traced && st !== MISSED && this.gemCount < 32 && z > -LEN * 0.8) {
+          if (traced && st !== MISSED && this.gemCount < 32 && z > -len * 0.8) {
             const k = this.gemCount++ * 4;
             list[k] = d[o];
             list[k + 1] = 0.13;

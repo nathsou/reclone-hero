@@ -8,7 +8,10 @@ export type NoteStyle = 'theme' | 'dome' | 'glass';
 export type SongView = 'list' | 'covers';
 
 export interface Settings {
+  /** how fast notes travel toward you: their spacing on the highway */
   noteSpeed: number;
+  /** share of the highway drawn ahead of the strike line: how far ahead you see */
+  highwayLength: number;
   /** ms; positive when audio reaches your ears late (Bluetooth etc.) */
   audioOffsetMs: number;
   /** ms; positive when the display lags */
@@ -49,7 +52,8 @@ export interface Settings {
 }
 
 export const DEFAULT_SETTINGS: Settings = {
-  noteSpeed: 1,
+  noteSpeed: 1.4,
+  highwayLength: 1,
   audioOffsetMs: 0,
   videoOffsetMs: 0,
   hitWindowMs: 90,
