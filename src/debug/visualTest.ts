@@ -92,7 +92,7 @@ const state: RenderState = {
 document.getElementById('legend')!.textContent =
   'near → far: missed blue · held green sustain · blue HOPO · green HOPO · yellow strum · orange tap · red strum\n' +
   'open strum · SP chord · SP HOPO · open HOPO · chord sustain · dropped yellow sustain   (blue button: wrong fret)\n' +
-  'query: ?sp ?solo ?lefty ?miss=1 ?mult=4 ?q=low ?close ?btn ?art ?theme=ink ?skin=neon';
+  'query: ?sp ?solo ?lefty ?miss=1 ?mult=4 ?q=low ?close ?btn ?art ?theme=ink ?skin=glass';
 const loop = () => {
   r.render(state);
   requestAnimationFrame(loop);

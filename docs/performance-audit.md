@@ -33,7 +33,7 @@ Graphics cost is much more sensitive to quality than the measured JS cost. At DP
 render scale at 2 and Medium at 1.25: `(1.25 / 2)² = 0.390625`, or 60.9% fewer scene pixels. MSAA also
 falls from up to four samples to two. The nominal multisample color/depth storage is therefore 80.5%
 smaller at DPR 2, before driver overhead. These are pixel/storage calculations, not measured GPU
-speedups; at DPR 1 the resolution benefit disappears. Studio reflections, Crystal frame copies and
+speedups; at DPR 1 the resolution benefit disappears. Crystal reflections, frame copies and
 bloom still require GPU work that WASM would not remove.
 
 ## Audio loading and existing mix improvements
@@ -84,7 +84,7 @@ prevent song selection or gameplay.
   in the synthesis worker first. A Rust/WASM SIMD implementation could help these tight loops, but
   it needs an end-to-end comparison including copies, startup time, bundle size and audio parity.
   No speedup is claimed without that comparison.
-- Measure actual mobile GPU time for Studio/Crystal before changing shader quality. Consider a
+- Measure actual mobile GPU time for Crystal before changing shader quality. Consider a
   lower reflection budget or bloom resolution before rewriting CPU code.
 - Decoded stereo PCM remains a larger memory cost than chart objects: about 84.7 MiB per four-minute
   stem at 44.1 kHz; player plus backing is about 169.4 MiB. The current two-buffer mix limits source

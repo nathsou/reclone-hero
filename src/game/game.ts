@@ -228,7 +228,7 @@ export class Game {
 
   /**
    * Frames that cannot keep up with the display for ~3 s of play lower the graphics quality one step
-   * (for the rest of the session), so a phone running Crystal or Studio stays smooth.
+   * (for the rest of the session), so a phone running Crystal stays smooth.
    */
   private checkFrameRate() {
     this.playedFor += 0.5;

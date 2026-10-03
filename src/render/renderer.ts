@@ -2,24 +2,7 @@ import type { BeatList, NoteList } from '../chart/types.ts';
 import { HOPO, TAP, noteListOf } from '../chart/types.ts';
 import { HIT, MISSED } from '../engine/engine.ts';
 import type { Quality } from '../settings.ts';
-import {
-  OPEN_R,
-  QUAD,
-  blockMesh,
-  domeBarMesh,
-  domeMesh,
-  fretButtonMesh,
-  gemMesh,
-  goldButtonMesh,
-  jewelMesh,
-  openBarMesh,
-  lensMesh,
-  beadMesh,
-  bezelButtonMesh,
-  squareButtonMesh,
-  stripMesh,
-  wheelMesh,
-} from './geometry.ts';
+import { OPEN_R, QUAD, beadMesh, domeBarMesh, domeMesh, glassButtonMesh, openBarMesh, stripMesh, wheelMesh } from './geometry.ts';
 import { InstanceBuffer, deleteTarget, program, staticBuffer, target } from './gl.ts';
 import type { GL, Program, Target } from './gl.ts';
 import { lookAt, multiply, perspective, project } from './math.ts';
@@ -51,7 +34,7 @@ interface ParticleFx {
   gravity: number;
   gain: number;
   add: number;
-  /** tint towards gold (Baroque glitter) */
+  /** tint towards gold (Crystal glitter) */
   gold: number;
   sustainRate: number;
 }
@@ -59,7 +42,6 @@ interface ParticleFx {
 const FX: Record<NoteSkin['particles'], ParticleFx> = {
   sparks: { flare: true, count: 12, openCount: 26, speed: 1, size: 0.05, sizeVar: 0.05, life: 0.3, lifeVar: 0.35, shape: 0, gravity: -9, gain: 1.8, add: 0.3, gold: 0, sustainRate: 60 },
   glitter: { flare: true, count: 16, openCount: 30, speed: 0.8, size: 0.035, sizeVar: 0.04, life: 0.4, lifeVar: 0.4, shape: 0, gravity: -5, gain: 1.7, add: 0.15, gold: 0.65, sustainRate: 45 },
-  squares: { flare: false, count: 8, openCount: 16, speed: 0.9, size: 0.07, sizeVar: 0.03, life: 0.3, lifeVar: 0.2, shape: 2, gravity: -12, gain: 1.15, add: 0.05, gold: 0, sustainRate: 22 },
 };
 const GOLD = [1.0, 0.66, 0.22];
 /** Rail colour by multiplier (index 1-4). */
@@ -74,6 +56,10 @@ const RAIL_SP = new Float32Array([0.4, 1.3, 2.2]);
 const TINT_SP = new Float32Array([0.2, 0.6, 1]);
 const TINT_NONE = new Float32Array([0, 0, 0]);
 const BEAT_SP = new Float32Array([0.4, 0.8, 1.2]);
+
+/** NoteSkin.style values */
+const DOME = 0;
+const CRYSTAL = 1;
 
 const HALF = 2.65;
 const LEN = 26;
@@ -141,13 +127,11 @@ export class Renderer {
   private emptyVao!: WebGLVertexArrayObject;
   private highwayVao!: WebGLVertexArrayObject;
   private gems!: Mesh;
-  private gemMeshes!: Record<NoteSkin['gem'], Mesh>;
-  private buttonMeshes!: Record<NoteSkin['button'], Mesh>;
+  /** per skin style: gems, open bars and fret buttons */
+  private styleMeshes!: { gems: Mesh; opens: Mesh; buttons: Mesh }[];
   private skin: NoteSkin = SKINS.dome;
   private colorsFlat = new Float32Array(SKINS.dome.colors.flat());
   private opens!: Mesh;
-  private opensStd!: Mesh;
-  private opensDome!: Mesh;
   private buttons!: Mesh;
   private sustains!: Mesh;
   private beatLines!: Mesh;
@@ -287,27 +271,12 @@ export class Renderer {
       const inst = new InstanceBuffer(gl, instLayout, 3, cap);
       return { vao, count: mesh.length / 7, inst };
     };
-    // Every skin's meshes are small; build them all now so switching skins costs nothing.
-    this.gemMeshes = {
-      dome: lit(domeMesh(), 1024, [4, 4]),
-      puck: lit(gemMesh(), 1024, [4, 4]),
-      jewel: lit(jewelMesh(), 1024, [4, 4]),
-      block: lit(blockMesh(), 1024, [4, 4]),
-      lens: lit(lensMesh(), 1024, [4, 4]),
-      bead: lit(beadMesh(), 1024, [4, 4]),
-    };
-    this.buttonMeshes = {
-      wheel: lit(wheelMesh(), 5, [4, 4]),
-      ring: lit(fretButtonMesh(), 5, [4, 4]),
-      gold: lit(goldButtonMesh(), 5, [4, 4]),
-      square: lit(squareButtonMesh(), 5, [4, 4]),
-      bezel: lit(bezelButtonMesh(), 5, [4, 4]),
-    };
-    this.gems = this.gemMeshes.dome;
-    this.buttons = this.buttonMeshes.wheel;
-    this.opensStd = lit(openBarMesh(HALF - 0.28), 128, [4, 4]);
-    this.opensDome = lit(domeBarMesh(HALF - 0.28), 128, [4, 4]);
-    this.opens = this.opensDome;
+    // Both skins' meshes are small; build them all now so switching skins costs nothing.
+    this.styleMeshes = [
+      { gems: lit(domeMesh(), 1024, [4, 4]), opens: lit(domeBarMesh(HALF - 0.28), 128, [4, 4]), buttons: lit(wheelMesh(), 5, [4, 4]) },
+      { gems: lit(beadMesh(), 1024, [4, 4]), opens: lit(openBarMesh(HALF - 0.28), 128, [4, 4]), buttons: lit(glassButtonMesh(), 5, [4, 4]) },
+    ];
+    ({ gems: this.gems, opens: this.opens, buttons: this.buttons } = this.styleMeshes[this.skin.style]);
 
     const strip = stripMesh(64);
     this.stripVerts = strip.length / 2;
@@ -546,9 +515,7 @@ export class Renderer {
   private applySkin() {
     const skin = this.skin;
     this.colorsFlat = new Float32Array(skin.colors.flat());
-    this.gems = this.gemMeshes[skin.gem];
-    this.buttons = this.buttonMeshes[skin.button];
-    this.opens = skin.style === 5 ? this.opensDome : this.opensStd;
+    ({ gems: this.gems, opens: this.opens, buttons: this.buttons } = this.styleMeshes[skin.style]);
   }
 
   hitBurst(mask: number, sp: boolean): void {
@@ -696,7 +663,7 @@ export class Renderer {
     this.lefty = s.lefty;
     this.time = s.time;
     this.setSkin(s.skin);
-    this.inkGems = s.theme.ink > 0.5 && s.skin.style === 5 ? 1 : 0;
+    this.inkGems = s.theme.ink > 0.5 && s.skin.style === DOME ? 1 : 0;
     this.inkCol = s.theme.inkColor;
     this.lightBg = s.theme.light ? 1 : 0;
     this.resize();
@@ -709,7 +676,7 @@ export class Renderer {
     gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
     gl.disable(gl.CULL_FACE);
 
-    const glass = this.skin.style === 7;
+    const glass = this.skin.style === CRYSTAL;
     this.fillNotes(s);
     this.drawBackground(s);
     // Crystal refracts what is behind it: copy the frame before the highway and before the gems.
@@ -752,7 +719,7 @@ export class Renderer {
   private bindGrab(p: Program, i: number) {
     if (!p.u.u_grab) return;
     const gl = this.gl;
-    const t = this.skin.style === 7 ? this.grabs[i] : null;
+    const t = this.skin.style === CRYSTAL ? this.grabs[i] : null;
     gl.activeTexture(gl.TEXTURE1);
     gl.bindTexture(gl.TEXTURE_2D, t ? t.tex : this.bgTex);
     gl.uniform1i(p.u.u_grab, 1);
@@ -827,8 +794,7 @@ export class Renderer {
     else gl.uniform3fv(p.u.u_rail, RAIL_COLORS[Math.min(4, s.multiplier)]);
     gl.uniform1f(p.u.u_railMode, railMode(th));
     gl.uniform1f(p.u.u_board, th.board);
-    gl.uniform1f(p.u.u_gloss, this.skin.style === 6 ? 1 : 0);
-    gl.uniform1f(p.u.u_glass, this.skin.style === 7 ? 1 : 0);
+    gl.uniform1f(p.u.u_glass, this.skin.style === CRYSTAL ? 1 : 0);
     this.bindGrab(p, 0);
     gl.uniform1f(p.u.u_sp, s.spActive ? 1 : 0);
     gl.uniform1f(p.u.u_miss, s.missPulse);
@@ -888,7 +854,7 @@ export class Renderer {
     gl.drawArraysInstanced(gl.TRIANGLE_STRIP, 0, 4, inst.count);
   }
 
-  /** Studio skin: the nearest gems as spheres (x, y, z, colour), for reflections traced in the shaders. */
+  /** Crystal: the nearest gems as spheres (x, y, z, colour), for reflections and caustics traced in the shaders. */
   private readonly gemList = new Float32Array(32 * 4);
   private gemCount = 0;
 
@@ -897,7 +863,7 @@ export class Renderer {
     const opens = this.opens.inst;
     const sus = this.sustains.inst;
     gems.count = opens.count = sus.count = 0;
-    const traced = this.skin.style >= 6;
+    const traced = this.skin.style === CRYSTAL;
     const list = this.gemList;
     this.gemCount = 0;
     const notes = s.notes;
@@ -1115,11 +1081,9 @@ export class Renderer {
     if (B.length) {
       this.fullscreen(this.pBright, scene.tex, B[0]);
       gl.uniform2f(this.pBright.u.u_texel, 1 / scene.w, 1 / scene.h);
-      // A light background sits near 1.0 and must not bloom; the neon on the highway still does.
-      // The dome look is authored to sit at its design colours, so only real emission (pressed wheels, star power, held sustains) blooms.
-      // Studio's chrome catches the softboxes at several times white: bloom only the brightest glints.
-      const dome = s.skin.style >= 5;
-      gl.uniform1f(this.pBright.u.u_threshold, s.theme.light ? (this.hdr ? 1.35 : 0.95) : dome ? (this.hdr ? 1.5 : 0.95) : this.hdr ? 1.0 : 0.75);
+      // A light background sits near 1.0 and must not bloom. The gems are authored to sit at their
+      // design colours, so only real emission (caps, pressed frets, star power, held sustains) blooms.
+      gl.uniform1f(this.pBright.u.u_threshold, s.theme.light ? (this.hdr ? 1.35 : 0.95) : this.hdr ? 1.5 : 0.95);
       gl.drawArrays(gl.TRIANGLES, 0, 3);
       for (let i = 1; i < B.length; i++) {
         this.fullscreen(this.pDown, B[i - 1].tex, B[i]);

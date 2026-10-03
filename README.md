@@ -98,11 +98,9 @@ before the next notes, which helps on a phone.
 - **Themes:** Classic dark (the default: a textured board, steel rails, domed gems and wheel frets) and
   Daylight ink (a paper highway with inked outlines). "Match system" switches between the two. The earlier
   colour schemes (Swiss, Baroque, Synthwave, Terminal, Paper, Midnight) are still there under Settings › Display.
-- **Note styles**, independent of the theme: Classic dome (the default), Studio (glass lenses in chrome
-  bezels on a lacquered board, with ray-traced reflections), Crystal (glass beads, tubes and a flowing glass
-  highway that refract what is behind them; see [Graphics](#graphics)), Neon (glowing pucks), Baroque (faceted
-  jewels in gold, pearls for HOPOs) and Pixel (8-bit blocks). Each keeps the same strum / HOPO / tap language and has its own sustains, fret buttons and
-  hit particles.
+- **Note styles**, independent of the theme: Classic dome (the default) and Crystal (glass beads, tubes and a
+  flowing glass highway that refract what is behind them; see [Graphics](#graphics)). Both keep the same
+  strum / HOPO / tap language and have their own sustains, fret buttons and hit particles.
 - **Backups:** Settings › Data exports settings, key and controller mappings, favourites and best scores to a
   file, to import on another computer (scores merge, keeping the best; favourites are combined).
 - **Controls:** remap any single guitar input (Settings › Controls › Change) without redoing the rest.
@@ -233,18 +231,13 @@ beat lines, fret buttons, particles), so the CPU only uploads the handful of not
 scene renders to an HDR (half-float), multisampled target, then goes through a bloom chain and an ACES tonemap.
 The look is neon-on-dark, emissive shapes carry most of the meaning, and a miss reads as missing light.
 
-The **Studio** note style is lit like a product shot: a procedural studio environment (a large softbox over
-the far end of the highway, strip lights at the sides, a warm kicker behind the player) with Fresnel
-reflections on glass lenses, polished and anodised metal, and clear-coated bodies. Reflections are ray-traced in
-the fragment shaders: each frame the 32 nearest gems are uploaded as spheres, reflection rays from gems and fret
-buttons are traced against them and against the highway plane, and the highway itself becomes lacquer that
-traces the mirror images of the approaching gems and darkens under them with soft contact shadows.
-
 **Crystal** refracts for real, in screen space: the frame is copied just before the highway is drawn and
 again just before the gems, and each glass surface samples the copy of what is behind it, offset by its
 surface normal. The three colour channels are offset by slightly different amounts, so edges split into
 rainbow fringes (dispersion). The highway is a glass slab with slow swells that travel with the chart, lens-like
-bevelled edges and a light frost; the beads magnify the lane lines under them, reflect the room and each other,
+bevelled edges and a light frost. Reflections are ray-traced in the fragment shaders against a procedural
+studio environment: each frame the 32 nearest gems are uploaded as spheres, and reflection rays from gems and
+fret buttons are traced against them and the highway plane. The beads magnify the lane lines under them, reflect the room and each other,
 glow at the rim and cast coloured caustics on the glass below; sustains are clear tubes and the fret buttons
 are glass rings that fill with colour.
 

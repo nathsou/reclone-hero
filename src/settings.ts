@@ -4,7 +4,7 @@ import type { GenreFilter } from './library/genres.ts';
 export type MissFeedback = 'auto' | 'mute' | 'muffle' | 'off';
 export type Quality = 'high' | 'medium' | 'low';
 export type Theme = 'system' | 'classic' | 'ink' | 'swiss' | 'baroque' | 'synthwave' | 'terminal' | 'paper' | 'midnight';
-export type NoteStyle = 'theme' | 'dome' | 'studio' | 'glass' | 'neon' | 'baroque' | 'pixel';
+export type NoteStyle = 'theme' | 'dome' | 'glass';
 export type SongView = 'list' | 'covers';
 
 export interface Settings {
@@ -101,6 +101,8 @@ function load(): Settings {
       // Neon and Light were replaced by Classic dark and Daylight ink.
       if (stored.theme === 'dark' || stored.theme === 'neon') stored.theme = 'classic';
       else if (stored.theme === 'light') stored.theme = 'ink';
+      // Only the Classic dome and Crystal note styles are left.
+      if (stored.noteStyle !== undefined && stored.noteStyle !== 'dome' && stored.noteStyle !== 'glass') delete stored.noteStyle;
       delete stored.v;
       return { ...DEFAULT_SETTINGS, ...(stored as Partial<Settings>) };
     }
