@@ -504,11 +504,6 @@ export class Renderer {
     return HALF;
   }
 
-  /** Drawn highway length in world units (as of the last frame). */
-  get highwayLength(): number {
-    return this.len;
-  }
-
   laneX(lane: number): number {
     const x = lane - 2;
     return this.lefty ? -x : x;
