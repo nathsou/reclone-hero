@@ -83,7 +83,7 @@ class DriveGuitar implements Voice {
       const c = this.chains[side];
       for (let i = 0; i < n; i++) {
         let x = c[1].tick(c[0].tick(buf[i]));
-        x = Math.tanh((x + 0.06) * this.gain) - 0.0599;
+        x = Math.tanh(x * this.gain + 0.06) - Math.tanh(0.06);
         x = c[7].tick(c[6].tick(c[5].tick(c[4].tick(c[3].tick(c[2].tick(x))))));
         buf[i] = x * 0.36;
       }
@@ -134,7 +134,7 @@ class LeadGuitar implements Voice {
     const c = this.c;
     for (let i = 0; i < n; i++) {
       let x = c[2].tick(c[1].tick(c[0].tick(L[i])));
-      x = Math.tanh((x + 0.05) * this.gain) - 0.05;
+      x = Math.tanh(x * this.gain + 0.05) - Math.tanh(0.05);
       L[i] = c[6].tick(c[5].tick(c[4].tick(c[3].tick(x)))) * 0.3;
     }
   }
@@ -293,7 +293,8 @@ class SuperSaw implements Voice {
     const [a, d, s, r] =
       k === 'pad' ? [0.35, 0.6, 0.8, 0.9] : k === 'strings' ? [0.14, 0.3, 0.85, 0.5] : k === 'pluck' ? [0.002, 0.18, 0.0, 0.12] : [0.006, 0.25, 0.75, 0.16];
     const rand = rng(index * 977 + 11);
-    const total = Math.min(L.length - at, Math.round((lenSec + r * 2) * sr));
+    const audibleSec = k === 'pluck' ? Math.min(lenSec + r * 2, a + d) : lenSec + r * 2;
+    const total = Math.min(L.length - at, Math.round(audibleSec * sr));
     const amp = (n.v * (k === 'lead' ? 0.24 : k === 'pluck' ? 0.5 : 0.22)) / Math.sqrt(n.p.length);
     for (const p of n.p) {
       const f0 = mtof(p);
@@ -322,12 +323,11 @@ class SuperSaw implements Voice {
           if (ph >= 1) ph -= 1;
           phases[v] = ph;
           const saw = 2 * ph - 1 - blep(ph, dt);
-          if (v & 1) xr += saw;
-          else xl += saw;
           if (v === (voices >> 1)) {
-            xl += saw * 0.5;
-            xr += saw * 0.5;
-          }
+            xl += saw;
+            xr += saw;
+          } else if (v < (voices >> 1)) xl += saw;
+          else xr += saw;
         }
         const g = adsrGain(i, sr, lenSec, a, d, s, r) * amp;
         L[at + i] += svfL.tick(xl) * g;
