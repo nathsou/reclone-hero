@@ -33,7 +33,8 @@ All sounds remain generated locally, with no samples, downloads or runtime depen
   returning storm, where another string progression was already playing. Move that repeated theme
   accompaniment to the actual second-theme reprise at bar 36.
 - **Levels:** remeasure complete songs at 44.1 kHz and update the pack's level trims after the voice
-  and mix changes. The measurement is gated RMS, not perceptual LUFS.
+  and mix changes. A verification pass puts every full track within 0.3 dB of the −12 dB target
+  (rounded to one decimal). The measurement is gated RMS, not perceptual LUFS.
 
 The existing 12-second preview audit (including up to three seconds of preroll) measured:
 

@@ -20,7 +20,7 @@ export const LEVELS: Record<string, number> = {
   'glass-elevator': 0.2,
   'golden-hour': 0.3,
   'greensleeves': 2.1,
-  'gymnopedie': -0.9,
+  'gymnopedie': -1.8,
   'hava-nagila': -1.7,
   'ignition': -2.7,
   'irish-washerwoman': -1.6,
