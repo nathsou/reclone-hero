@@ -7,6 +7,8 @@ export interface InputEvent {
   /** performance.now() timestamp of the physical change */
   time: number;
   source: InputSource;
+  /** keyboard: the key (KeyboardEvent.code), so one key bound to two actions can be told apart */
+  code: string;
 }
 
 /** Keyboard, a guitar (or other gamepad), or on-screen touch frets. */
@@ -134,7 +136,7 @@ export class InputManager {
       if (down === this.kbDown.has(a)) continue;
       if (down) this.kbDown.add(a);
       else this.kbDown.delete(a);
-      this.push(a, down, e.timeStamp, 'kb');
+      this.push(a, down, e.timeStamp, 'kb', e.code);
     }
   }
 
@@ -211,12 +213,13 @@ export class InputManager {
     this.touchWhammy = v;
   }
 
-  private push(action: Action, down: boolean, time: number, source: InputSource) {
-    const e = this.pool.pop() ?? { action, down, time, source };
+  private push(action: Action, down: boolean, time: number, source: InputSource, code = '') {
+    const e = this.pool.pop() ?? { action, down, time, source, code };
     e.action = action;
     e.down = down;
     e.time = time;
     e.source = source;
+    e.code = code;
     this.queue.push(e);
   }
 

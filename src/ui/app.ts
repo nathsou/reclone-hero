@@ -125,6 +125,11 @@ export class App {
     m.el.remove();
   }
 
+  /** Close every open modal (e.g. a library check opened from the settings jumping to a song). */
+  closeModals(): void {
+    while (this.modals.length) this.popModal();
+  }
+
   toast(msg: string): void {
     const el = h('div', { class: 'app-toast' }, msg);
     this.toastBox.append(el);

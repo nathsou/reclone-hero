@@ -47,6 +47,18 @@ export class TempoMap {
     return this.timeToTick(time) / this.resolution;
   }
 
+  /** Slowest and fastest tempo in the map, in BPM. */
+  bpmRange(): { min: number; max: number } {
+    let min = Infinity;
+    let max = 0;
+    for (let i = 0; i < this.secPerTick.length; i++) {
+      const bpm = 60 / (this.secPerTick[i] * this.resolution);
+      if (bpm < min) min = bpm;
+      if (bpm > max) max = bpm;
+    }
+    return { min, max };
+  }
+
   bpmAt(time: number): number {
     const j = Math.max(0, upperBound(this.times, time) - 1);
     return 60 / (this.secPerTick[j] * this.resolution);

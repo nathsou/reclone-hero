@@ -1,4 +1,4 @@
-import { buildLyrics } from './lyrics.ts';
+import { buildLyrics, cleanSyllable } from './lyrics.ts';
 import type { LyricLine } from './lyrics.ts';
 import { foldToTouch } from './touch.ts';
 import { TempoMap } from './tempo.ts';
@@ -75,6 +75,8 @@ export interface Chart {
   noteCount(key: string): number;
   /** time of the last note end */
   lastNoteTime: number;
+  /** time of the earliest note on any part; NaN when the chart has no notes at all */
+  firstNoteTime: number;
   meta: Record<string, string>;
 }
 
@@ -93,7 +95,21 @@ export function buildChart(raw: RawChart, opts: ChartOptions = {}): Chart {
   const tracks = new LazyTracks();
   const counts = new Map<string, number>();
   let lastTick = 0;
+  let firstTick = Infinity;
+  const vocals = raw.vocals;
+  if (vocals && vocals.notes.length) {
+    // One sung part for every difficulty: the difficulty sets how close the pitch has to be.
+    const v = vocals.notes;
+    firstTick = Math.min(firstTick, v[0].tick);
+    for (const n of v) lastTick = Math.max(lastTick, n.end);
+    for (const difficulty of DIFFICULTIES) {
+      const key = trackKey('vocals', difficulty);
+      counts.set(key, v.length);
+      tracks.add(key, () => buildVocalTrack(vocals, raw.phrases, difficulty, tempo));
+    }
+  }
   for (const instrument of INSTRUMENTS) {
+    if (instrument === 'vocals') continue;
     for (const difficulty of DIFFICULTIES) {
       const key = trackKey(instrument, difficulty);
       let rt = raw.tracks.get(key);
@@ -107,11 +123,13 @@ export function buildChart(raw: RawChart, opts: ChartOptions = {}): Chart {
       const { tick, len } = packed;
       let distinct = 0;
       for (let i = 0; i < tick.length; i++) {
-        if (i === 0 || tick[i] !== tick[i - 1]) distinct++;
+        // drums: every gem is a note of its own
+        if (i === 0 || tick[i] !== tick[i - 1] || instrument === 'drums') distinct++;
         lastTick = Math.max(lastTick, tick[i] + (len[i] > sustainCutoff ? len[i] : 0));
       }
+      firstTick = Math.min(firstTick, tick[0]);
       counts.set(key, distinct);
-      tracks.add(key, () => buildTrack(packed, instrument, difficulty, tempo, hopoThreshold, sustainCutoff, format));
+      tracks.add(key, () => (instrument === 'drums' ? buildDrumTrack(packed, difficulty, tempo) : buildTrack(packed, instrument, difficulty, tempo, hopoThreshold, sustainCutoff, format)));
     }
   }
 
@@ -129,6 +147,7 @@ export function buildChart(raw: RawChart, opts: ChartOptions = {}): Chart {
     tracks,
     noteCount: (key) => counts.get(key) ?? 0,
     lastNoteTime: tempo.tickToTime(lastTick),
+    firstNoteTime: Number.isFinite(firstTick) ? tempo.tickToTime(firstTick) : NaN,
     meta: raw.meta,
   };
 }
@@ -149,6 +168,8 @@ interface PackedTrack {
   forceStrum: Int32Array;
   starPower: TickRange[];
   solos: TickRange[];
+  /** drums: tick * 8 + lane of the gems played on cymbals, sorted */
+  cymbals: Int32Array;
 }
 
 function packRanges(ranges: TickRange[]): Int32Array {
@@ -184,6 +205,7 @@ function pack(rt: RawTrack): PackedTrack {
     forceStrum: packRanges(rt.forceStrum),
     starPower: rt.starPower,
     solos: rt.solos,
+    cymbals: Int32Array.from([...(rt.cymbals ?? [])].sort((a, b) => a - b)),
   };
 }
 
@@ -290,6 +312,53 @@ function buildTrack(
   const starPower = assignPhrases(notes, rt.starPower, tempo, notes.sp);
   const solos = assignPhrases(notes, rt.solos, tempo, notes.solo);
   return { instrument, difficulty, notes, starPower, solos };
+}
+
+/**
+ * Drums: one note per gem, in (tick, lane) order, so the kick comes first in a chord. mask 0 is the kick,
+ * bit 0..3 the red, yellow, blue and green pad; cymbals are HOPO-typed (they are drawn with a lit top).
+ */
+function buildDrumTrack(rt: PackedTrack, difficulty: Difficulty, tempo: TempoMap): Track {
+  const n = rt.tick.length;
+  const notes = allocNotes(n);
+  const cymbal = new TickCursor(rt.cymbals);
+  for (let i = 0; i < n; i++) {
+    const tick = rt.tick[i];
+    const lane = rt.lane[i];
+    notes.tick[i] = notes.endTick[i] = tick;
+    notes.time[i] = notes.endTime[i] = tempo.tickToTime(tick);
+    notes.mask[i] = lane === 0 ? 0 : 1 << (lane - 1);
+    // cymbal keys are tick * 8 + lane, ascending like the gems
+    notes.type[i] = cymbal.has(tick * 8 + lane) ? HOPO : STRUM;
+  }
+  const starPower = assignPhrases(notes, rt.starPower, tempo, notes.sp);
+  const solos = assignPhrases(notes, rt.solos, tempo, notes.solo);
+  return { instrument: 'drums', difficulty, notes, starPower, solos };
+}
+
+/**
+ * Vocals: one note per sung syllable, the MIDI pitch in mask; spoken syllables (lyrics ending in # or ^)
+ * are TAP-typed, pitched ones STRUM. A "+" lyric slides on from the last syllable: it shows no text.
+ */
+function buildVocalTrack(v: NonNullable<RawChart['vocals']>, phrases: TickRange[], difficulty: Difficulty, tempo: TempoMap): Track {
+  const n = v.notes.length;
+  const notes = allocNotes(n);
+  const syllables: string[] = [];
+  for (let i = 0; i < n; i++) {
+    const s = v.notes[i];
+    notes.tick[i] = s.tick;
+    notes.endTick[i] = Math.max(s.end, s.tick + 1);
+    notes.time[i] = tempo.tickToTime(s.tick);
+    notes.endTime[i] = tempo.tickToTime(notes.endTick[i]);
+    notes.mask[i] = s.pitch;
+    notes.type[i] = /[#^*]\s*$/.test(s.text) ? TAP : STRUM;
+    syllables.push(cleanSyllable(s.text)?.text ?? '');
+  }
+  const starPower = assignPhrases(notes, v.starPower, tempo, notes.sp);
+  // phrases (lines) for the ratings: the solo slots serve as scratch, then are cleared
+  const lines = assignPhrases(notes, phrases.length ? phrases : [{ start: notes.tick[0] ?? 0, end: (notes.endTick[n - 1] ?? 0) + 1 }], tempo, notes.solo);
+  notes.solo.fill(-1);
+  return { instrument: 'vocals', difficulty, notes, starPower, solos: [], syllables, lines };
 }
 
 function assignPhrases(notes: NoteList, ranges: TickRange[], tempo: TempoMap, out: Int16Array): Phrase[] {

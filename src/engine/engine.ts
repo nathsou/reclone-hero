@@ -13,6 +13,9 @@ export interface EngineConfig {
   hopoStrumGrace: number;
   /** releasing a sustain this close to its end still counts as complete */
   sustainGrace: number;
+  /** rock meter (0..1): gained per note hit, lost per note missed (an overstrum costs 60% of a miss) */
+  rockGain: number;
+  rockLoss: number;
 }
 
 export const DEFAULT_ENGINE_CONFIG: EngineConfig = {
@@ -21,7 +24,14 @@ export const DEFAULT_ENGINE_CONFIG: EngineConfig = {
   strumLeniency: 0.05,
   hopoStrumGrace: 0.09,
   sustainGrace: 0.1,
+  rockGain: 0.02,
+  rockLoss: 0.07,
 };
+
+/** Rock meter loss per miss by difficulty, Guitar Hero style: easier parts forgive more. */
+export const ROCK_LOSS = { easy: 0.04, medium: 0.05, hard: 0.06, expert: 0.07 } as const;
+/** Setting off Star Power lifts the rock meter this much. */
+const ROCK_SP_BOOST = 0.15;
 
 export const PENDING = 0;
 export const HIT = 1;
@@ -48,7 +58,9 @@ export type EngineEventType =
   | 'spActivate'
   | 'spEnd'
   | 'soloStart'
-  | 'soloEnd';
+  | 'soloEnd'
+  /** vocals: a phrase (line) ended; value is its rating (0 awful .. 5 awesome), hits / total its notes */
+  | 'vocalPhrase';
 
 /**
  * One judgement event. Records are pooled and reused: read them before the next engine call, and
@@ -108,7 +120,7 @@ export class Engine {
   readonly track: Track;
   readonly notes: NoteList;
   readonly cfg: EngineConfig;
-  private readonly tempo: TempoMap;
+  protected readonly tempo: TempoMap;
 
   readonly noteState: Uint8Array;
   readonly hitDelta: Float32Array;
@@ -131,9 +143,19 @@ export class Engine {
   spPhrasesHit = 0;
   /** index of the solo currently in progress, or -1 */
   activeSolo = -1;
+  /** Guitar Hero's rock meter: 0 (failing) .. 1, starting in the middle */
+  rock = 0.5;
+  /** song time the rock meter first ran out; NaN while it never has */
+  rockOutAt = NaN;
+  /** drums: pad hits with no gem to hit (they cost nothing) */
+  overhits = 0;
+  /** a drum track: gems are hit with pad(), each on its own and in any order within the window */
+  readonly drums: boolean;
 
-  private next: number;
-  private readonly end: number;
+  protected next: number;
+  protected readonly end: number;
+  /** a vocal track: notes are judged by VocalJudge, by how long they are sung in tune */
+  protected readonly vocals: boolean;
   private lastNoteHit = true;
   private lastHitTime = -Infinity;
   private lastHammerTime = -Infinity;
@@ -158,6 +180,8 @@ export class Engine {
     this.hitDelta = new Float32Array(this.notes.length);
     this.spBroken = new Uint8Array(track.starPower.length);
     this.ghosted = new Uint8Array(this.notes.length);
+    this.drums = track.instrument === 'drums';
+    this.vocals = track.instrument === 'vocals';
     this.next = range?.first ?? 0;
     this.end = range ? range.last + 1 : this.notes.length;
     while (this.soloCursor < track.solos.length && track.solos[this.soloCursor].last < this.next) this.soloCursor++;
@@ -264,6 +288,23 @@ export class Engine {
     this.pendingDeadline = t + this.cfg.strumLeniency;
   }
 
+  /**
+   * Drums: a pad (its bit) or the kick pedal (0) was hit at t. It plays the earliest gem of that pad still
+   * in reach; with none, it is an overhit, which costs nothing.
+   */
+  pad(t: number, mask: number): void {
+    t = this.advance(t);
+    const N = this.notes;
+    const { early, late } = this.cfg;
+    for (let i = this.next; i < this.end; i++) {
+      if (N.time[i] - early > t) break;
+      if (this.noteState[i] !== PENDING || N.mask[i] !== mask || N.time[i] + late < t) continue;
+      this.hit(i, t, true, false);
+      return;
+    }
+    this.overhits++;
+  }
+
   setWhammy(t: number, value: number): void {
     t = this.advance(t);
     if (Math.abs(value - this.whammy) > 0.04) this.lastWhammyMove = t;
@@ -274,6 +315,7 @@ export class Engine {
     t = this.advance(t);
     if (this.spActive || this.spBar < 0.5 - 1e-9) return false;
     this.spActive = true;
+    this.rock = Math.min(1, this.rock + ROCK_SP_BOOST);
     this.lastDrainBeat = this.tempo.timeToBeat(t);
     this.emit('spActivate', t);
     this.checkMultiplier(t);
@@ -287,9 +329,9 @@ export class Engine {
 
     if (this.hasPending && this.pendingDeadline <= t) this.failPending(this.pendingDeadline);
 
-    // HOPOs/taps whose fret state was set up before their window opened.
+    // HOPOs/taps whose fret state was set up before their window opened (not on drums: cymbals are HOPO-typed).
     const N = this.notes;
-    for (;;) {
+    for (; !this.drums && !this.vocals; ) {
       const n = this.next;
       if (n >= this.end || N.type[n] === STRUM) break;
       const open = N.time[n] - early;
@@ -297,9 +339,12 @@ export class Engine {
       this.hit(n, Math.max(open, this.fretChangeTime, this.time), false, true);
     }
 
-    while (this.next < this.end && N.time[this.next] + late < t) {
+    // (vocal notes are judged when they end, by VocalJudge)
+    while (!this.vocals && this.next < this.end && N.time[this.next] + late < t) {
       const n = this.next;
-      this.miss(n, N.time[n] + late, 'late');
+      // drums: gems hit out of order are already judged
+      if (this.noteState[n] !== PENDING) this.next++;
+      else this.miss(n, N.time[n] + late, 'late');
     }
 
     for (let i = this.sustains.length - 1; i >= 0; i--) {
@@ -395,6 +440,7 @@ export class Engine {
       this.miss(n, t, 'wrong');
     } else {
       this.overstrums++;
+      this.rockDown(this.cfg.rockLoss * 0.6, pt);
       this.emit('overstrum', pt).frets = this.frets;
       while (this.sustains.length) {
         const s = this.sustains[this.sustains.length - 1];
@@ -409,13 +455,15 @@ export class Engine {
 
   private hit(n: number, t: number, strum: boolean, auto: boolean): void {
     const N = this.notes;
-    for (let i = this.next; i < n; i++) if (this.noteState[i] === PENDING) this.miss(i, t, 'skipped');
+    if (!this.drums) for (let i = this.next; i < n; i++) if (this.noteState[i] === PENDING) this.miss(i, t, 'skipped');
     const mask = N.mask[n];
     const time = N.time[n];
     this.noteState[n] = HIT;
     this.hitDelta[n] = t - time;
-    this.next = n + 1;
+    if (!this.drums) this.next = n + 1;
+    else while (this.next < this.end && this.noteState[this.next] !== PENDING) this.next++;
     this.hits++;
+    this.rock = Math.min(1, this.rock + this.cfg.rockGain);
 
     for (let i = this.sustains.length - 1; i >= 0; i--) {
       const s = this.sustains[i];
@@ -451,7 +499,7 @@ export class Engine {
     e.auto = auto;
 
     const sp = N.sp[n];
-    if (sp >= 0 && !this.spBroken[sp] && this.track.starPower[sp].last === n) {
+    if (sp >= 0 && !this.spBroken[sp] && this.phraseDone(sp, n)) {
       this.spBar = Math.min(1, this.spBar + SP_PHRASE_GAIN);
       this.spPhrasesHit++;
       const p = this.emit('spPhrase', t);
@@ -460,11 +508,20 @@ export class Engine {
     }
   }
 
-  private miss(n: number, t: number, reason: MissReason): void {
+  /** Whether hitting note n completes star power phrase sp (drums: every gem of it hit, in any order). */
+  protected phraseDone(sp: number, n: number): boolean {
+    const p = this.track.starPower[sp];
+    if (!this.drums) return p.last === n;
+    for (let i = p.first; i <= p.last; i++) if (this.noteState[i] !== HIT) return false;
+    return true;
+  }
+
+  protected miss(n: number, t: number, reason: MissReason): void {
     this.noteState[n] = MISSED;
     if (n >= this.next) this.next = n + 1;
     this.misses++;
     this.lastNoteHit = false;
+    this.rockDown(this.cfg.rockLoss, t);
     const e = this.emit('miss', t);
     e.note = n;
     e.reason = reason;
@@ -479,13 +536,18 @@ export class Engine {
     this.breakStreak(t);
   }
 
-  private breakStreak(t: number): void {
+  protected rockDown(by: number, t: number): void {
+    this.rock = Math.max(0, this.rock - by);
+    if (this.rock === 0 && this.rockOutAt !== this.rockOutAt) this.rockOutAt = t;
+  }
+
+  protected breakStreak(t: number): void {
     if (this.streak > 0) this.emit('streakBreak', t).streak = this.streak;
     this.streak = 0;
     this.checkMultiplier(t);
   }
 
-  private checkMultiplier(t: number): void {
+  protected checkMultiplier(t: number): void {
     const m = this.multiplier;
     if (m !== this.lastMultiplier) {
       this.lastMultiplier = m;
@@ -505,7 +567,7 @@ export class Engine {
   }
 
   /** Take a pooled event record, set its type and time, and queue it. */
-  private emit(type: EngineEventType, t: number): EngineEvent {
+  protected emit(type: EngineEventType, t: number): EngineEvent {
     let e = this.events[this.eventCount];
     if (!e) this.events.push((e = newEvent()));
     this.eventCount++;
@@ -530,7 +592,8 @@ export function baseScore(track: Track, tempo: TempoMap): number {
   let total = 0;
   const N = track.notes;
   for (let i = 0; i < N.length; i++) {
-    const count = GEM_COUNT[N.mask[i]];
+    // vocal notes hold a pitch in mask: one "gem" each
+    const count = track.instrument === 'vocals' ? 1 : GEM_COUNT[N.mask[i]];
     total += POINTS_PER_NOTE * count;
     if (N.endTime[i] > N.time[i]) total += (tempo.timeToBeat(N.endTime[i]) - tempo.timeToBeat(N.time[i])) * SUSTAIN_POINTS_PER_BEAT * count;
   }

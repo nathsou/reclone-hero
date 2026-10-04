@@ -6,7 +6,7 @@ import { applyAction, botActions } from '../engine/bot.ts';
 import type { PlayedWith } from './scores.ts';
 import { TouchFrets } from '../ui/touchFrets.ts';
 import type { Action as BotAction } from '../engine/bot.ts';
-import { Engine, HIT, baseScore, starProgress } from '../engine/engine.ts';
+import { Engine, HIT, ROCK_LOSS, baseScore, starProgress } from '../engine/engine.ts';
 import type { EngineEvent } from '../engine/engine.ts';
 import { FRET_ACTIONS, keyLabel } from '../input/bindings.ts';
 import { input } from '../input/input.ts';
@@ -20,12 +20,26 @@ import type { Quality } from '../settings.ts';
 import { Hud } from '../ui/hud.ts';
 import type { HudState } from '../ui/hud.ts';
 import { noteSkin, renderTheme } from '../ui/theme.ts';
+import { SKIP_CHORD, canSkip, findGaps, gapAt, skipTarget } from './gaps.ts';
+import { PHRASE_RATINGS, VocalJudge } from '../engine/vocals.ts';
+import type { Mic } from '../audio/mic.ts';
+import { SILENCE_RMS } from '../audio/pitch.ts';
+import type { Gap } from './gaps.ts';
+import { MODIFIER_LABEL, isModifier, windowScale } from './modifiers.ts';
 
 /** Misses are judged slightly behind real time so late-arriving input events are never pre-empted. */
 const JUDGE_LAG = 0.02;
 /** In keyboard tap mode, fret keys pressed this close together form one chord, i.e. one strum. */
 const TAP_CHORD_WINDOW = 0.04;
-const FRET_INDEX: Record<string, number> = { green: 0, red: 1, yellow: 2, blue: 3, orange: 4, strumUp: -1, strumDown: -1, starPower: -1, tilt: -1, start: -1 };
+const FRET_INDEX: Record<string, number> = { green: 0, red: 1, yellow: 2, blue: 3, orange: 4, strumUp: -1, strumDown: -1, starPower: -1, tilt: -1, start: -1, kick: -1 };
+/**
+ * Drums: what each action hits. The red, yellow, blue and orange frets (keys S D F G) are the red, yellow,
+ * blue and green pads; the kick pedal action and the green fret are the kick (KICK_BIT stands for it while
+ * it is held, for the key labels).
+ */
+const KICK_BIT = 1 << 4;
+const DRUM_HIT: Record<string, number> = { red: 1, yellow: 2, blue: 4, orange: 8, green: KICK_BIT, kick: KICK_BIT };
+const DRUM_PADS_ALL = 0b1111;
 
 export interface PracticeRange {
   start: number;
@@ -44,6 +58,10 @@ export interface GameSetup {
   duration: number;
   bot: boolean;
   practice?: PracticeRange;
+  /** song speed outside practice (1 = as recorded) */
+  speed?: number;
+  /** modifiers on for this run (the track already has the note ones applied) */
+  mods?: string[];
 }
 
 export interface SectionResult {
@@ -54,9 +72,18 @@ export interface SectionResult {
 }
 
 const QUALITY_STEPS: Quality[] = ['high', 'medium', 'low'];
-/** Quality lowered this session because frames could not keep up; applies to later songs too. */
-let qualityCap: Quality | null = null;
-const capped = (q: Quality): Quality => (qualityCap && QUALITY_STEPS.indexOf(qualityCap) > QUALITY_STEPS.indexOf(q) ? qualityCap : q);
+/**
+ * Quality lowered this session because frames could not keep up; applies to later songs too. It is
+ * forgotten when the player picks another quality or turns automatic lowering off.
+ */
+let qualityCap: { cap: Quality; chosen: Quality } | null = null;
+
+/** The quality to render at: the chosen one, unless it was lowered automatically this session. */
+export function effectiveQuality(): Quality {
+  const q = settings.quality;
+  if (!qualityCap || !settings.autoQuality || qualityCap.chosen !== q) return q;
+  return QUALITY_STEPS.indexOf(qualityCap.cap) > QUALITY_STEPS.indexOf(q) ? qualityCap.cap : q;
+}
 
 /** Keep the screen awake while a song plays (released on pause and when the song ends). */
 class ScreenAwake {
@@ -109,12 +136,18 @@ export interface GameResult {
   missByType: { strum: number; hopo: number; tap: number };
   wrongFret: number;
   lateMiss: number;
+  /** drums: pad hits with nothing to hit */
+  overhits: number;
+  /** vocals: the rating (index into PHRASE_RATINGS) of each phrase */
+  ratings?: number[];
   /** per-note outcome and timing (seconds, negative = early), parallel to setup.track.notes */
   noteState: Uint8Array;
   hitDelta: Float32Array;
   /** song time the results timeline spans */
   start: number;
   end: number;
+  /** the rock meter ran out at this song time (fail mode); the run stops there */
+  failedAt?: number;
 }
 
 export class Game {
@@ -162,7 +195,7 @@ export class Game {
   constructor(setup: GameSetup, canvas: HTMLCanvasElement, hud: Hud) {
     this.setup = setup;
     this.renderer = new Renderer(canvas);
-    this.renderer.setQuality(capped(settings.quality));
+    this.renderer.setQuality(effectiveQuality());
     // A lost GPU context (phones do this when backgrounded) pauses the song; once it is back the
     // renderer has rebuilt itself, so warm it up again and draw the paused frame.
     this.renderer.onContextChange = (available) => {
@@ -206,6 +239,34 @@ export class Game {
   }
 
   private autoIdx = 0;
+  /** a vocal part: sung into the microphone, drawn as the vocal lane instead of the highway */
+  private get vocals(): boolean {
+    return this.setup.track.instrument === 'vocals';
+  }
+
+  private mic: Mic | null = null;
+
+  /** The microphone to sing into (vocals; none for the bot). */
+  setMic(mic: Mic | null): void {
+    this.mic = mic;
+  }
+
+  /**
+   * How far behind the song clock the judge runs: what the microphone hears now was sung this long ago
+   * (vocals), or a little lag so late input events are not pre-empted.
+   */
+  private get judgeLag(): number {
+    return this.vocals && this.mic ? this.mic.latency + JUDGE_LAG : JUDGE_LAG;
+  }
+
+  /** a drum part: pads and kick instead of frets and strums */
+  private get drums(): boolean {
+    return this.setup.track.instrument === 'drums';
+  }
+  /** intros and long breaks: counted down, and skippable */
+  private gaps: Gap[] = [];
+  /** how to skip, shown in the countdown (rebuilt when the controls in use change) */
+  private skipHint = '';
   /** every note hit with no overstrum, settled when the last note is hit */
   private fullCombo = false;
   private prepared = false;
@@ -232,19 +293,20 @@ export class Game {
    * (for the rest of the session), so a phone running Crystal stays smooth.
    */
   private checkFrameRate() {
+    if (!settings.autoQuality) return;
     this.playedFor += 0.5;
     if (this.playedFor < 3 || !Number.isFinite(this.minDt)) return;
     const slow = this.fps < (1 / this.minDt) * 0.72;
     this.slowWindows = slow ? this.slowWindows + 1 : 0;
     if (this.slowWindows < 6) return;
     this.slowWindows = 0;
-    const current = capped(settings.quality);
+    const current = effectiveQuality();
     const next = QUALITY_STEPS[QUALITY_STEPS.indexOf(current) + 1];
     if (!next) return;
-    qualityCap = next;
+    qualityCap = { cap: next, chosen: settings.quality };
     this.renderer.setQuality(next);
     this.hudCameraKey = '';
-    this.hud.toast(`Graphics quality lowered to ${next}`, 'info', 'to keep the song smooth');
+    this.hud.toast(`Graphics quality lowered to ${next}`, 'info', 'to keep the song smooth · Settings › Display turns this off');
   }
 
   private reset() {
@@ -255,12 +317,15 @@ export class Game {
     this.slowWindows = 0;
     const { track, chart, practice } = this.setup;
     const n = track.notes.length;
-    this.engine = new Engine(
-      track,
-      chart.tempo,
-      { early: settings.hitWindowMs / 1000, late: settings.hitWindowMs / 1000, strumLeniency: settings.strumLeniencyMs / 1000 },
-      practice ? { first: practice.first, last: practice.last } : undefined,
-    );
+    // At another song speed the windows are kept the same length in real time (practice stays lenient).
+    const scale = (practice ? 1 : this.rate) * windowScale(this.setup.mods ?? []);
+    const cfg = { early: (settings.hitWindowMs / 1000) * scale, late: (settings.hitWindowMs / 1000) * scale, strumLeniency: (settings.strumLeniencyMs / 1000) * scale, rockLoss: ROCK_LOSS[track.difficulty] };
+    const range = practice ? { first: practice.first, last: practice.last } : undefined;
+    if (track.instrument === 'vocals') {
+      const judge = new VocalJudge(track, chart.tempo, cfg, range);
+      judge.autoSing = this.setup.bot;
+      this.engine = judge;
+    } else this.engine = new Engine(track, chart.tempo, cfg, range);
     this.base = baseScore(track, chart.tempo);
     this.sustainHeld = new Uint8Array(n);
     this.sustainDrop = new Float32Array(n).fill(NaN);
@@ -284,6 +349,7 @@ export class Game {
       const last = chart.lastNoteTime;
       this.endTime = Math.max(last + 2.5, Math.min(this.setup.duration, last + 6));
     }
+    this.gaps = practice ? findGaps(track.notes, this.startTime, practice.first, practice.last) : findGaps(track.notes, this.startTime);
     this.bot = this.setup.bot ? botActions(track, practice ? { from: practice.first, to: practice.last } : {}) : [];
     this.botIdx = 0;
   }
@@ -294,24 +360,32 @@ export class Game {
     this.prepared = true;
     const { song, practice } = this.setup;
     const t = this.setup.track;
-    this.hud.setTitle(song.name, song.artist, `${INSTRUMENT_LABEL[t.instrument]} · ${t.difficulty}`);
+    const extras = [!practice && this.rate !== 1 ? `${Math.round(this.rate * 100)}%` : '', ...(this.setup.mods ?? []).filter(isModifier).map((m) => MODIFIER_LABEL[m])].filter(Boolean);
+    this.hud.setTitle(song.name, song.artist, [`${INSTRUMENT_LABEL[t.instrument]} · ${t.difficulty}`, ...extras].join(' · '));
     this.hud.setSections(this.setup.chart.sections.map((s) => s.time), practice ? practice.start : this.startTime, this.endTime);
-    this.hud.setLyrics(this.setup.chart.lyrics);
+    // vocals: the lyrics are under the notes in the vocal lane
+    this.hud.setLyrics(this.vocals ? [] : this.setup.chart.lyrics);
+    this.hud.vocals.setTrack(this.vocals ? t : null);
     if (practice) this.hud.toast(`PRACTICE · ${practice.label}`, 'info', `${Math.round(practice.speed * 100)}% speed`);
+    else if (this.rate !== 1) this.hud.toast(`${Math.round(this.rate * 100)}% SPEED`, 'info', this.rate < 1 ? 'best scores count at 100% and above' : undefined);
     const touch = !this.setup.bot && TouchFrets.wanted();
-    this.hud.touch.setVisible(touch, this.setup.track.instrument === 'touch' ? TOUCH_LANES : undefined);
+    // vocals on a touch screen: no pads, only Star Power and pause
+    this.hud.touch.setVisible(touch, this.setup.track.instrument === 'touch' ? TOUCH_LANES : this.vocals ? [] : undefined);
     this.hud.onTouchPause = () => this.pause();
+    this.hud.onSkip = () => void this.skipBreak();
+    this.hud.setDrums(this.drums);
+    // sung notes have no early or late
+    this.hud.showTimingBar(settings.timingBar && !this.vocals);
     this.setKeyboardActive(!this.setup.bot && !input().hasPads && !touch);
   }
 
   start(): void {
     this.prepareStart();
-    const { practice } = this.setup;
     input().gameMode = true;
     input().setPollRate(4);
     input().clear();
     this.srcMask = { kb: 0, pad: input().padFretMask(), touch: 0 };
-    audio().play(this.startTime, practice?.speed ?? 1);
+    audio().play(this.startTime, this.rate);
     this.awake.on();
     this.lastFrame = performance.now();
     cancelAnimationFrame(this.raf);
@@ -329,7 +403,7 @@ export class Game {
     const v = this.video;
     if (!v) return;
     const want = t + this.videoOffset;
-    const rate = this.setup.practice?.speed ?? 1;
+    const rate = this.rate;
     if (this.paused || want < 0 || (v.duration && want > v.duration)) {
       if (!v.paused) v.pause();
       return;
@@ -371,13 +445,17 @@ export class Game {
 
   resume(): void {
     if (!this.paused) return;
-    this.paused = false;
-    this.pausedDrawn = false;
     const at = this.engine.time;
-    const rate = this.setup.practice?.speed ?? 1;
+    const rate = this.rate;
     // Rewind a little so notes approach again; judged notes stay judged.
     this.resumeAt = Number.isFinite(at) ? at : this.startTime;
-    audio().play(Math.max(this.startTime, this.resumeAt - 2 * rate), rate);
+    this.unpause(Math.max(this.startTime, this.resumeAt - 2 * rate));
+  }
+
+  private unpause(from: number) {
+    this.paused = false;
+    this.pausedDrawn = false;
+    audio().play(from, this.rate);
     this.awake.on();
     // the audio rewinds: let the beat pulse find its place again
     this.beatIdx = 0;
@@ -386,6 +464,40 @@ export class Game {
     input().clear();
     this.srcMask = { kb: 0, pad: input().padFretMask(), touch: 0 };
     this.lastFrame = performance.now();
+  }
+
+  /** Playback speed: the practice speed, or the song speed. */
+  get rate(): number {
+    return this.setup.practice?.speed ?? this.setup.speed ?? 1;
+  }
+
+  /** Song time now: the audio clock while playing, where the judge stopped while paused. */
+  private get now(): number {
+    return this.paused ? this.songPosition : audio().songTime(performance.now());
+  }
+
+  /** The intro or break the song is in, if skipping it would save some waiting; for the pause menu. */
+  get skippable(): 'intro' | 'break' | null {
+    if (this.ended) return null;
+    const t = this.now;
+    const g = gapAt(this.gaps, t);
+    return g && canSkip(g, t, this.rate) ? (g.intro ? 'intro' : 'break') : null;
+  }
+
+  /**
+   * Jump to a few seconds before the next note, from inside an intro or a long break (paused or not).
+   * Returns false when there is nothing worth skipping.
+   */
+  skipBreak(): boolean {
+    if (this.ended) return false;
+    const t = this.now;
+    const g = gapAt(this.gaps, t);
+    if (!g || !canSkip(g, t, this.rate)) return false;
+    const target = skipTarget(g, this.rate);
+    this.resumeAt = -Infinity;
+    if (this.paused) this.unpause(target);
+    else audio().play(target, this.rate);
+    return true;
   }
 
   /** Switch to another difficulty's track and start the song over. */
@@ -436,7 +548,7 @@ export class Game {
   private readonly lanePts = Array.from({ length: 5 }, () => new Float64Array(2));
   /** the keyboard played the last fret press: key labels show under the frets */
   private kbActive = false;
-  private readonly hs: HudState = { score: 0, multiplier: 1, streak: 0, spBar: 0, spActive: false, stars: 0, accuracy: 1, progress: 0, elapsed: 0, total: 0, spSeconds: 0, fps: 0, cpuMs: 0, worstMs: 0, showFps: false };
+  private readonly hs: HudState = { score: 0, multiplier: 1, streak: 0, spBar: 0, spActive: false, stars: 0, accuracy: 1, progress: 0, elapsed: 0, total: 0, spSeconds: 0, fps: 0, cpuMs: 0, worstMs: 0, showFps: false, rock: 0.5, rockOn: false };
   private rs!: RenderState;
 
   private frame = (now: number) => {
@@ -474,14 +586,16 @@ export class Game {
       } else if (t >= engine.time) {
         engine.setWhammy(t, inp.whammy(now));
       }
-      engine.advance(t - JUDGE_LAG);
+      if (this.vocals) this.listen(t);
+      engine.advance(t - this.judgeLag);
       if (settings.autoStarPower && !this.setup.bot) this.autoStarPower(t);
       for (let i = 0; i < engine.pendingEvents; i++) this.handleEvent(engine.event(i));
       engine.clearEvents();
     }
 
     // countdown after resuming
-    this.hud.setCountdown(t < this.resumeAt ? Math.ceil((this.resumeAt - t) / (this.setup.practice?.speed ?? 1)) : 0);
+    this.hud.setCountdown(t < this.resumeAt ? Math.ceil((this.resumeAt - t) / this.rate) : 0);
+    this.updateBreak(t);
 
     // decays
     const hitDecay = Math.exp(-dt * 9);
@@ -518,7 +632,8 @@ export class Game {
       sustainMask |= s.mask;
       if (s.sp >= 0 && !engine.spBroken[s.sp]) sustainSp = true;
     }
-    if (!this.paused) this.renderer.sustainSparks(sustainMask, sustainSp || engine.spActive, dt);
+    if (!this.paused && !this.vocals) this.renderer.sustainSparks(sustainMask, sustainSp || engine.spActive, dt);
+    if (this.vocals) this.hud.vocals.draw(t - this.judgeLag, engine as VocalJudge);
 
     // The render and HUD state objects are reused every frame (no per-frame garbage).
     const rs = this.rs;
@@ -531,13 +646,15 @@ export class Game {
     rs.sustainHeld = this.sustainHeld;
     rs.sustainDrop = this.sustainDrop;
     rs.sustainMask = sustainMask;
-    rs.frets = this.setup.bot ? engine.frets : this.srcMask.kb | this.srcMask.pad | this.srcMask.touch;
+    rs.frets = this.drums ? (this.srcMask.kb | this.srcMask.pad | this.srcMask.touch) & DRUM_PADS_ALL : this.setup.bot ? engine.frets : this.srcMask.kb | this.srcMask.pad | this.srcMask.touch;
+    rs.drums = this.drums;
+    rs.noHighway = this.vocals;
     rs.spActive = engine.spActive;
     rs.multiplier = engine.multiplier > 4 ? 4 : engine.multiplier;
     rs.missPulse = this.missPulse;
     rs.whammy = this.setup.bot ? 0.5 + 0.5 * Math.sin(now / 60) : engine.whammy;
     rs.lefty = settings.lefty;
-    rs.laneMask = this.setup.track.instrument === 'touch' ? 0b10101 : 0b11111;
+    rs.laneMask = this.setup.track.instrument === 'touch' ? 0b10101 : this.drums ? DRUM_PADS_ALL : 0b11111;
     rs.solo = engine.activeSolo >= 0;
     rs.beatPulse = beatPulse;
     rs.theme = renderTheme();
@@ -548,7 +665,11 @@ export class Game {
       this.hudCameraKey = r.cameraKey;
       const half = r.highwayHalfWidth;
       this.hud.layout(r.toScreen(-half - 0.25, 0, 0.3, this.p0), r.toScreen(half + 0.25, 0, 0.3, this.p1), r.toScreen(0, 0, 0.9, this.p2), r.toScreen(0, 0, -15, this.p3));
-      for (let i = 0; i < 5; i++) r.toScreen(r.laneX(i), 0, 0.55, this.lanePts[i]);
+      for (let i = 0; i < 5; i++) {
+        // drums: four pad keys, and the kick's centred below them
+        if (this.drums && i === 4) r.toScreen(0, 0, 1.1, this.lanePts[i]);
+        else r.toScreen(r.laneX(i), 0, 0.55, this.lanePts[i]);
+      }
       this.hud.layoutKeys(this.lanePts);
     }
     this.hud.setKeysDown(this.srcMask.kb);
@@ -574,8 +695,12 @@ export class Game {
     hs.cpuMs = this.cpuMs;
     hs.worstMs = this.worstFrame * 1000;
     hs.showFps = settings.showFps;
+    hs.rock = engine.rock;
+    hs.rockOn = settings.rockMeter !== 'off' && !this.setup.bot && !practice;
     this.hud.update(hs);
 
+    // Fail mode: the rock meter ran out (not in practice, nor for the bot).
+    if (!this.ended && this.canFail && engine.rockOutAt === engine.rockOutAt) this.fail(engine.rockOutAt);
     if (!this.paused && !this.ended && t > this.endTime) {
       if (practice) this.loopPractice();
       else this.finish();
@@ -583,23 +708,100 @@ export class Game {
     this.cpuMs += (performance.now() - cpuStart - this.cpuMs) * 0.05;
   };
 
+  /** The countdown through an intro or long break, hidden for its last second (the notes are in sight). */
+  private updateBreak(t: number) {
+    const g = settings.breakCountdown && !this.ended && t >= this.resumeAt ? gapAt(this.gaps, t) : null;
+    const rate = this.rate;
+    if (!g || (g.to - t) / rate < 1) {
+      this.hud.setBreak(0, 0, 0, null);
+      return;
+    }
+    this.hud.setBreak(g.intro ? 1 : 2, (g.to - t) / rate, (t - g.from) / (g.to - g.from), canSkip(g, t, rate) ? this.skipHint : null);
+  }
+
+  /** Vocals: hand the judge what the microphone hears (the bot sings the notes themselves, for show). */
+  private listen(t: number) {
+    const judge = this.engine as VocalJudge;
+    const at = t - this.judgeLag;
+    if (this.mic) {
+      const r = this.mic.read();
+      judge.sing(at, r.pitch, r.level > SILENCE_RMS * 2);
+      this.hud.vocals.push(at, r.pitch);
+    } else if (this.setup.bot) {
+      const N = this.setup.track.notes;
+      let p = NaN;
+      for (let i = judge.nextNote; i < N.length && N.time[i] <= at; i++) if (at < N.endTime[i] && N.type[i] === 0) p = N.mask[i];
+      this.hud.vocals.push(at, p);
+    }
+  }
+
+  /** Vocals: no frets to play; they only make the skip chord. Pause and Star Power work as ever. */
+  private vocalInput(ev: InputEvent, t: number) {
+    const fret = FRET_INDEX[ev.action];
+    if (fret >= 0) {
+      if (ev.down) this.srcMask[ev.source] |= 1 << fret;
+      else this.srcMask[ev.source] &= ~(1 << fret);
+      if (ev.down && ((this.srcMask.kb | this.srcMask.pad | this.srcMask.touch) & SKIP_CHORD) === SKIP_CHORD) this.skipBreak();
+      return;
+    }
+    if (!ev.down) return;
+    if (ev.action === 'start') this.pause();
+    else if ((ev.action === 'starPower' || ev.action === 'tilt') && !this.setup.bot && t >= this.engine.time - 0.01) this.engine.activateStarPower(t);
+  }
+
+  /** Drums: pads and the kick are hits (no strum); held keys only light the pads. */
+  private drumInput(ev: InputEvent, t: number) {
+    const e = this.engine;
+    const bit = DRUM_HIT[ev.action];
+    if (bit === undefined) {
+      if (!ev.down) return;
+      if (ev.action === 'start') this.pause();
+      // Space is the kick on drums, not Star Power (Shift or select still is)
+      else if ((ev.action === 'starPower' || ev.action === 'tilt') && !(ev.source === 'kb' && input().keys.kick.includes(ev.code)) && !this.setup.bot && t >= e.time - 0.01) e.activateStarPower(t);
+      return;
+    }
+    if (ev.down) this.srcMask[ev.source] |= bit;
+    else this.srcMask[ev.source] &= ~bit;
+    if (!ev.down) return;
+    if (!this.setup.bot && (ev.source === 'kb') !== this.kbActive) this.setKeyboardActive(ev.source === 'kb');
+    const held = this.srcMask.kb | this.srcMask.pad | this.srcMask.touch;
+    if ((held & DRUM_PADS_ALL) === DRUM_PADS_ALL) this.skipBreak();
+    if (this.setup.bot || t < e.time - 0.01) return;
+    this.presses[ev.source]++;
+    // in a long silence, reaching for the skip chord hits nothing
+    if (canSkip(gapAt(this.gaps, t), t, this.rate)) return;
+    e.pad(t, bit === KICK_BIT ? 0 : bit);
+  }
+
   private handleInput(ev: InputEvent) {
     const a = audio();
     const e = this.engine;
     const t = a.songTime(ev.time);
+    if (this.drums) {
+      this.drumInput(ev, t);
+      return;
+    }
+    if (this.vocals) {
+      this.vocalInput(ev, t);
+      return;
+    }
     const fret = FRET_INDEX[ev.action];
     if (fret >= 0) {
       if (ev.down && !this.setup.bot && (ev.source === 'kb') !== this.kbActive) this.setKeyboardActive(ev.source === 'kb');
       const bit = 1 << fret;
       if (ev.down) this.srcMask[ev.source] |= bit;
       else this.srcMask[ev.source] &= ~bit;
+      // Red + yellow + blue + orange held together skips an intro or long break.
+      if (ev.down && ((this.srcMask.kb | this.srcMask.pad | this.srcMask.touch) & SKIP_CHORD) === SKIP_CHORD) this.skipBreak();
       if (this.setup.bot) return;
       if (ev.down && t >= e.time - 0.01) this.presses[ev.source]++;
       e.setFrets(Math.max(t, e.time), this.srcMask.kb | this.srcMask.pad | this.srcMask.touch);
       // Tap mode: the press is the strum (always on touch screens, optional on the keyboard). The
       // engine's strum leniency waits for the rest of a chord, so only the first fret of a chord strums.
       const taps = ev.source === 'touch' || (ev.source === 'kb' && settings.kbTapMode);
-      if (ev.down && taps && t >= e.time - 0.01 && !(Math.abs(t - this.lastTapStrum) <= TAP_CHORD_WINDOW)) {
+      // Fret presses in a long silence are not strums: reaching for the skip chord costs nothing.
+      const quiet = canSkip(gapAt(this.gaps, t), t, this.rate);
+      if (ev.down && taps && !quiet && t >= e.time - 0.01 && !(Math.abs(t - this.lastTapStrum) <= TAP_CHORD_WINDOW)) {
         this.lastTapStrum = t;
         e.strum(t);
       }
@@ -621,7 +823,24 @@ export class Game {
   private setKeyboardActive(on: boolean) {
     this.kbActive = on;
     const keys = input().keys;
-    this.hud.setKeyLabels(on ? FRET_ACTIONS.map((a) => (keys[a]?.[0] ? keyLabel(keys[a][0]) : '')) : null);
+    const label = (a: keyof typeof keys) => (keys[a]?.[0] ? keyLabel(keys[a][0]) : '');
+    if (this.vocals) {
+      this.hud.setKeyLabels(null);
+      this.skipHint = on ? FRET_ACTIONS.slice(1).map(label).join(' ') : 'red + yellow + blue + orange';
+      return;
+    }
+    if (this.drums) {
+      // four pads, and the kick under them
+      const pads = (['red', 'yellow', 'blue', 'orange'] as const).map(label);
+      this.hud.setKeyLabels(on ? [...pads, `${label('kick')} kick`] : null);
+      this.skipHint = on ? pads.join(' ') : 'red + yellow + blue + green pads';
+      return;
+    }
+    const labels = FRET_ACTIONS.map((a) => (keys[a]?.[0] ? keyLabel(keys[a][0]) : ''));
+    this.hud.setKeyLabels(on ? labels : null);
+    // The touch part has no red or blue pad: the skip button is the way there.
+    const touchOnly = this.setup.track.instrument === 'touch' && TouchFrets.wanted() && !on;
+    this.skipHint = touchOnly ? '' : on ? labels.slice(1).join(' ') : 'red + yellow + blue + orange';
   }
   private lastClank = -1;
 
@@ -652,8 +871,10 @@ export class Game {
         const mask = notes.mask[ev.note];
         const sp = notes.sp[ev.note];
         a.setPlayerAudible(true);
-        for (let i = 0; i < 5; i++) if (mask & (1 << i) || mask === 0) this.laneHit[i] = 1;
-        this.renderer.hitBurst(mask, engine.spActive || (sp >= 0 && !engine.spBroken[sp]));
+        if (!this.vocals) {
+          for (let i = 0; i < 5; i++) if (mask & (1 << i) || mask === 0) this.laneHit[i] = 1;
+          this.renderer.hitBurst(mask, engine.spActive || (sp >= 0 && !engine.spBroken[sp]));
+        }
         if (!ev.auto) this.hud.timingTick(ev.delta);
         // The final note of a flawless run: that settles the full combo (a stray strum once the notes
         // are over does not take it back), and it is celebrated straight away.
@@ -673,7 +894,8 @@ export class Game {
       }
       case 'miss': {
         const mask = notes.mask[ev.note];
-        this.missAudio(ev.t);
+        // the guide vocals keep playing over a missed note
+        if (!this.vocals) this.missAudio(ev.t);
         if (ev.reason === 'wrong') this.wrongFret++;
         else this.lateMiss++;
         if (ev.reason === 'wrong') {
@@ -742,6 +964,11 @@ export class Game {
       case 'spEnd':
         a.playSfx('spEnd', 0.6);
         break;
+      case 'vocalPhrase': {
+        const rating = PHRASE_RATINGS[ev.value];
+        this.hud.toast(rating.toUpperCase(), ev.value >= 4 ? 'streak' : ev.value <= 1 ? 'bad' : 'info', `${ev.hits} / ${ev.total} notes`);
+        break;
+      }
       case 'soloStart':
         this.soloHits = this.soloSeen = 0;
         this.updateSolo();
@@ -774,19 +1001,46 @@ export class Game {
     audio().play(this.startTime, p.speed);
   }
 
-  private finish() {
+  private get canFail(): boolean {
+    return settings.rockMeter === 'fail' && !this.setup.bot && !this.setup.practice;
+  }
+
+  /** The rock meter ran out: the band winds down, SONG FAILED, then the results of what was played. */
+  private fail(at: number) {
+    this.ended = true;
+    const a = audio();
+    a.failOut();
+    a.playSfx('streakBreak', 0.9);
+    this.hud.songFailed();
+    this.missPulse = 1;
+    setTimeout(() => {
+      a.stop();
+      this.finish(at);
+    }, 2400);
+  }
+
+  private finish(failedAt?: number) {
     this.ended = true;
     const e = this.engine;
     const { track, chart } = this.setup;
-    const notes = track.notes;
+    // A failed run only counts the notes reached before the fail.
+    const all = track.notes;
+    const notes = failedAt === undefined ? all : { ...all, length: e.nextNote };
     const missByLane = [0, 0, 0, 0, 0];
     const missByType = { strum: 0, hopo: 0, tap: 0 };
     let missChords = 0;
     let missOpen = 0;
     const deltas: number[] = [];
+    const sung = this.vocals;
     for (let i = 0; i < notes.length; i++) {
       if (e.noteState[i] === HIT) {
-        deltas.push(e.hitDelta[i]);
+        // vocal notes have no timing to show
+        if (!sung) deltas.push(e.hitDelta[i]);
+        continue;
+      }
+      if (sung) {
+        if (notes.type[i] === TAP) missByType.tap++;
+        else missByType.strum++;
         continue;
       }
       const mask = notes.mask[i];
@@ -838,13 +1092,16 @@ export class Game {
       missByType,
       wrongFret: this.wrongFret,
       lateMiss: this.lateMiss,
+      overhits: e.overhits,
+      ratings: e instanceof VocalJudge ? [...e.ratings] : undefined,
       input: this.playedWith(),
       fullCombo: this.setup.practice ? e.misses === 0 && e.overstrums === 0 && notes.length > 0 : this.fullCombo,
       noteState: e.noteState.slice(),
       hitDelta: e.hitDelta.slice(),
       start: Math.min(0, notes.length ? notes.time[0] : 0),
-      end: Math.max(this.endTime, notes.length ? notes.time[notes.length - 1] + 1 : 1),
+      end: failedAt === undefined ? Math.max(this.endTime, notes.length ? notes.time[notes.length - 1] + 1 : 1) : failedAt + 1,
+      failedAt,
     };
-    setTimeout(() => this.onEnd?.(result), 600);
+    setTimeout(() => this.onEnd?.(result), failedAt === undefined ? 600 : 0);
   }
 }

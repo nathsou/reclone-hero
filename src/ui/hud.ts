@@ -2,6 +2,7 @@ import type { LyricLine } from '../chart/lyrics.ts';
 import { TouchFrets } from './touchFrets.ts';
 import { formatTime } from '../util/text.ts';
 import { h, setText } from './dom.ts';
+import { VocalLane } from './vocalLane.ts';
 
 const MULT_CLASS = ['', 'm1', 'm2', 'm3', 'm4'];
 const MULT_TEXT = ['', '×1', '×2', '×3', '×4', '×5', '×6', '×7', '×8'];
@@ -62,6 +63,9 @@ export interface HudState {
   /** longest frame interval over the last half second */
   worstMs: number;
   showFps: boolean;
+  /** rock meter 0..1, and whether it is shown */
+  rock: number;
+  rockOn: boolean;
 }
 
 /** DOM overlay for score, multiplier, star power, streak, toasts and the timing bar. */
@@ -70,6 +74,10 @@ export class Hud {
   /** on-screen frets for touch screens */
   readonly touch: TouchFrets;
   onTouchPause: (() => void) | null = null;
+  /** vocals: the scrolling pitch lane (shown only for a vocal part) */
+  readonly vocals = new VocalLane();
+  /** the skip button of the break countdown was pressed */
+  onSkip: (() => void) | null = null;
   private readonly left: HTMLDivElement;
   private readonly right: HTMLDivElement;
   private readonly score: HTMLDivElement;
@@ -77,6 +85,9 @@ export class Hud {
   private readonly multText: HTMLSpanElement;
   private readonly streak: HTMLDivElement;
   private readonly meter: HTMLDivElement;
+  private readonly rock: HTMLDivElement;
+  private lastRock = -1;
+  private lastRockOn = false;
   private readonly spFills: HTMLElement[] = [];
   private readonly spMeter: HTMLDivElement;
   private readonly spText: HTMLDivElement;
@@ -104,6 +115,12 @@ export class Hud {
   private readonly partEl: HTMLSpanElement;
   private readonly fps: HTMLDivElement;
   private readonly countdown: HTMLDivElement;
+  private readonly breakEl: HTMLDivElement;
+  private readonly breakLabel: HTMLDivElement;
+  private readonly breakTime: HTMLDivElement;
+  private readonly breakFill: HTMLElement;
+  private readonly breakSkip: HTMLButtonElement;
+  private readonly breakKeys: HTMLSpanElement;
   private readonly keys: HTMLDivElement;
   private readonly keyCaps: HTMLSpanElement[] = [];
   private readonly lyricsEl: HTMLDivElement;
@@ -141,7 +158,8 @@ export class Hud {
     this.mult = h('div', { class: 'hud-mult m1' }, this.multText);
     this.streak = h('div', { class: 'hud-streak' }, '');
     this.meter = h('div', { class: 'hud-meter' });
-    this.left = h('div', { class: 'hud-left', 'data-m': '1' }, this.score, h('div', { class: 'hud-row' }, this.streak, this.mult), this.meter);
+    this.rock = h('div', { class: 'hud-rock', title: 'Rock meter' }, h('span', { class: 'zone bad' }), h('span', { class: 'zone meh' }), h('span', { class: 'zone good' }), h('i', { class: 'needle' }));
+    this.left = h('div', { class: 'hud-left', 'data-m': '1' }, this.score, h('div', { class: 'hud-row' }, this.streak, this.mult), this.meter, this.rock);
     this.spMeter = h('div', { class: 'hud-sp' });
     for (let i = 0; i < SP_SEGMENTS; i++) {
       const fill = h('i');
@@ -189,6 +207,23 @@ export class Hud {
     this.title = h('div', { class: 'hud-top' }, h('span', { class: 't' }), h('span', { class: 'a' }), h('span', { class: 'grow' }), this.partEl);
     this.fps = h('div', { class: 'hud-fps' });
     this.countdown = h('div', { class: 'hud-countdown' });
+    this.breakLabel = h('div', { class: 'lbl' });
+    this.breakTime = h('div', { class: 'n' });
+    this.breakFill = h('i');
+    this.breakKeys = h('span', { class: 'keys' });
+    this.breakSkip = h(
+      'button',
+      {
+        class: 'skip',
+        onpointerdown: (e: PointerEvent) => {
+          e.preventDefault();
+          this.onSkip?.();
+        },
+      },
+      h('span', { class: 'what' }, 'Skip'),
+      this.breakKeys,
+    );
+    this.breakEl = h('div', { class: 'hud-break' }, this.breakLabel, this.breakTime, h('div', { class: 'bar' }, this.breakFill), this.breakSkip);
     this.keys = h('div', { class: 'hud-keys' });
     for (let i = 0; i < 5; i++) {
       const cap = h('span', { class: `cap f${i}` });
@@ -211,6 +246,8 @@ export class Hud {
       this.timing,
       this.fps,
       this.countdown,
+      this.vocals.el,
+      this.breakEl,
       this.keys,
     );
     this.touch = new TouchFrets(() => this.onTouchPause?.());
@@ -247,6 +284,11 @@ export class Hud {
   setKeyLabels(labels: string[] | null): void {
     this.keys.classList.toggle('on', labels !== null);
     if (labels) for (let i = 0; i < 5; i++) setText(this.keyCaps[i], labels[i] ?? '');
+  }
+
+  /** Drums: the key caps take the pad colours (red, yellow, blue, green) and the kick's. */
+  setDrums(on: boolean): void {
+    this.keys.classList.toggle('drums', on);
   }
 
   setKeysDown(mask: number): void {
@@ -355,6 +397,17 @@ export class Hud {
       setText(this.elapsed, formatTime(second));
       setText(this.totalEl, formatTime(s.total));
     }
+    if (s.rockOn !== this.lastRockOn) {
+      this.lastRockOn = s.rockOn;
+      this.rock.classList.toggle('on', s.rockOn);
+    }
+    const rock = Math.round(s.rock * 200);
+    if (s.rockOn && rock !== this.lastRock) {
+      this.lastRock = rock;
+      this.rock.style.setProperty('--r', String(rock / 200));
+      this.rock.classList.toggle('danger', rock < 50);
+      this.root.classList.toggle('rock-danger', rock < 50);
+    }
     if (s.showFps) {
       if ((this.fpsFrame & 63) === 0) setText(this.fps, `${s.fps.toFixed(0)} fps · ${s.cpuMs.toFixed(2)} ms cpu · worst frame ${s.worstMs.toFixed(1)} ms`);
     } else if (this.fps.firstChild) setText(this.fps, '');
@@ -415,6 +468,11 @@ export class Hud {
     }, 2500);
   }
 
+  /** The rock meter ran out: the song is over. */
+  songFailed(): void {
+    this.root.append(h('div', { class: 'hud-failed' }, h('div', { class: 't' }, 'SONG FAILED'), h('div', { class: 's' }, 'The crowd has had enough.')));
+  }
+
   /** The last note is in and nothing was missed: a title, confetti from the frets and fireworks. */
   fullCombo(): void {
     const word = (text: string, from: number) => h('span', { class: 'w' }, ...[...text].map((c, i) => h('span', { style: `--i:${from + i}` }, c)));
@@ -441,7 +499,9 @@ export class Hud {
     clearTimeout(this.soloTimer);
     this.soloTimer = 0;
     this.solo.classList.remove('on', 'done', 'perfect', 'slipping');
-    this.root.querySelectorAll('.hud-fc').forEach((el) => el.remove());
+    this.root.querySelectorAll('.hud-fc, .hud-failed').forEach((el) => el.remove());
+    this.root.classList.remove('rock-danger');
+    this.lastRock = -1;
     this.stopConfetti?.();
     this.stopConfetti = null;
   }
@@ -519,6 +579,41 @@ export class Hud {
       const spans = this.lyricCur.children;
       for (let j = this.lyricSung; j < k; j++) spans[j]?.classList.add('sung');
       this.lyricSung = k;
+    }
+  }
+
+  private lastBreakKind = 0;
+  private lastBreakSecond = -1;
+  private lastBreakFill = -1;
+  private lastSkipHint: string | null = '';
+
+  /**
+   * The countdown through an intro or a long break. kind: 0 hides it, 1 = intro, 2 = break.
+   * skipHint: how to skip (e.g. the keys), '' for the button alone, null when skipping is not offered.
+   * Called every frame; the DOM changes only when what is shown does.
+   */
+  setBreak(kind: number, secondsLeft: number, fill: number, skipHint: string | null): void {
+    if (kind !== this.lastBreakKind) {
+      this.lastBreakKind = kind;
+      this.breakEl.classList.toggle('on', kind !== 0);
+      if (kind) setText(this.breakLabel, kind === 1 ? 'First note in' : 'Next note in');
+      setText(this.breakSkip.firstChild as HTMLElement, kind === 1 ? 'Skip intro' : 'Skip break');
+    }
+    if (!kind) return;
+    const sec = Math.max(0, Math.ceil(secondsLeft));
+    if (sec !== this.lastBreakSecond) {
+      this.lastBreakSecond = sec;
+      setText(this.breakTime, formatTime(sec));
+    }
+    const f = Math.round(Math.min(1, Math.max(0, fill)) * 400);
+    if (f !== this.lastBreakFill) {
+      this.lastBreakFill = f;
+      this.breakFill.style.transform = `scaleX(${f / 400})`;
+    }
+    if (skipHint !== this.lastSkipHint) {
+      this.lastSkipHint = skipHint;
+      this.breakSkip.hidden = skipHint === null;
+      setText(this.breakKeys, skipHint ?? '');
     }
   }
 

@@ -1,6 +1,7 @@
 import { EV_NOTE_OFF, EV_NOTE_ON, EV_SYSEX, EV_TEMPO, EV_TEXT, EV_TIMESIG, parseMidi } from './midi.ts';
 import type { MidiTrack } from './midi.ts';
 import { emptyTrack } from './dotchart.ts';
+import { finishDrumTrack } from './drums.ts';
 import type { Instrument, RawChart, RawTrack, TickRange } from './types.ts';
 import { DIFFICULTIES, pushRaw, trackKey } from './types.ts';
 
@@ -46,6 +47,8 @@ export function parseMidiChart(bytes: Uint8Array, multiplierNote = 116): RawChar
     const inst = TRACK_NAMES[name];
     if (inst && !DIFFICULTIES.some((d) => chart.tracks.has(trackKey(inst, d)))) {
       readInstrument(track, inst, chart, multiplierNote);
+    } else if (name === 'PART DRUMS' && !DIFFICULTIES.some((d) => chart.tracks.has(trackKey('drums', d)))) {
+      readDrums(track, chart, multiplierNote);
     }
   });
   // lyrics from the lead vocals, or from the first harmony part when there is no lead part
@@ -130,6 +133,53 @@ function readInstrument(track: MidiTrack, inst: Instrument, chart: RawChart, mul
   });
 }
 
+/** Tom markers (pro drums): gems on yellow, blue or green under these are toms, the rest cymbals. */
+const TOM_NOTES = [110, 111, 112];
+
+/**
+ * PART DRUMS: per difficulty (base 60/72/84/96) kick, red, yellow, blue, green (+5: the green of a 5-lane
+ * chart). Charts with tom markers are pro drums: yellow, blue and green are cymbals unless marked as toms;
+ * charts without them are all toms, as Clone Hero shows them.
+ */
+function readDrums(track: MidiTrack, chart: RawChart, multiplierNote: number) {
+  const ranges = new Map<number, TickRange[]>();
+  const open = new Map<number, number>();
+  const close = (pitch: number, tick: number) => {
+    const start = open.get(pitch);
+    if (start === undefined) return;
+    open.delete(pitch);
+    let list = ranges.get(pitch);
+    if (!list) ranges.set(pitch, (list = []));
+    list.push({ start, end: tick });
+  };
+  for (const ev of track.events) {
+    if (ev.type === EV_NOTE_ON) {
+      close(ev.a, ev.tick);
+      open.set(ev.a, ev.tick);
+    } else if (ev.type === EV_NOTE_OFF) close(ev.a, ev.tick);
+  }
+  for (const pitch of [...open.keys()]) close(pitch, open.get(pitch)! + 1);
+  const get = (pitch: number) => ranges.get(pitch) ?? [];
+  const pro = TOM_NOTES.some((p) => get(p).length > 0);
+  const spNote = multiplierNote === SOLO_NOTE ? SOLO_NOTE : 116;
+  DIFFICULTIES.forEach((diff, di) => {
+    const base = 60 + di * 12;
+    const t: RawTrack = emptyTrack();
+    const cymbals = new Set<number>();
+    for (let lane = 0; lane <= 5; lane++) {
+      for (const r of get(base + lane)) {
+        pushRaw(t.notes, r.start, lane, 0);
+        if (pro && lane >= 2 && lane <= 4 && !inRanges(get(TOM_NOTES[lane - 2]), r.start)) cymbals.add(r.start * 8 + lane);
+      }
+    }
+    if (t.notes.tick.length === 0) return;
+    t.starPower = get(spNote);
+    t.solos = spNote === SOLO_NOTE ? [] : get(SOLO_NOTE);
+    finishDrumTrack(t, cymbals);
+    chart.tracks.set(trackKey('drums', diff), t);
+  });
+}
+
 function inRanges(ranges: TickRange[], tick: number): boolean {
   for (const r of ranges) if (tick >= r.start && tick < r.end) return true;
   return false;
@@ -138,14 +188,40 @@ function inRanges(ranges: TickRange[], tick: number): boolean {
 /** Phrase markers in PART VOCALS (Rock Band: 105, and 106 for the second player). */
 const PHRASE_NOTES = [105, 106];
 
-/** Lyrics: every text or lyric event that is not a [bracketed] event, and the phrase notes as lines. */
+/** Sung notes in PART VOCALS: MIDI pitches 36-84 (Rock Band), each with the lyric event on its tick. */
+const VOCAL_LOW = 36;
+const VOCAL_HIGH = 84;
+
+/**
+ * Lyrics: every text or lyric event that is not a [bracketed] event, and the phrase notes as lines. Also
+ * the pitched notes, for singing (with the overdrive / star power note, 116).
+ */
 function readVocals(track: MidiTrack, chart: RawChart) {
   const open = new Map<number, number>();
   const phrases: TickRange[] = [];
+  const sung = new Map<number, number>();
+  const notes: { tick: number; end: number; pitch: number; text: string }[] = [];
+  const texts = new Map<number, string>();
+  let spStart = -1;
+  const starPower: TickRange[] = [];
   for (const ev of track.events) {
+    if ((ev.type === EV_NOTE_ON || ev.type === EV_NOTE_OFF) && ev.a >= VOCAL_LOW && ev.a <= VOCAL_HIGH) {
+      const start = sung.get(ev.a);
+      if (start !== undefined) {
+        notes.push({ tick: start, end: ev.tick, pitch: ev.a, text: '' });
+        sung.delete(ev.a);
+      }
+      if (ev.type === EV_NOTE_ON) sung.set(ev.a, ev.tick);
+    } else if ((ev.type === EV_NOTE_ON || ev.type === EV_NOTE_OFF) && ev.a === 116) {
+      if (spStart >= 0) starPower.push({ start: spStart, end: Math.max(ev.tick, spStart + 1) });
+      spStart = ev.type === EV_NOTE_ON ? ev.tick : -1;
+    }
     if (ev.type === EV_TEXT && ev.text && (ev.a === 0x01 || ev.a === 0x05)) {
       const text = ev.text.trim();
-      if (text && !text.startsWith('[')) chart.lyrics.push({ tick: ev.tick, text });
+      if (text && !text.startsWith('[')) {
+        chart.lyrics.push({ tick: ev.tick, text });
+        texts.set(ev.tick, text);
+      }
     } else if ((ev.type === EV_NOTE_ON || ev.type === EV_NOTE_OFF) && PHRASE_NOTES.includes(ev.a)) {
       const start = open.get(ev.a);
       if (start !== undefined) {
@@ -154,6 +230,11 @@ function readVocals(track: MidiTrack, chart: RawChart) {
       }
       if (ev.type === EV_NOTE_ON) open.set(ev.a, ev.tick);
     }
+  }
+  if (notes.length) {
+    notes.sort((a, b) => a.tick - b.tick || a.pitch - b.pitch);
+    for (const n of notes) n.text = texts.get(n.tick) ?? '';
+    chart.vocals = { notes, starPower };
   }
   // 105 and 106 often mark the same phrases: keep each range once
   phrases.sort((a, b) => a.start - b.start || a.end - b.end);

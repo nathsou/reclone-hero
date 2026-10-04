@@ -240,6 +240,7 @@ uniform float u_solo;
 uniform vec3 u_tint;
 uniform float u_lanes[5];
 uniform vec3 u_laneCol[5];
+uniform float u_four;      // drums: four lanes 1.25 wide instead of five
 uniform vec3 u_hwFar;
 uniform vec3 u_hwNear;
 uniform vec3 u_laneLine;
@@ -324,8 +325,11 @@ void main() {
   // solo sections tint the lane surface
   vec3 soloCol = inked ? vec3(0.86, 0.8, 0.93) : vec3(0.045, 0.02, 0.065);
   base = mix(base, soloCol, u_solo * 0.85);
+  // lane coordinate: lane boundaries sit at half-integers of lx (five lanes of 1, or four of 1.25)
+  float lx = u_four > 0.5 ? x * 0.8 + 0.5 : x;
+  float laneOff = u_four > 0.5 ? 1.5 : 2.5;
   // alternate lane shading helps read which lane a gem is in
-  float laneIdx = floor(x + 2.5);
+  float laneIdx = floor(lx + laneOff);
   base *= 1.0 + (inked ? 0.0 : board ? 0.06 : 0.12) * mod(laneIdx, 2.0);
   if (!board && !inked) {
     // soft sheen that scrolls with the chart so the surface reads as moving
@@ -333,11 +337,11 @@ void main() {
   }
 
   // lane separators
-  float d = abs(fract(x) - 0.5);
+  float d = abs(fract(lx) - 0.5);
   float sep;
   if (board || inked) {
     // at least a pixel and a half wide, so the lanes stay legible all the way down the highway
-    float lw = fwidth(x);
+    float lw = fwidth(lx);
     sep = (1.0 - smoothstep(max(lw * 0.75, 0.008), max(lw * 1.75, 0.016), d)) * step(ax, 2.0);
   } else {
     sep = (1.0 - smoothstep(0.0, 0.02, d)) * step(ax, 2.0);
@@ -345,11 +349,11 @@ void main() {
   base += u_laneLine * sep;
 
   // lane glow while a fret is held
-  float lane = floor(x + 2.5);
+  float lane = floor(lx + laneOff);
   if (lane >= 0.0 && lane <= 4.0) {
     float held = u_lanes[int(lane)];
     float fall = exp(z * 0.45);
-    base += u_laneCol[int(lane)] * (inked ? 0.0 : 0.07) * held * fall * (1.0 - smoothstep(0.3, 0.5, abs(fract(x + 0.5) - 0.5)));
+    base += u_laneCol[int(lane)] * (inked ? 0.0 : 0.07) * held * fall * (1.0 - smoothstep(0.3, 0.5, abs(fract(lx + 0.5) - 0.5)));
   }
 
   // star power

@@ -1,5 +1,6 @@
 import type { Difficulty, Instrument, RawChart, RawTrack } from './types.ts';
 import { pushRaw, rawNotes, trackKey } from './types.ts';
+import { finishDrumTrack } from './drums.ts';
 
 const DIFF_NAMES: Record<string, Difficulty> = { easy: 'easy', medium: 'medium', hard: 'hard', expert: 'expert' };
 const INST_NAMES: Record<string, Instrument> = {
@@ -8,6 +9,7 @@ const INST_NAMES: Record<string, Instrument> = {
   doublebass: 'bass',
   doublerhythm: 'rhythm',
   keyboard: 'keys',
+  drums: 'drums',
   touch: 'touch',
 };
 
@@ -32,23 +34,29 @@ export function parseDotChart(text: string): RawChart {
   let phraseStart = -1;
   let track: RawTrack | null = null;
   let soloStart = -1;
+  /** drums: cymbal markers (N 66-68) of the track being read, or null for other instruments */
+  let cymbals: Set<number> | null = null;
 
   for (const raw of text.split('\n')) {
     const line = raw.trim().replace(/^﻿/, '');
     if (!line || line === '{') continue;
     if (line === '}') {
+      if (track && cymbals) finishDrumTrack(track, cymbals);
       section = '';
       track = null;
+      cymbals = null;
       continue;
     }
     if (line.startsWith('[') && line.endsWith(']')) {
       section = line.slice(1, -1);
       track = null;
       soloStart = -1;
-      const m = /^(easy|medium|hard|expert)(single|doubleguitar|doublebass|doublerhythm|keyboard|touch)$/i.exec(section);
+      const m = /^(easy|medium|hard|expert)(single|doubleguitar|doublebass|doublerhythm|keyboard|drums|touch)$/i.exec(section);
       if (m) {
-        const key = trackKey(INST_NAMES[m[2].toLowerCase()], DIFF_NAMES[m[1].toLowerCase()]);
+        const inst = INST_NAMES[m[2].toLowerCase()];
+        const key = trackKey(inst, DIFF_NAMES[m[1].toLowerCase()]);
         track = emptyTrack();
+        cymbals = inst === 'drums' ? new Set() : null;
         chart.tracks.set(key, track);
       }
       continue;
@@ -87,7 +95,12 @@ export function parseDotChart(text: string): RawChart {
         }
       }
     } else if (track) {
-      if (kind === 'N') {
+      if (kind === 'N' && cymbals) {
+        // drums: 0 kick, 1-4 pads (5: the green of a 5-lane chart), 66-68 yellow/blue/green cymbal markers
+        const lane = Number(parts[1]);
+        if (lane >= 0 && lane <= 5) pushRaw(track.notes, tick, lane, 0);
+        else if (lane >= 66 && lane <= 68) cymbals.add(tick * 8 + lane - 64);
+      } else if (kind === 'N') {
         const lane = Number(parts[1]);
         const length = Number(parts[2]) || 0;
         if (lane <= 4 || lane === 7) pushRaw(track.notes, tick, lane, length);

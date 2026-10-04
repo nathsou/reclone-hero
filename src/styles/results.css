@@ -337,3 +337,98 @@
     gap: 28px;
   }
 }
+
+/* the last runs of this part, as bars */
+.res-runs {
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+  margin-top: 6px;
+  height: 22px;
+}
+
+.res-runs .lbl {
+  font: 500 11px var(--font-mono);
+  color: var(--dim);
+}
+
+.res-runs .bars {
+  display: flex;
+  align-items: flex-end;
+  gap: 2px;
+  height: 100%;
+}
+
+.res-runs .bars i {
+  width: 6px;
+  border-radius: 1px;
+  background: var(--fainter);
+}
+
+.res-runs .bars i.fc {
+  background: var(--star, var(--ok));
+}
+
+.res-runs .bars i.now {
+  background: var(--accent);
+}
+
+.res-num .tag.failed {
+  background: var(--bad);
+  color: #fff;
+}
+
+.res-setlist {
+  margin-top: 4px;
+  font: 500 11px var(--font-mono);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+
+/* the end of a setlist */
+.setlist-summary .res-nums {
+  margin: 22px 0;
+}
+
+.sl-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+}
+
+.sl-table th {
+  padding: 8px 10px;
+  text-align: left;
+  font: 500 11px var(--font-mono);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--dim);
+  border-bottom: 1px solid var(--line);
+}
+
+.sl-table td {
+  padding: 10px;
+  border-bottom: 1px solid var(--line-soft);
+}
+
+.sl-table tr.dim td {
+  color: var(--faint);
+}
+
+.sl-table tr.failed td:first-child {
+  color: var(--bad);
+}
+
+.sl-table .st {
+  margin-left: 8px;
+  font: 500 11px var(--font-mono);
+  color: var(--dim);
+}
+
+.lane-bars.ratings .lane-bar small {
+  display: block;
+  font: 500 9px var(--font-mono);
+  color: var(--dim);
+  text-align: center;
+}

@@ -1,12 +1,16 @@
-// Export/import of everything the player builds up: settings, key and controller bindings, best scores.
+// Export/import of everything the player builds up: settings, key and controller bindings, best scores,
+// favourites and hidden songs.
 // The charts folder itself cannot travel (browsers tie folder access to this machine).
 
 import type { PlayStat } from './plays.ts';
 import type { BestScore } from './scores.ts';
+import { mergeHistory } from './history.ts';
+import { mergeSetlists } from './setlists.ts';
+import type { TrackHistory } from './history.ts';
 
 const APP = 'reclone-hero';
 const FORMAT = 1;
-const KEYS = { settings: 'chsq.settings', keys: 'chsq.keys', pads: 'chsq.pads', scores: 'chsq.scores', plays: 'chsq.plays', favourites: 'chsq.favourites' } as const;
+const KEYS = { settings: 'chsq.settings', keys: 'chsq.keys', pads: 'chsq.pads', scores: 'chsq.scores', plays: 'chsq.plays', favourites: 'chsq.favourites', hidden: 'chsq.hidden', history: 'chsq.history', setlists: 'chsq.setlists' } as const;
 type Section = keyof typeof KEYS;
 
 export interface Backup {
@@ -51,6 +55,10 @@ export interface BackupSummary {
   scores: number;
   plays: number;
   favourites: number;
+  hidden: number;
+  /** parts with a run history */
+  history: number;
+  setlists: number;
   exportedAt: string;
 }
 
@@ -74,6 +82,9 @@ export function summarize(b: Backup): BackupSummary {
     scores: b.data.scores ? Object.keys(b.data.scores as object).length : 0,
     plays: b.data.plays ? Object.keys(b.data.plays as object).length : 0,
     favourites: Array.isArray(b.data.favourites) ? b.data.favourites.length : 0,
+    hidden: Array.isArray(b.data.hidden) ? b.data.hidden.length : 0,
+    history: isObj(b.data.history) ? Object.keys(b.data.history).length : 0,
+    setlists: Array.isArray(b.data.setlists) ? b.data.setlists.length : 0,
     exportedAt: b.exportedAt,
   };
 }
@@ -118,10 +129,18 @@ export function applyBackup(b: Backup): void {
     }
     write(KEYS.plays, mine);
   }
-  if (Array.isArray(b.data.favourites)) {
-    // Favourites: the union of both lists.
-    const mine = read(KEYS.favourites);
-    const ids = b.data.favourites.filter((x): x is string => typeof x === 'string');
-    write(KEYS.favourites, [...new Set([...(Array.isArray(mine) ? mine : []), ...ids])]);
+  // Run history: runs combined, the better best at each speed and set of modifiers.
+  if (isObj(b.data.history)) {
+    const stored = read(KEYS.history);
+    write(KEYS.history, mergeHistory((isObj(stored) ? stored : {}) as Record<string, TrackHistory>, b.data.history));
+  }
+  if (Array.isArray(b.data.setlists)) write(KEYS.setlists, mergeSetlists(read(KEYS.setlists), b.data.setlists));
+  // Favourites and hidden songs: the union of both lists.
+  for (const section of ['favourites', 'hidden'] as const) {
+    const theirs = b.data[section];
+    if (!Array.isArray(theirs)) continue;
+    const mine = read(KEYS[section]);
+    const ids = theirs.filter((x): x is string => typeof x === 'string');
+    write(KEYS[section], [...new Set([...(Array.isArray(mine) ? mine : []), ...ids])]);
   }
 }

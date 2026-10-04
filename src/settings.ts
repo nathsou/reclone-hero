@@ -32,6 +32,18 @@ export interface Settings {
   timingBar: boolean;
   /** words at the top of the screen on charts that have lyrics */
   lyrics: boolean;
+  /** modifier ids switched on for the next runs (see game/modifiers.ts) */
+  modifiers: string[];
+  /** song speed for normal play (1 = as recorded); practice has its own */
+  songSpeed: number;
+  /** Guitar Hero's rock meter: hidden, shown, or shown and failing the song when it runs out */
+  rockMeter: 'off' | 'meter' | 'fail';
+  /** a countdown through long intros and breaks */
+  breakCountdown: boolean;
+  /** vocals: the microphone (deviceId; '' = the system's default) */
+  micDevice: string;
+  /** vocals: extra delay (ms) of the microphone, on top of what the browser reports */
+  micLatencyMs: number;
   missFeedback: MissFeedback;
   missSounds: boolean;
   volMaster: number;
@@ -41,6 +53,8 @@ export interface Settings {
   volCrowd: number;
   volPreview: number;
   quality: Quality;
+  /** lower the quality a step when frames cannot keep up */
+  autoQuality: boolean;
   theme: Theme;
   noteStyle: NoteStyle;
   songView: SongView;
@@ -68,6 +82,12 @@ export const DEFAULT_SETTINGS: Settings = {
   favouritesOnly: false,
   timingBar: true,
   lyrics: true,
+  breakCountdown: true,
+  micDevice: '',
+  micLatencyMs: 0,
+  rockMeter: 'off',
+  songSpeed: 1,
+  modifiers: [],
   missFeedback: 'auto',
   missSounds: true,
   volMaster: 0.9,
@@ -77,6 +97,7 @@ export const DEFAULT_SETTINGS: Settings = {
   volCrowd: 0.5,
   volPreview: 0.6,
   quality: 'medium',
+  autoQuality: true,
   theme: 'system',
   noteStyle: 'theme',
   songView: 'list',
@@ -110,6 +131,7 @@ function load(): Settings {
       else if (stored.theme === 'light') stored.theme = 'ink';
       // Only the Classic dome, Cone and Crystal note styles are left.
       if (stored.noteStyle !== undefined && stored.noteStyle !== 'dome' && stored.noteStyle !== 'cone' && stored.noteStyle !== 'glass') delete stored.noteStyle;
+      if (stored.modifiers !== undefined && !(Array.isArray(stored.modifiers) && stored.modifiers.every((m) => typeof m === 'string'))) delete stored.modifiers;
       delete stored.v;
       return { ...DEFAULT_SETTINGS, ...(stored as Partial<Settings>) };
     }

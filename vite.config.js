@@ -48,6 +48,16 @@ function chartsPlugin() {
         res.setHeader('Content-Type', 'application/json');
         return res.end(JSON.stringify({ root: path.basename(CHARTS_DIR), songs: out }));
       }
+      if (url.pathname.startsWith('/__charts/folder/') && req.method === 'DELETE') {
+        // "Delete from disk" in the song list: one song folder, never the root or anything outside it.
+        const rel = decodeURIComponent(url.pathname.slice('/__charts/folder/'.length));
+        const abs = path.resolve(CHARTS_DIR, rel);
+        if (!rel || !abs.startsWith(CHARTS_DIR + path.sep)) { res.statusCode = 403; return res.end(); }
+        const entries = await fs.promises.readdir(abs, { withFileTypes: true });
+        if (!entries.some((e) => e.isFile() && CHART_RE.test(e.name))) { res.statusCode = 400; return res.end('not a song folder'); }
+        await fs.promises.rm(abs, { recursive: true });
+        return res.end();
+      }
       if (url.pathname.startsWith('/__charts/file/')) {
         const rel = decodeURIComponent(url.pathname.slice('/__charts/file/'.length));
         const abs = path.resolve(CHARTS_DIR, rel);

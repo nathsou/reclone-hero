@@ -1,5 +1,5 @@
 export const FRET_ACTIONS = ['green', 'red', 'yellow', 'blue', 'orange'] as const;
-export const ACTIONS = [...FRET_ACTIONS, 'strumUp', 'strumDown', 'starPower', 'tilt', 'start'] as const;
+export const ACTIONS = [...FRET_ACTIONS, 'strumUp', 'strumDown', 'starPower', 'tilt', 'start', 'kick'] as const;
 export type Action = (typeof ACTIONS)[number];
 
 export const ACTION_LABEL: Record<Action, string> = {
@@ -13,6 +13,7 @@ export const ACTION_LABEL: Record<Action, string> = {
   starPower: 'Star Power (select)',
   tilt: 'Tilt',
   start: 'Start / pause',
+  kick: 'Kick pedal (drums)',
 };
 
 export type DigitalBinding =
@@ -44,6 +45,8 @@ export const DEFAULT_KEYS: KeyBindings = {
   starPower: ['Space', 'ShiftRight'],
   tilt: [],
   start: ['Escape'],
+  // drums: the pads are the red, yellow, blue and orange fret keys; the kick is Space (or the green fret key)
+  kick: ['Space'],
   whammy: ['KeyW'],
 };
 

@@ -51,8 +51,43 @@ to start.
 The whole menu works from the guitar or the keyboard: strum or arrows move, green or `Enter` confirms, red or
 `Esc` goes back, yellow opens practice, blue/orange (or `←`/`→`) change difficulty and adjust settings. In the
 song list the guitar's select button (or `Space`) opens the song options: play, practise or watch the bot,
-favourite, instrument and difficulty, sort, filters, view, search and settings. `*` stars a song.
+favourite, instrument and difficulty, song speed, sort, filters, view, search and settings. `*` stars a song,
+`Del` hides or deletes one, and `-`/`+` change the song speed.
 On the results screen `Enter` returns to the song list, `R` retries and `P` practises the weakest section.
+
+## Playing drums
+
+Charts with a drum part (`[ExpertDrums]` in a `.chart`, `PART DRUMS` in a `.mid`) offer **Drums** next to
+Guitar and Bass. It is 4-lane drums as in Rock Band and Clone Hero: red, yellow, blue and green pads on a
+four-lane highway, and the kick as a bar across it. On the keyboard the pads are `S D F G` and the kick is
+`Space` (or `A`); Star Power is the right `Shift` (or turn on Auto Star Power). A drum kit is set up like a guitar in
+Settings › Controls: its pads as the red, yellow, blue and orange frets and the pedal as the (optional) kick.
+
+- Every gem is judged on its own and in any order within the hit window; hitting a pad with nothing there
+  costs nothing. Streak, multiplier, Star Power, solos, the rock meter and the results work as on guitar.
+- Pro drums charts show cymbals with a lit top (`.chart` cymbal markers; in a `.mid`, everything not marked
+  as a tom). Cymbals are judged like pads of the same colour.
+- Guitar Hero 5-lane charts are folded to 4 lanes the way Clone Hero does it (orange becomes the green
+  cymbal, green the green tom).
+- The drum stems (`drums.ogg`, `drums_1-4.ogg`) are your part: they mute when you miss.
+- Not supported yet: drum rolls and swells, drum-fill Star Power activation, 2× kick (Expert+).
+
+## Singing
+
+Charts whose `notes.mid` has pitched notes in `PART VOCALS` offer **Vocals**. Sing into a microphone (the
+browser asks for it the first time; Settings › Audio › Microphone picks one and **Test** shows the note it
+hears). The highway gives way to a vocal lane, Rock Band style: the notes are bars at their pitch scrolling
+towards the line on the left, with their syllables under them; your voice is the trail and the dot on the
+line, and a note fills in green as you sing it in tune.
+
+- Any octave counts. The difficulty sets how close the pitch must be (±3 semitones on Easy to ±1 on Expert)
+  and how much of each note has to be in tune (30% to 60%). Spoken words (dashed bars) only need a voice.
+- Each phrase is rated as it ends (Awful, Messy, OK, Good, Strong, Awesome); the results show how many of
+  each. Notes score like sustains, by how much of them was in tune; streak, multiplier, Star Power (right
+  `Shift`, select or Auto Star Power), the rock meter and best scores work as on the other parts.
+- Pitch is found with YIN on the microphone signal, in the page (nothing is recorded or sent anywhere). If
+  notes fill in late when you sing on time, raise Settings › Audio › Microphone delay.
+- `.chart` files carry lyrics but no sung pitches, so they have no Vocals part; harmonies are not supported.
 
 ## Playing on a phone or tablet
 
@@ -72,7 +107,7 @@ before the next notes, which helps on a phone.
 
 ## What's in it
 
-- **Charts:** `.chart` and `.mid` for guitar, bass, rhythm, keys and guitar co-op on all four difficulties:
+- **Charts:** `.chart` and `.mid` for guitar, bass, rhythm, keys, guitar co-op and drums, and `.mid` vocals, on all four difficulties:
   chords, sustains (including extended sustains), natural and forced HOPOs, tap notes, open notes, star power
   phrases, solos, sections, lyrics, tempo and time-signature changes, and `song.ini` options (`hopo_frequency`,
   `eighthnote_hopo`, `sustain_cutoff_threshold`, `multiplier_note`, `delay`).
@@ -91,6 +126,30 @@ before the next notes, which helps on a phone.
   timestamp, not the frame's.
 - **Practice:** loop any range of sections at 40–100% speed. Audio is time-stretched without changing pitch
   (WSOLA), and each loop reports its accuracy.
+- **Song speed**, as in Clone Hero: play whole songs at 50–150% (`-`/`+` in the song list, or the song
+  options). The audio is time-stretched in a Web Worker while the song loads, and the hit window keeps its
+  length in real time. Scores below 100% are shown but not kept as best scores.
+- **Setlists:** `L` (or the song options) opens the setlists: make one, name it, add songs with **+ Setlist**
+  (or Space › Add to a setlist), reorder or shuffle them, and play the setlist back to back with your current
+  instrument, difficulty, song speed and modifiers (each song falls back to the nearest part it has). Each
+  result offers the next song; the pause menu can skip one. The end shows every song's score, stars and
+  accuracy with the totals, Guitar Hero gig style. Setlists are kept in backups.
+- **Rock meter** (Settings › Gameplay › Rock meter), as in Guitar Hero: off by default (Clone Hero has
+  none), shown, or shown and failing the song. Hits fill it, misses drain it (more on harder difficulties),
+  an overstrum costs a little less than a miss, and setting off Star Power lifts it. It pulses red near the
+  bottom; when it runs out the band winds down, **SONG FAILED**, and the results cover what was played
+  (failed runs set no scores). Never in practice or for the bot.
+- **Modifiers** (`M` or the song options), as in Clone Hero: *Mirror* (green ↔ orange), *All strums*, *All
+  HOPOs*, *All taps* and *Precision* (half the hit window). They stay on until switched off and show in the
+  song details and the in-game title. All HOPOs and All taps make a part easier, so those runs set no best score
+  (they still get a best of their own in the score history).
+- **Score history:** every run of a part is kept (the last 25), with the best at each song speed and set
+  of modifiers. The results screen shows your last runs as bars and tags a best at another speed; the song
+  details list the run count, the last accuracy and the bests at other speeds. History travels in backups.
+- **Long intros and breaks:** an intro of 5 s or more, or a break of 12 s or more, shows a countdown to the
+  next note. Hold red + yellow + blue + orange (on the keyboard `S D F G`), press **Skip**, or pick
+  *Skip intro* in the pause menu to jump to 3 s before it. Fret presses there do not count as overstrums.
+  Settings › Gameplay › Countdown in long breaks hides the countdown.
 - **Calibration:** tap along to clicks (audio offset) and flashes (video offset).
 - **Song list** (scroll with the mouse wheel; in the cover view the wheel or a trackpad swipe moves through
   the covers; touch swipes drag them directly and coast to a stop) grouped the way Clone Hero does it (by artist, title letter, difficulty, length, year,
@@ -99,6 +158,18 @@ before the next notes, which helps on a phone.
   between the list (with the song's details beside it) and a cover-flow view with an A–Z scrubber.
 - **Favourites:** star songs (`*`, the ☆ button or the song options) and show only your favourites.
   Favourites are kept in backups.
+- **Tidying the library:** `Del` (or the ✕ button, or the song options) hides a song from the list, or
+  deletes its folder from disk after a second confirmation. Deleting works on a folder opened with the
+  folder picker (the browser asks for write access the first time) and on the dev server; built-in songs and
+  folders picked in Firefox/Safari can only be hidden. Hidden songs stay on disk, travel in backups, and come
+  back with Settings › Data › Show them again.
+- **Duplicates:** songs in the library more than once (same artist and title, ignoring case, accents and
+  punctuation) are counted in the toolbar; click the count to list only them. The song details name the
+  other copies' folders.
+- **Chart problems:** the song details flag charts with no notes (they cannot be played), unreadable files, broken
+  tempo maps, notes running past the song length and very late first notes, and the song list marks them
+  (⊘ / ⚠). **Check library** (Settings › Data, or the song options) reads every chart, also finds chord gems
+  a tick apart, and lists the problem songs to show, hide or delete (or hide everything unplayable at once).
 - **Genre filter:** show only, or hide, whole genre families (hiding *Metal* also hides metalcore, djent,
   deathcore…) or exact genres.
 - **Themes:** Classic dark (the default: a textured board, steel rails, cone gems and wheel frets) and
@@ -109,8 +180,9 @@ before the next notes, which helps on a phone.
   behind it; see [Graphics](#graphics)). All three tell strums from HOPOs by light, the way Clone Hero does:
   a HOPO's top glows white (bloom turns it into a halo), a strum's never does, and taps are dark inside a
   glowing coloured ring. Every gem keeps its fret colour and an outline that holds up on any board.
-- **Backups:** Settings › Data exports settings, key and controller mappings, favourites and best scores to a
-  file, to import on another computer (scores merge, keeping the best; favourites are combined).
+- **Backups:** Settings › Data exports settings, key and controller mappings, favourites, hidden songs and best
+  scores to a file, to import on another computer (scores merge, keeping the best; favourites and hidden songs
+  are combined).
 - **Controls:** remap any single guitar input (Settings › Controls › Change) without redoing the rest.
 - **Video backgrounds**, album-art backgrounds, fullscreen (`Shift+F`, `Esc` to leave), lefty flip, quality levels.
 
@@ -265,7 +337,9 @@ glowing core and the fret buttons are glass rings that fill with colour.
 
 ## Performance
 
-Medium is the default graphics quality; explicit quality choices remain saved. At device pixel ratio 2,
+Medium is the default graphics quality; explicit quality choices remain saved. When frames cannot keep up
+with the display for a few seconds, the quality drops a step for the rest of the session; Settings › Display ›
+Lower quality when slow turns that off (picking another quality also clears it). At device pixel ratio 2,
 Medium renders 61% fewer pixels than High and uses 2× instead of 4× MSAA. Touch controls establish the
 final canvas size before GPU warm-up, avoiding a target rebuild on the first gameplay frame.
 See [the performance audit](docs/performance-audit.md) for measurements, limitations and the WASM assessment.

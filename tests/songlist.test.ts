@@ -88,3 +88,16 @@ test('genre families and filters', () => {
   assert.equal(passesGenreFilter('Power Metal', onlyRockElectro), false);
   assert.equal(passesGenreFilter('pop punk', { mode: 'only', items: ['g:pop punk'] }), true);
 });
+
+test('finds the same song in several folders, ignoring case, accents and punctuation', async () => {
+  const { duplicateKey, findDuplicates } = await import('../src/ui/songlist.ts');
+  const a = song('Through the Fire and Flames', 'DragonForce', { id: 'pack1/ttfaf', path: 'pack1/ttfaf' });
+  const b = song('Through The Fire & Flames', 'Dragonforce', { id: 'pack2/ttfaf', path: 'pack2/ttfaf' });
+  const c = song('Through the Fire and Flames', 'DragonForce', { id: 'pack3/ttfaf', path: 'pack3/ttfaf' });
+  const d = song('Fury of the Storm', 'DragonForce');
+  assert.equal(duplicateKey(song('Für Elise', 'The Beethoven')), duplicateKey(song('fur elise', 'Beethoven')));
+  const dupes = findDuplicates([a, b, c, d, ...songs]);
+  assert.deepEqual([...dupes.keys()].sort(), ['pack1/ttfaf', 'pack2/ttfaf', 'pack3/ttfaf']);
+  assert.equal(dupes.get('pack1/ttfaf'), dupes.get('pack3/ttfaf'));
+  assert.equal(findDuplicates(songs).size, 0);
+});

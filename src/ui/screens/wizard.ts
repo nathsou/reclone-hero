@@ -14,6 +14,7 @@ const STEPS: Step[] = [
   { action: 'starPower', optional: true, prompt: 'Press SELECT / Star Power button' },
   { action: 'tilt', optional: true, prompt: 'TILT the guitar neck up, then back down' },
   { action: 'start', optional: false, prompt: 'Press START' },
+  { action: 'kick', optional: true, prompt: 'Drum kits: press the KICK pedal (skip on a guitar)' },
   { action: 'whammy', optional: true, prompt: 'Push the WHAMMY bar all the way, then let go' },
 ];
 

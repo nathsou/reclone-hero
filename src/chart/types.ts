@@ -1,4 +1,4 @@
-export const INSTRUMENTS = ['guitar', 'bass', 'rhythm', 'keys', 'guitarcoop', 'touch'] as const;
+export const INSTRUMENTS = ['guitar', 'bass', 'rhythm', 'keys', 'guitarcoop', 'drums', 'vocals', 'touch'] as const;
 export type Instrument = (typeof INSTRUMENTS)[number];
 export const DIFFICULTIES = ['easy', 'medium', 'hard', 'expert'] as const;
 export type Difficulty = (typeof DIFFICULTIES)[number];
@@ -9,8 +9,19 @@ export const INSTRUMENT_LABEL: Record<Instrument, string> = {
   rhythm: 'Rhythm',
   keys: 'Keys',
   guitarcoop: 'Guitar Co-op',
+  drums: 'Drums',
+  vocals: 'Vocals',
   touch: 'Touch',
 };
+
+
+/**
+ * Drums (4-lane, as in Rock Band and Clone Hero): one note per gem. mask bit 0..3 = red, yellow, blue and
+ * green pad; mask 0 = the kick pedal; type STRUM = a tom (or plain pad), HOPO = a cymbal (pro drums).
+ */
+export const DRUM_PADS = 4;
+/** Raw drum lanes: 0 = kick, 1..4 = red, yellow, blue, green. */
+export const DRUM_KICK = 0;
 
 /** The touch part has three frets, drawn on these lanes of the highway. */
 export const TOUCH_LANES = [0, 2, 4] as const;
@@ -59,6 +70,8 @@ export interface RawTrack {
   forceStrum: TickRange[];
   starPower: TickRange[];
   solos: TickRange[];
+  /** drums: gems played on a cymbal, as tick * 8 + raw lane (pro drums) */
+  cymbals?: Set<number>;
 }
 
 export interface RawTempo {
@@ -85,6 +98,8 @@ export interface RawChart {
   tracks: Map<string, RawTrack>;
   /** metadata from the .chart [Song] section, if any */
   meta: Record<string, string>;
+  /** pitched vocal notes (PART VOCALS of a .mid), with their lyric, and vocal star power phrases */
+  vocals?: { notes: { tick: number; end: number; pitch: number; text: string }[]; starPower: TickRange[] };
 }
 
 /**
@@ -160,6 +175,13 @@ export interface Track {
   notes: NoteList;
   starPower: Phrase[];
   solos: Phrase[];
+  /**
+   * Vocals only: notes are sung syllables, mask holding the MIDI pitch (36-84) and type STRUM for a
+   * pitched note or TAP for a spoken one ("talkie", judged on voice alone). syllables is each note's text
+   * ('' for a slide continuing the last one), lines the vocal phrases, rated as they end.
+   */
+  syllables?: string[];
+  lines?: Phrase[];
 }
 
 /** Beat lines as parallel arrays. */

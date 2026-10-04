@@ -1,9 +1,13 @@
 import { audio } from '../../audio/audio.ts';
-import { DIFFICULTIES, INSTRUMENT_LABEL, trackKey } from '../../chart/types.ts';
+import { DIFFICULTIES, INSTRUMENT_LABEL, TAP, trackKey } from '../../chart/types.ts';
 import { HIT } from '../../engine/engine.ts';
 import { formatTime } from '../../util/text.ts';
 import type { GameResult, SectionResult } from '../../game/game.ts';
 import { getBest, PLAYED_WITH_LABEL, recordScore, scoreKey } from '../../game/scores.ts';
+import { getHistory, recordRun, variantKey, variantLabel } from '../../game/history.ts';
+import type { Run } from '../../game/history.ts';
+import { MODIFIER_LABEL, countsForBest, isModifier } from '../../game/modifiers.ts';
+import { PHRASE_RATINGS } from '../../engine/vocals.ts';
 import type { NavAction } from '../../input/input.ts';
 import { skinHex } from '../../render/skins.ts';
 import { noteSkin } from '../theme.ts';
@@ -11,10 +15,36 @@ import { settings } from '../../settings.ts';
 import type { App, Screen } from '../app.ts';
 import { h } from '../dom.ts';
 import type { GameRequest } from './gamescreen.ts';
+import type { SetlistRun } from '../setlistRun.ts';
 import { starsEl } from './songselect.ts';
 import { resultSummary } from '../resultAdvice.ts';
 
 const LANE_NAMES = ['Green', 'Red', 'Yellow', 'Blue', 'Orange'];
+const DRUM_NAMES = ['Red pad', 'Yellow pad', 'Blue pad', 'Green pad', 'Kick'];
+
+/** The last runs of this part as bars (score, relative to the best of them); this run is the last, lit. */
+function runsChart(runs: Run[]): HTMLElement | null {
+  const last = runs.slice(-12);
+  if (last.length < 2) return null;
+  const max = Math.max(1, ...last.map((x) => x.score));
+  const day = (d: number) => new Date(d).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+  return h(
+    'div',
+    { class: 'res-runs', title: 'Your last runs of this part' },
+    h('span', { class: 'lbl' }, `Run ${runs.length >= 25 ? '25+' : runs.length}`),
+    h(
+      'span',
+      { class: 'bars' },
+      ...last.map((x, i) =>
+        h('i', {
+          class: `${i === last.length - 1 ? 'now' : ''}${x.fc ? ' fc' : ''}`,
+          style: `height:${Math.max(8, Math.round((x.score / max) * 100))}%`,
+          title: `${day(x.date)} · ${x.score.toLocaleString('en-US')} · ${(x.accuracy * 100).toFixed(1)}%${x.fc ? ' · FC' : ''}${x.speed !== 1 ? ` · ${Math.round(x.speed * 100)}%` : ''}${x.mods.length ? ` · ${x.mods.map((m) => (isModifier(m) ? MODIFIER_LABEL[m] : m)).join(', ')}` : ''}`,
+        }),
+      ),
+    ),
+  );
+}
 
 export class ResultsScreen implements Screen {
   readonly el: HTMLElement;
@@ -23,6 +53,8 @@ export class ResultsScreen implements Screen {
   private readonly r: GameResult;
   private readonly weakest: SectionResult | null;
   private readonly fc: boolean;
+  /** the setlist being played, if any */
+  private readonly run: SetlistRun | undefined;
   private stopConfetti: (() => void) | null = null;
   private readonly plot: HTMLCanvasElement;
   private readonly drift: HTMLCanvasElement;
@@ -41,9 +73,22 @@ export class ResultsScreen implements Screen {
     const fc = (this.fc = r.fullCombo);
     let newBest = false;
     const key = scoreKey(song.id, trackKey(t.instrument, t.difficulty));
-    if (!req.bot && !req.practice) {
-      newBest = recordScore(key, { score: r.score, stars: r.stars, accuracy: acc, fc, date: Date.now(), input: r.input });
+    // A slowed-down song is easier: its score is shown but not kept as a best.
+    const mods = (req.mods ?? []).filter(isModifier);
+    const slowed = (req.speed ?? 1) < 1 || !countsForBest(mods);
+    const run: Run = { score: r.score, stars: r.stars, accuracy: acc, fc, date: Date.now(), input: r.input, speed: req.speed ?? 1, mods: [...mods].sort() };
+    const variant = variantKey(run.speed, run.mods);
+    let variantBest = false;
+    const failed = r.failedAt !== undefined;
+    if (!req.bot && !req.practice && !failed) {
+      variantBest = recordRun(key, run);
+      if (!slowed) newBest = recordScore(key, { score: r.score, stars: r.stars, accuracy: acc, fc, date: run.date, input: r.input });
     }
+    // In a setlist, remember how this song went (a retry replaces it).
+    const sl = req.practice || req.bot ? undefined : req.setlist;
+    this.run = sl;
+    if (sl) sl.results[sl.index] = { score: r.score, stars: r.stars, accuracy: acc, fc, failed, part: `${INSTRUMENT_LABEL[t.instrument]} · ${t.difficulty}` };
+    const bestTag = newBest ? 'NEW BEST' : variantBest && variant !== '100' ? `BEST AT ${variantLabel(variant, MODIFIER_LABEL).toUpperCase()}` : null;
     const best = getBest(key);
     const weakest = (this.weakest = req.practice ? null : weakestSection(r.sections));
     const mean = r.deltas.length ? r.deltas.reduce((a, b) => a + b, 0) / r.deltas.length : 0;
@@ -100,11 +145,11 @@ export class ResultsScreen implements Screen {
         'div',
         { class: 'res-head' },
         art,
-        h('div', { class: 'res-song' }, h('div', { class: 'title' }, song.name), h('div', { class: 'artist' }, `${song.artist} · ${INSTRUMENT_LABEL[t.instrument]} ${t.difficulty}${req.bot ? ' · bot' : ` · played with ${PLAYED_WITH_LABEL[r.input].toLowerCase()}`}${req.practice ? ' · practice' : ''}`)),
+        h('div', { class: 'res-song' }, h('div', { class: 'title' }, song.name), h('div', { class: 'artist' }, `${song.artist} · ${INSTRUMENT_LABEL[t.instrument]} ${t.difficulty}${req.bot ? ' · bot' : ` · played with ${PLAYED_WITH_LABEL[r.input].toLowerCase()}`}${req.practice ? ' · practice' : ''}${!req.practice && req.speed && req.speed !== 1 ? ` · ${Math.round(req.speed * 100)}% speed` : ''}${mods.length ? ` · ${mods.map((m) => MODIFIER_LABEL[m]).join(', ')}` : ''}`), sl ? h('div', { class: 'res-setlist' }, `${sl.name} · song ${sl.index + 1} of ${sl.songs.length}`) : null),
         h(
           'div',
           { class: 'res-nums' },
-          h('div', { class: 'res-num' }, h('div', { class: 'label' }, 'Score'), h('div', { class: 'v' }, r.score.toLocaleString('en-US')), newBest ? h('span', { class: 'tag best' }, 'NEW BEST') : null, h('div', { class: 'res-best' }, `Best score: ${best ? best.score.toLocaleString('en-US') : '—'}`, best?.input ? ` · ${PLAYED_WITH_LABEL[best.input]}` : '')),
+          h('div', { class: 'res-num' }, h('div', { class: 'label' }, 'Score'), h('div', { class: 'v' }, r.score.toLocaleString('en-US')), bestTag ? h('span', { class: 'tag best' }, bestTag) : null, failed ? h('span', { class: 'tag failed' }, `FAILED AT ${formatTime(r.failedAt!)}`) : null, h('div', { class: 'res-best' }, `Best score: ${best ? best.score.toLocaleString('en-US') : '—'}`, best?.input ? ` · ${PLAYED_WITH_LABEL[best.input]}` : ''), req.bot || req.practice ? null : runsChart(getHistory(key)?.runs ?? [])),
           h('div', { class: 'res-num' }, h('div', { class: 'label' }, 'Max streak'), h('div', { class: 'v' }, r.maxStreak.toLocaleString('en-US'))),
           h('div', { class: 'res-num' }, h('div', { class: 'label' }, 'Accuracy'), h('div', { class: 'v' }, `${(acc * 100).toFixed(1)}%`), fc ? h('span', { class: 'tag fc' }, 'FULL COMBO') : null),
           h('div', { class: 'res-num' }, h('div', { class: 'label' }, 'Stars'), h('div', { class: 'res-stars' }, starsEl(r.stars))),
@@ -127,7 +172,10 @@ export class ResultsScreen implements Screen {
           { class: 'res-actions' },
           weakest ? h('button', { class: 'btn', onclick: () => this.practiceSection(weakest) }, h('i', { class: 'dot', style: 'background:var(--blue)' }), `Practice “${weakest.name}”`, h('kbd', null, 'P')) : null,
           h('button', { class: 'btn', onclick: () => this.retry() }, h('i', { class: 'dot', style: 'background:var(--yellow)' }), 'Retry', h('kbd', null, 'R')),
-          h('button', { class: 'btn primary', onclick: () => this.back() }, h('i', { class: 'dot ring' }), 'Song list', h('kbd', null, 'Enter')),
+          sl ? h('button', { class: 'btn', onclick: () => this.back() }, 'Quit setlist', h('kbd', null, 'Esc')) : null,
+          sl
+            ? h('button', { class: 'btn primary', onclick: () => this.next() }, h('i', { class: 'dot ring' }), sl.index + 1 < sl.songs.length ? `Next: ${sl.songs[sl.index + 1].name}` : 'Setlist results', h('kbd', null, 'Enter'))
+            : h('button', { class: 'btn primary', onclick: () => this.back() }, h('i', { class: 'dot ring' }), 'Song list', h('kbd', null, 'Enter')),
         ),
       ),
     );
@@ -208,10 +256,27 @@ export class ResultsScreen implements Screen {
     const pillW = Math.max(3, Math.min(9, w / 200));
     const pillH = Math.min(14, laneH - 8);
     const missed: [number, number][] = [];
+    // vocals: notes at their pitch, from the lowest to the highest sung
+    const vocal = r.setup.track.instrument === 'vocals';
+    let lo = 127;
+    let hi = 0;
+    if (vocal) for (let i = 0; i < notes.length; i++) if (notes.type[i] !== TAP) (lo = Math.min(lo, notes.mask[i])), (hi = Math.max(hi, notes.mask[i]));
     for (let i = 0; i < notes.length; i++) {
+      if (r.failedAt !== undefined && notes.time[i] > r.failedAt) break;
       const mask = notes.mask[i];
       const px = x(notes.time[i]);
       const hit = r.noteState[i] === HIT;
+      if (vocal) {
+        const cy = notes.type[i] === TAP || hi <= lo ? H / 2 : H - 8 - ((mask - lo) / (hi - lo)) * (H - 16);
+        if (hit) {
+          g.globalAlpha = dens[i];
+          g.fillStyle = hex[2];
+          g.beginPath();
+          g.roundRect(px - pillW / 2, cy - 4, Math.max(pillW, x(notes.endTime[i]) - px), 8, 4);
+          g.fill();
+        } else missed.push([px, cy]);
+        continue;
+      }
       if (mask === 0) {
         g.globalAlpha = hit ? 0.45 : 0.9;
         g.fillStyle = hex[5];
@@ -224,7 +289,7 @@ export class ResultsScreen implements Screen {
         const cy = l * laneH + laneH / 2;
         if (hit) {
           g.globalAlpha = dens[i];
-          g.fillStyle = hex[l];
+          g.fillStyle = hex[r.setup.track.instrument === 'drums' ? [1, 2, 3, 0][l] : l];
           g.beginPath();
           g.roundRect(px - pillW / 2, cy - pillH / 2, pillW, pillH, pillW / 2.2);
           g.fill();
@@ -303,21 +368,35 @@ export class ResultsScreen implements Screen {
     const r = this.r;
     const totalMissed = r.total - r.hits;
     if (!totalMissed) return h('p', { class: 'res-note' }, 'Nothing. Every note was hit.');
-    const max = Math.max(1, ...r.missByLane);
+    if (r.setup.track.instrument === 'vocals') return this.vocalBreakdown();
+    const drums = r.setup.track.instrument === 'drums';
+    // drums: the four pads (red, yellow, blue, green) and the kick
+    const counts = drums ? [...r.missByLane.slice(0, 4), r.missOpen] : r.missByLane;
+    const colorOf = drums ? [1, 2, 3, 0, 5] : [0, 1, 2, 3, 4];
+    const names = drums ? DRUM_NAMES : LANE_NAMES;
+    const max = Math.max(1, ...counts);
     const lanes = h(
       'div',
       { class: 'lane-bars' },
-      ...r.missByLane.map((n, i) => {
-        const c = skinHex(noteSkin().colors[i]);
+      ...counts.map((n, i) => {
+        const c = skinHex(noteSkin().colors[colorOf[i]]);
         return h(
           'div',
-          { class: 'lane-bar', title: `${LANE_NAMES[i]}: ${n} missed` },
+          { class: 'lane-bar', title: `${names[i]}: ${n} missed` },
           h('div', { class: 'fill', style: `height:${(n / max) * 100}%;background:${c}` }),
           h('span', null, String(n)),
         );
       }),
     );
     const t = r.missByType;
+    if (drums) {
+      return h(
+        'div',
+        null,
+        lanes,
+        h('p', { class: 'res-note' }, 'Not played ', h('b', null, String(r.lateMiss)), ' · Cymbals ', h('b', null, String(t.hopo)), ' · Kicks ', h('b', null, String(r.missOpen)), ' · Extra hits ', h('b', null, String(r.overhits))),
+      );
+    }
     const kinds = [
       ['HOPOs', t.hopo],
       ['Taps', t.tap],
@@ -333,6 +412,26 @@ export class ResultsScreen implements Screen {
     );
   }
 
+  /** Vocals: how the phrases were rated, and the notes missed (sung and spoken). */
+  private vocalBreakdown(): HTMLElement {
+    const r = this.r;
+    const counts = PHRASE_RATINGS.map(() => 0);
+    for (const x of r.ratings ?? []) counts[x]++;
+    const max = Math.max(1, ...counts);
+    return h(
+      'div',
+      null,
+      h(
+        'div',
+        { class: 'lane-bars ratings' },
+        ...counts.map((n, i) =>
+          h('div', { class: 'lane-bar', title: `${PHRASE_RATINGS[i]}: ${n} phrase${n === 1 ? '' : 's'}` }, h('div', { class: 'fill', style: `height:${(n / max) * 100}%;background:${i >= 4 ? 'var(--good)' : i >= 2 ? 'var(--ok)' : 'var(--bad)'}` }), h('span', null, String(n)), h('small', null, PHRASE_RATINGS[i])),
+        ),
+      ),
+      h('p', { class: 'res-note' }, 'Sung notes missed ', h('b', null, String(r.missByType.strum)), ' · Spoken ', h('b', null, String(r.missByType.tap))),
+    );
+  }
+
   /** Plain-language advice derived from how notes were lost. */
   private tips(): string[] {
     const r = this.r;
@@ -344,6 +443,15 @@ export class ResultsScreen implements Screen {
     if (r.wrongFret > r.lateMiss && r.wrongFret >= 5) tips.push('Most misses were wrong frets, not timing. A slowed-down practice loop helps the shapes sink in.');
     if (r.lateMiss > r.wrongFret && r.lateMiss >= 5) tips.push('Most misses were notes you never played. Practise the weakest section at a slower speed until the pattern feels familiar.');
     if (r.sustainDrops >= 3) tips.push(`${r.sustainDrops} sustains were let go early. Keep the fret down until the tail passes the line.`);
+    if (r.setup.track.instrument === 'vocals') {
+      if (lost >= 8) tips.push('Pitch counts in any octave: sing where it is comfortable. If notes fill in late, raise Settings › Audio › Microphone delay.');
+      return tips;
+    }
+    const drums = r.setup.track.instrument === 'drums';
+    if (drums) {
+      if (lost >= 8 && r.missOpen > lost * 0.4) tips.push('The kick cost you the most. Count the kicks with your foot (or Space) even where nothing else is hit.');
+      return tips;
+    }
     if (lost >= 8 && r.missByType.hopo > lost * 0.4) tips.push(tapping ? 'HOPOs cost you the most. Use a fresh fret press for each note, including repeated frets.' : 'HOPOs cost you the most. After a miss, the next HOPO has to be strummed.');
     if (lost >= 8 && r.missChords > lost * 0.4) tips.push('Chords cost you the most. Chords need exactly their frets: no extra lower frets.');
     const worstLane = r.missByLane.indexOf(Math.max(...r.missByLane));
@@ -373,19 +481,28 @@ export class ResultsScreen implements Screen {
     this.app.pushModal(new PracticeModal(this.app, this.req, idx >= 0 ? idx : 0));
   }
 
+  /** Setlists: on to the next song (or the setlist's results). */
+  private async next() {
+    if (!this.run) return this.back();
+    const { nextInSetlist } = await import('../setlistRun.ts');
+    await nextInSetlist(this.app, this.run);
+  }
+
   private async back() {
     const { SongSelect } = await import('./songselect.ts');
     this.app.show(new SongSelect(this.app));
   }
 
   nav(a: NavAction): void {
-    if (a === 'confirm' || a === 'back') void this.back();
+    if (a === 'confirm') void this.next();
+    else if (a === 'back') void this.back();
     else if (a === 'alt') void this.retry();
     else if (a === 'left' && this.weakest) void this.practiceSection(this.weakest);
   }
 
   key(e: KeyboardEvent): boolean {
-    if (e.key === 'Enter' || e.key === 'Escape') void this.back();
+    if (e.key === 'Enter') void this.next();
+    else if (e.key === 'Escape') void this.back();
     else if (e.key === 'r' || e.key === 'R') void this.retry();
     else if ((e.key === 'p' || e.key === 'P') && this.weakest) void this.practiceSection(this.weakest);
     else return false;

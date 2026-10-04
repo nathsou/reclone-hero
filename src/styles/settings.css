@@ -609,3 +609,92 @@
   min-height: 20px;
   font: 500 13px var(--font-mono);
 }
+
+/* ------------------------------------------------------------------ setlists */
+.setlists-modal {
+  width: min(640px, 100%);
+}
+
+.setlists-modal .sl-name {
+  width: 100%;
+  padding: 0;
+  border: 0;
+  border-bottom: 1px dashed var(--line);
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  letter-spacing: inherit;
+  outline: none;
+}
+
+.setlists-modal .sl-name:focus {
+  border-bottom-color: var(--accent);
+}
+
+.sl-lists,
+.sl-songs {
+  display: flex;
+  flex-direction: column;
+  margin-top: 14px;
+}
+
+.sl-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 4px;
+  border: 0;
+  border-top: 1px solid var(--line-soft);
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.sl-row:hover,
+.sl-row:focus-visible {
+  color: var(--accent);
+}
+
+.sl-song {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 0;
+  border-top: 1px solid var(--line-soft);
+}
+
+.sl-song .idx {
+  width: 24px;
+  font: 500 11px var(--font-mono);
+  color: var(--faint);
+}
+
+.sl-song .name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sl-song.missing .name {
+  color: var(--faint);
+}
+
+.setlists-modal .dim {
+  color: var(--dim);
+}
+
+.mic-test {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 10px;
+}
+
+.mic-readout {
+  font: 500 12px var(--font-mono);
+  color: var(--dim);
+}
