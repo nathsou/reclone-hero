@@ -857,6 +857,93 @@
   opacity: 0.9;
 }
 
+/* intros and long breaks: how long until the next note, and how to skip there */
+.hud-break {
+  position: absolute;
+  left: 50%;
+  top: 30%;
+  transform: translate(-50%, -50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  min-width: 220px;
+  padding: 16px 22px 14px;
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--bg, #000) 62%, transparent);
+  backdrop-filter: blur(6px);
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 0.25s ease-out, visibility 0s linear 0.25s;
+}
+
+.hud-break.on {
+  opacity: 1;
+  visibility: visible;
+  transition: opacity 0.25s ease-out;
+}
+
+.hud-break .lbl {
+  font: 500 12px/1 var(--font-mono);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  opacity: 0.75;
+}
+
+.hud-break .n {
+  font: 800 64px/1 var(--font-display);
+  letter-spacing: -0.04em;
+}
+
+.hud-break .bar {
+  width: 100%;
+  height: 4px;
+  border-radius: 2px;
+  background: color-mix(in srgb, var(--text) 18%, transparent);
+  overflow: hidden;
+}
+
+.hud-break .bar i {
+  display: block;
+  height: 100%;
+  background: var(--accent);
+  transform-origin: left;
+  transform: scaleX(0);
+}
+
+.hud-break .skip {
+  pointer-events: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 4px;
+  padding: 7px 12px;
+  border: 1px solid color-mix(in srgb, var(--text) 30%, transparent);
+  border-radius: 8px;
+  background: transparent;
+  color: inherit;
+  font: 600 13px/1 var(--font-ui);
+  cursor: pointer;
+}
+
+.hud-break .skip[hidden] {
+  display: none;
+}
+
+.hud-break .skip:hover {
+  border-color: var(--accent);
+}
+
+.hud-break .skip .keys {
+  font: 500 11px/1 var(--font-mono);
+  letter-spacing: 0.04em;
+  opacity: 0.75;
+}
+
+.hud-break .skip .keys:empty {
+  display: none;
+}
+
 /* misses: a red edge glow and a shaken score */
 .hud-vignette {
   position: absolute;

@@ -51,7 +51,8 @@ to start.
 The whole menu works from the guitar or the keyboard: strum or arrows move, green or `Enter` confirms, red or
 `Esc` goes back, yellow opens practice, blue/orange (or `←`/`→`) change difficulty and adjust settings. In the
 song list the guitar's select button (or `Space`) opens the song options: play, practise or watch the bot,
-favourite, instrument and difficulty, sort, filters, view, search and settings. `*` stars a song.
+favourite, instrument and difficulty, song speed, sort, filters, view, search and settings. `*` stars a song,
+`Del` hides or deletes one, and `-`/`+` change the song speed.
 On the results screen `Enter` returns to the song list, `R` retries and `P` practises the weakest section.
 
 ## Playing on a phone or tablet
@@ -91,6 +92,13 @@ before the next notes, which helps on a phone.
   timestamp, not the frame's.
 - **Practice:** loop any range of sections at 40–100% speed. Audio is time-stretched without changing pitch
   (WSOLA), and each loop reports its accuracy.
+- **Song speed**, as in Clone Hero: play whole songs at 50–150% (`-`/`+` in the song list, or the song
+  options). The audio is time-stretched in a Web Worker while the song loads, and the hit window keeps its
+  length in real time. Scores below 100% are shown but not kept as best scores.
+- **Long intros and breaks:** an intro of 5 s or more, or a break of 12 s or more, shows a countdown to the
+  next note. Hold red + yellow + blue + orange (on the keyboard `S D F G`), press **Skip**, or pick
+  *Skip intro* in the pause menu to jump to 3 s before it. Fret presses there do not count as overstrums.
+  Settings › Gameplay › Countdown in long breaks hides the countdown.
 - **Calibration:** tap along to clicks (audio offset) and flashes (video offset).
 - **Song list** (scroll with the mouse wheel; in the cover view the wheel or a trackpad swipe moves through
   the covers; touch swipes drag them directly and coast to a stop) grouped the way Clone Hero does it (by artist, title letter, difficulty, length, year,
@@ -99,6 +107,18 @@ before the next notes, which helps on a phone.
   between the list (with the song's details beside it) and a cover-flow view with an A–Z scrubber.
 - **Favourites:** star songs (`*`, the ☆ button or the song options) and show only your favourites.
   Favourites are kept in backups.
+- **Tidying the library:** `Del` (or the ✕ button, or the song options) hides a song from the list, or
+  deletes its folder from disk after a second confirmation. Deleting works on a folder opened with the
+  folder picker (the browser asks for write access the first time) and on the dev server; built-in songs and
+  folders picked in Firefox/Safari can only be hidden. Hidden songs stay on disk, travel in backups, and come
+  back with Settings › Data › Show them again.
+- **Duplicates:** songs in the library more than once (same artist and title, ignoring case, accents and
+  punctuation) are counted in the toolbar; click the count to list only them. The song details name the
+  other copies' folders.
+- **Chart problems:** the song details flag charts with no notes (they cannot be played), unreadable files, broken
+  tempo maps, notes running past the song length and very late first notes, and the song list marks them
+  (⊘ / ⚠). **Check library** (Settings › Data, or the song options) reads every chart, also finds chord gems
+  a tick apart, and lists the problem songs to show, hide or delete (or hide everything unplayable at once).
 - **Genre filter:** show only, or hide, whole genre families (hiding *Metal* also hides metalcore, djent,
   deathcore…) or exact genres.
 - **Themes:** Classic dark (the default: a textured board, steel rails, cone gems and wheel frets) and
@@ -109,8 +129,9 @@ before the next notes, which helps on a phone.
   behind it; see [Graphics](#graphics)). All three tell strums from HOPOs by light, the way Clone Hero does:
   a HOPO's top glows white (bloom turns it into a halo), a strum's never does, and taps are dark inside a
   glowing coloured ring. Every gem keeps its fret colour and an outline that holds up on any board.
-- **Backups:** Settings › Data exports settings, key and controller mappings, favourites and best scores to a
-  file, to import on another computer (scores merge, keeping the best; favourites are combined).
+- **Backups:** Settings › Data exports settings, key and controller mappings, favourites, hidden songs and best
+  scores to a file, to import on another computer (scores merge, keeping the best; favourites and hidden songs
+  are combined).
 - **Controls:** remap any single guitar input (Settings › Controls › Change) without redoing the rest.
 - **Video backgrounds**, album-art backgrounds, fullscreen (`Shift+F`, `Esc` to leave), lefty flip, quality levels.
 
@@ -265,7 +286,9 @@ glowing core and the fret buttons are glass rings that fill with colour.
 
 ## Performance
 
-Medium is the default graphics quality; explicit quality choices remain saved. At device pixel ratio 2,
+Medium is the default graphics quality; explicit quality choices remain saved. When frames cannot keep up
+with the display for a few seconds, the quality drops a step for the rest of the session; Settings › Display ›
+Lower quality when slow turns that off (picking another quality also clears it). At device pixel ratio 2,
 Medium renders 61% fewer pixels than High and uses 2× instead of 4× MSAA. Touch controls establish the
 final canvas size before GPU warm-up, avoiding a target rebuild on the first gameplay frame.
 See [the performance audit](docs/performance-audit.md) for measurements, limitations and the WASM assessment.

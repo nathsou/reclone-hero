@@ -16,6 +16,7 @@ import { SKINS, SKIN_IDS } from '../../render/skins.ts';
 import { skinPreviewSvg } from '../skinPreview.ts';
 import { resolveSkin } from '../theme.ts';
 import { applyBackup, downloadBackup, makeBackup, parseBackup, summarize } from '../../game/backup.ts';
+import { unhideAll } from '../../library/hidden.ts';
 
 type Tab = 'gameplay' | 'audio' | 'video' | 'controls' | 'data';
 
@@ -108,6 +109,7 @@ export class SettingsModal implements Screen {
       h('div', { class: 'sec-label' }, 'Feedback'),
       toggle('Timing bar', 'timingBar', 'Shows early/late ticks under the strike line.'),
       toggle('Lyrics', 'lyrics', 'Shows the words at the top of the screen on charts that have them.'),
+      toggle('Countdown in long breaks', 'breakCountdown', 'Counts down to the first note of a long intro (5 s or more) and through breaks of 12 s or more. Hold red + yellow + blue + orange, or pick Skip in the pause menu, to jump to just before the next note.'),
       toggle('Auto Star Power', 'autoStarPower', 'Star Power goes off by itself as soon as it can, just before the next notes. Handy on touch screens.'),
       select('When you miss', 'missFeedback', [
         ['auto', 'Mute my part (or muffle)'],
@@ -160,6 +162,7 @@ export class SettingsModal implements Screen {
         ['medium', 'Medium'],
         ['low', 'Low (no glow)'],
       ]),
+      toggle('Lower quality when slow', 'autoQuality', 'If a song cannot keep up with the display for a few seconds, quality drops a step for the rest of the session. Turn off to always keep the quality you picked.'),
       slider('Video offset', 'videoOffsetMs', -150, 150, 1, (v) => `${v} ms`, 'Raise this if notes look late compared to what you hear.'),
       this.inGame ? null : h('div', { class: 'actions' }, h('button', { class: 'btn', onclick: () => this.calibrate('video') }, 'Calibrate video offset…')),
       toggle('Show FPS', 'showFps'),
@@ -176,7 +179,7 @@ export class SettingsModal implements Screen {
       try {
         const backup = parseBackup(await file.text());
         const sum = summarize(backup);
-        const parts = [sum.settings && 'settings', sum.keys && 'keyboard keys', sum.controllers && `${sum.controllers} controller${sum.controllers > 1 ? 's' : ''}`, sum.scores && `${sum.scores} best score${sum.scores > 1 ? 's' : ''}`, sum.plays && `play history for ${sum.plays} song${sum.plays > 1 ? 's' : ''}`, sum.favourites && `${sum.favourites} favourite${sum.favourites > 1 ? 's' : ''}`].filter(Boolean);
+        const parts = [sum.settings && 'settings', sum.keys && 'keyboard keys', sum.controllers && `${sum.controllers} controller${sum.controllers > 1 ? 's' : ''}`, sum.scores && `${sum.scores} best score${sum.scores > 1 ? 's' : ''}`, sum.plays && `play history for ${sum.plays} song${sum.plays > 1 ? 's' : ''}`, sum.favourites && `${sum.favourites} favourite${sum.favourites > 1 ? 's' : ''}`, sum.hidden && `${sum.hidden} hidden song${sum.hidden > 1 ? 's' : ''}`].filter(Boolean);
         replace(
           status,
           h('p', null, `Backup from ${new Date(sum.exportedAt).toLocaleString()} with ${parts.join(', ') || 'nothing'}.`),
@@ -212,16 +215,49 @@ export class SettingsModal implements Screen {
       this.body,
       h('div', { class: 'sec-label' }, 'Library'),
       toggle('Built-in songs', 'builtinSongs', 'Original tracks and public-domain classics that come with the game, synthesized in your browser.', () => void this.app.refreshLibrary()),
+      this.hiddenRow(),
+      h(
+        'div',
+        { class: 'row' },
+        h('span', { class: 'lbl' }, 'Check library', h('small', null, 'Reads every chart and lists the ones that cannot be played or look broken (no notes, unreadable, broken tempo), to hide or delete.')),
+        h('button', { class: 'btn', onclick: () => void import('./libraryCheck.ts').then(({ LibraryCheck }) => this.app.pushModal(new LibraryCheck(this.app))) }, 'Check…'),
+      ),
       h('div', { class: 'sec-label' }, 'Move to another computer'),
       h(
         'p',
         { class: 'hint' },
-        `Export saves your settings, keyboard keys, controller mappings, play history, favourites and ${scores} best score${scores === 1 ? '' : 's'} to a file. Import it on the other computer. Your songs are not included: point the game at your charts folder there.`,
+        `Export saves your settings, keyboard keys, controller mappings, play history, favourites, hidden songs and ${scores} best score${scores === 1 ? '' : 's'} to a file. Import it on the other computer. Your songs are not included: point the game at your charts folder there.`,
       ),
       h('div', { class: 'actions' }, h('button', { class: 'btn primary', onclick: () => downloadBackup() }, 'Export…'), h('button', { class: 'btn', onclick: () => fileInput.click() }, 'Import…')),
       fileInput,
       status,
     );
+  }
+
+  /** How many songs are hidden from the song list, with a way to bring them back. */
+  private hiddenRow(): HTMLElement {
+    const n = this.app.library.hiddenCount;
+    const row = h(
+      'div',
+      { class: 'row' },
+      h('span', { class: 'lbl' }, 'Hidden songs', h('small', null, n ? `${n} song${n === 1 ? ' is' : 's are'} hidden from the song list (Del in the song list hides a song).` : 'None. Del in the song list hides a song, e.g. a duplicate, without deleting it.')),
+      n
+        ? h(
+            'button',
+            {
+              class: 'btn',
+              onclick: async () => {
+                unhideAll();
+                await this.app.refreshLibrary();
+                this.app.toast(`${n} song${n === 1 ? '' : 's'} back in the song list`);
+                row.replaceWith(this.hiddenRow());
+              },
+            },
+            'Show them again',
+          )
+        : null,
+    );
+    return row;
   }
 
   private calibrate(kind: 'audio' | 'video') {

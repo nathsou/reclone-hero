@@ -9,6 +9,8 @@ export interface LibrarySource {
   /** A URL usable by <img>/<audio>; caller must call release() when done with blob URLs. */
   fileUrl(path: string): Promise<string>;
   release(url: string): void;
+  /** Delete a song folder and everything in it (sources that can write only). */
+  deleteFolder?(path: string): Promise<void>;
 }
 
 const CHART_RE = /\.(chart|mid)$/i;
@@ -55,6 +57,11 @@ export class HttpSource implements LibrarySource {
   }
 
   release(): void {}
+
+  async deleteFolder(path: string): Promise<void> {
+    const res = await fetch('/__charts/folder/' + path.split('/').map(encodeURIComponent).join('/'), { method: 'DELETE' });
+    if (!res.ok) throw new Error(`The dev server could not delete it (${res.status}).`);
+  }
 }
 
 /** A folder picked with the File System Access API (Chromium). */
@@ -134,6 +141,19 @@ export class FsSource implements LibrarySource {
 
   release(url: string): void {
     if (url.startsWith('blob:')) URL.revokeObjectURL(url);
+  }
+
+  /** The folder was opened read-only: ask for write access first (the browser shows a prompt). */
+  async deleteFolder(path: string): Promise<void> {
+    if (!path) throw new Error('That is the charts folder itself.');
+    const mode = { mode: 'readwrite' } as const;
+    let perm = await this.root.queryPermission(mode);
+    if (perm !== 'granted') perm = await this.root.requestPermission(mode).catch(() => 'denied' as PermissionState);
+    if (perm !== 'granted') throw new Error('The browser did not allow changes to the charts folder.');
+    const i = path.lastIndexOf('/');
+    const parent = await this.dir(i < 0 ? '' : path.slice(0, i));
+    await parent.removeEntry(path.slice(i + 1), { recursive: true });
+    for (const k of [...this.dirs.keys()]) if (k === path || k.startsWith(`${path}/`)) this.dirs.delete(k);
   }
 }
 

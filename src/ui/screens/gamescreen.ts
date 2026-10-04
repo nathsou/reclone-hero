@@ -1,10 +1,10 @@
 import { audio } from '../../audio/audio.ts';
 import type { StemFile } from '../../audio/audio.ts';
-import { stretchExcerpt } from '../../audio/stretch.ts';
+import { stretchAsync } from '../../audio/stretch.ts';
 import type { Chart } from '../../chart/build.ts';
 import type { Difficulty, Instrument } from '../../chart/types.ts';
 import { DIFFICULTIES, INSTRUMENT_LABEL, trackKey } from '../../chart/types.ts';
-import { Game } from '../../game/game.ts';
+import { Game, effectiveQuality } from '../../game/game.ts';
 import type { PracticeRange } from '../../game/game.ts';
 import type { NavAction } from '../../input/input.ts';
 import type { SongEntry } from '../../library/song.ts';
@@ -28,6 +28,8 @@ export interface GameRequest {
   difficulty: Difficulty;
   bot: boolean;
   practice?: PracticeRange;
+  /** song speed outside practice (1 or absent: as recorded) */
+  speed?: number;
 }
 
 export class GameScreen implements Screen {
@@ -60,6 +62,7 @@ export class GameScreen implements Screen {
       h('div', { class: 'load-title' }, req.song.name),
       h('div', { class: 'load-artist' }, req.song.artist),
       h('div', { class: 'load-part' }, `${INSTRUMENT_LABEL[req.instrument]} · ${req.difficulty}${req.bot ? ' · bot' : ''}${req.practice ? ' · practice' : ''}`),
+      req.speed && req.speed !== 1 && !req.practice ? h('div', { class: 'load-part' }, `${Math.round(req.speed * 100)}% speed`) : null,
       req.song.loadingPhrase ? h('div', { class: 'load-phrase' }, /^["“]/.test(req.song.loadingPhrase) ? req.song.loadingPhrase : `“${req.song.loadingPhrase}”`) : null,
       h('div', { class: 'load-bar' }, this.loadBar),
       this.loadStatus,
@@ -90,6 +93,7 @@ export class GameScreen implements Screen {
 
   private async load() {
     const { song, chart, instrument, difficulty, practice } = this.req;
+    const speed = practice ? 1 : (this.req.speed ?? 1);
     const lib = this.app.library;
     const track = chart.tracks.get(trackKey(instrument, difficulty));
     if (!track) throw new Error('This part is not charted');
@@ -110,18 +114,30 @@ export class GameScreen implements Screen {
     if (this.destroyed) return;
     const loaded = await audio().loadSong(files, instrument, (d, t) => this.progress(0.4 + (d / t) * 0.5, `Decoding audio (${d}/${t})`));
     if (this.destroyed) return;
-    if (practice && practice.speed !== 1) {
-      this.progress(0.92, 'Slowing down the practice section…');
-      await new Promise((r) => setTimeout(r, 30));
+    if ((practice && practice.speed !== 1) || speed !== 1) {
+      const rate = practice ? practice.speed : speed;
+      const text = practice ? 'Slowing down the practice section…' : rate < 1 ? 'Slowing the song down…' : 'Speeding the song up…';
+      this.progress(0.9, text);
       const a = audio();
       const b = a.buffers;
-      const from = Math.max(0, practice.start - 4);
-      const to = practice.end + 3;
-      const s = (x: AudioBuffer | null) => (x ? stretchExcerpt(a.ctx, x, from, to, practice.speed) : null);
-      a.setBuffers({ player: s(b.player), backing: s(b.backing), origin: from });
+      // practice: the range and a little either side; song speed: the whole song
+      const from = practice ? Math.max(0, practice.start - 4) : 0;
+      const to = practice ? practice.end + 3 : loaded.duration;
+      const parts = [b.player, b.backing].filter((x): x is AudioBuffer => !!x);
+      const done = new Array<number>(parts.length).fill(0);
+      const stretched = await Promise.all(
+        parts.map((x, i) =>
+          stretchAsync(a.ctx, x, from, to, rate, (p) => {
+            done[i] = p;
+            this.progress(0.9 + 0.07 * (done.reduce((s, v) => s + v, 0) / parts.length), text);
+          }),
+        ),
+      );
+      if (this.destroyed) return;
+      a.setBuffers({ player: b.player ? stretched[0] : null, backing: b.backing ? stretched[b.player ? 1 : 0] : null, origin: from });
     }
     this.progress(0.97, 'Warming up…');
-    this.game = new Game({ song, chart, track, instrument, duration: loaded.duration, bot: this.req.bot, practice }, this.canvas, this.hud);
+    this.game = new Game({ song, chart, track, instrument, duration: loaded.duration, bot: this.req.bot, practice, speed }, this.canvas, this.hud);
     if (song.video) {
       try {
         const url = await lib.fileUrl(song, song.video);
@@ -186,8 +202,10 @@ export class GameScreen implements Screen {
       ...available.map((d) => ({ label: `${DIFF_LABEL[d]}${d === difficulty ? ' ✓' : ''}`, action: () => this.changeDifficulty(d) })),
       { label: 'Back', action: () => this.refreshPause() },
     ];
+    const skip = g.skippable;
     const main: MenuItem[] = [
       { label: 'Resume', action: () => this.resume() },
+      ...(skip ? [{ label: skip === 'intro' ? 'Skip intro' : 'Skip break', action: () => this.skipBreak() }] : []),
       { label: 'Restart', action: () => this.restart() },
       ...(this.req.practice || available.length < 2 ? [] : [{ label: `Difficulty: ${DIFF_LABEL[difficulty]}`, action: () => this.showDifficulties() }]),
       ...(this.req.practice || this.req.bot ? [] : [{ label: 'Practice this section', action: () => void this.practiceHere() }]),
@@ -258,10 +276,19 @@ export class GameScreen implements Screen {
   private resume() {
     this.hidePause();
     // Settings may have changed from the pause menu.
-    this.game?.renderer.setQuality(settings.quality);
+    this.game?.renderer.setQuality(effectiveQuality());
     this.hud.showTimingBar(settings.timingBar);
     audio().applyVolumes();
     this.game?.resume();
+  }
+
+  /** Resume a few seconds before the next note. */
+  private skipBreak() {
+    this.hidePause();
+    this.game?.renderer.setQuality(effectiveQuality());
+    this.hud.showTimingBar(settings.timingBar);
+    audio().applyVolumes();
+    this.game?.skipBreak();
   }
 
   private restart() {

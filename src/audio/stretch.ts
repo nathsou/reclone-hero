@@ -1,72 +1,64 @@
+import type { StretchRequest, StretchResponse } from './stretch.worker.ts';
+import { stretchChannels } from './wsola.ts';
+import StretchWorker from './stretch.worker.ts?worker&inline';
+
 /**
- * WSOLA time stretching for practice mode: slows audio down without changing pitch.
- * Works on an excerpt so it stays fast (a 30 s excerpt takes a fraction of a second).
+ * WSOLA time stretching for practice and song speed: changes the speed of audio without changing its
+ * pitch. `rate` above 1 speeds up. A 30 s practice excerpt takes a fraction of a second; a whole
+ * 4-minute stem about 1.5-2 s, so whole songs are stretched in a worker (stretchAsync).
  */
 export function stretchExcerpt(ctx: BaseAudioContext, buf: AudioBuffer, start: number, end: number, rate: number): AudioBuffer {
+  return toBuffer(ctx, stretchChannels(excerpt(buf, start, end, false), rate), buf.sampleRate);
+}
+
+/** The same, off the main thread when workers are available. */
+export async function stretchAsync(ctx: BaseAudioContext, buf: AudioBuffer, start: number, end: number, rate: number, onProgress?: (p: number) => void): Promise<AudioBuffer> {
+  const worker = getWorker();
+  if (!worker) return stretchExcerpt(ctx, buf, start, end, rate);
+  const chans = excerpt(buf, start, end, true);
+  const id = ++lastId;
+  const out = await new Promise<Float32Array[]>((resolve, reject) => {
+    jobs.set(id, { resolve, reject, onProgress });
+    worker.postMessage({ id, chans, rate } satisfies StretchRequest, chans.map((c) => c.buffer));
+  });
+  return toBuffer(ctx, out, buf.sampleRate);
+}
+
+/** The channels of buf between two times: views, or copies that can be handed to a worker. */
+function excerpt(buf: AudioBuffer, start: number, end: number, copy: boolean): Float32Array[] {
   const sr = buf.sampleRate;
   const s0 = Math.max(0, Math.floor(start * sr));
-  const s1 = Math.min(buf.length, Math.ceil(end * sr));
-  const inLen = Math.max(0, s1 - s0);
-  const chans = Array.from({ length: buf.numberOfChannels }, (_, c) => buf.getChannelData(c).subarray(s0, s1));
-  if (rate === 1 || inLen < 4096) {
-    const out = ctx.createBuffer(chans.length, Math.max(1, inLen), sr);
-    chans.forEach((c, i) => out.copyToChannel(c as Float32Array<ArrayBuffer>, i));
-    return out;
-  }
-  const N = 2048;
-  const Hs = N / 2;
-  const Ha = Hs * rate;
-  const TOL = 512;
-  const outLen = Math.floor(inLen / rate);
-  const outs = chans.map(() => new Float32Array(outLen + N));
-  const win = new Float32Array(N);
-  for (let i = 0; i < N; i++) win[i] = 0.5 - 0.5 * Math.cos((2 * Math.PI * i) / N);
-  const mono = new Float32Array(inLen);
-  for (const c of chans) for (let i = 0; i < inLen; i++) mono[i] += c[i];
+  const s1 = Math.max(s0, Math.min(buf.length, Math.ceil(end * sr)));
+  return Array.from({ length: buf.numberOfChannels }, (_, c) => (copy ? buf.getChannelData(c).slice(s0, s1) : buf.getChannelData(c).subarray(s0, s1)));
+}
 
-  const corr = (a: number, b: number, step: number) => {
-    let s = 0;
-    for (let i = 0; i < Hs; i += step) s += mono[a + i] * mono[b + i];
-    return s;
-  };
-
-  let prev = 0;
-  for (let k = 0; k * Hs < outLen; k++) {
-    const outPos = k * Hs;
-    const ideal = Math.round(k * Ha);
-    let best = ideal;
-    if (k > 0) {
-      const natural = prev + Hs;
-      if (natural + Hs < inLen) {
-        const lo = Math.max(0, ideal - TOL);
-        const hi = Math.min(inLen - N - 1, ideal + TOL);
-        let bestC = -Infinity;
-        for (let p = lo; p <= hi; p += 4) {
-          const c = corr(p, natural, 4);
-          if (c > bestC) {
-            bestC = c;
-            best = p;
-          }
-        }
-        const center = best;
-        for (let p = Math.max(lo, center - 4); p <= Math.min(hi, center + 4); p++) {
-          const c = corr(p, natural, 1);
-          if (c > bestC) {
-            bestC = c;
-            best = p;
-          }
-        }
-      }
-    }
-    best = Math.max(0, Math.min(inLen - N, best));
-    for (let c = 0; c < chans.length; c++) {
-      const src = chans[c];
-      const dst = outs[c];
-      for (let i = 0; i < N && best + i < inLen; i++) dst[outPos + i] += src[best + i] * win[i];
-    }
-    prev = best;
-  }
-  const out = ctx.createBuffer(chans.length, outLen, sr);
-  outs.forEach((o, i) => out.copyToChannel(o.subarray(0, outLen) as Float32Array<ArrayBuffer>, i));
+function toBuffer(ctx: BaseAudioContext, chans: Float32Array[], sr: number): AudioBuffer {
+  const out = ctx.createBuffer(chans.length, Math.max(1, chans[0]?.length ?? 0), sr);
+  chans.forEach((c, i) => out.copyToChannel(c as Float32Array<ArrayBuffer>, i));
   return out;
+}
+
+let worker: Worker | null | undefined;
+let lastId = 0;
+const jobs = new Map<number, { resolve: (c: Float32Array[]) => void; reject: (e: Error) => void; onProgress?: (p: number) => void }>();
+
+function getWorker(): Worker | null {
+  if (worker !== undefined) return worker;
+  try {
+    worker = new StretchWorker();
+    worker.onmessage = (e: MessageEvent<StretchResponse>) => {
+      const m = e.data;
+      const job = jobs.get(m.id);
+      if (!job) return;
+      if (m.type === 'progress') job.onProgress?.(m.value);
+      else {
+        jobs.delete(m.id);
+        if (m.type === 'done') job.resolve(m.chans);
+        else job.reject(new Error(m.message));
+      }
+    };
+  } catch {
+    worker = null;
+  }
+  return worker;
 }

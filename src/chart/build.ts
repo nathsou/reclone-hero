@@ -75,6 +75,8 @@ export interface Chart {
   noteCount(key: string): number;
   /** time of the last note end */
   lastNoteTime: number;
+  /** time of the earliest note on any part; NaN when the chart has no notes at all */
+  firstNoteTime: number;
   meta: Record<string, string>;
 }
 
@@ -93,6 +95,7 @@ export function buildChart(raw: RawChart, opts: ChartOptions = {}): Chart {
   const tracks = new LazyTracks();
   const counts = new Map<string, number>();
   let lastTick = 0;
+  let firstTick = Infinity;
   for (const instrument of INSTRUMENTS) {
     for (const difficulty of DIFFICULTIES) {
       const key = trackKey(instrument, difficulty);
@@ -110,6 +113,7 @@ export function buildChart(raw: RawChart, opts: ChartOptions = {}): Chart {
         if (i === 0 || tick[i] !== tick[i - 1]) distinct++;
         lastTick = Math.max(lastTick, tick[i] + (len[i] > sustainCutoff ? len[i] : 0));
       }
+      firstTick = Math.min(firstTick, tick[0]);
       counts.set(key, distinct);
       tracks.add(key, () => buildTrack(packed, instrument, difficulty, tempo, hopoThreshold, sustainCutoff, format));
     }
@@ -129,6 +133,7 @@ export function buildChart(raw: RawChart, opts: ChartOptions = {}): Chart {
     tracks,
     noteCount: (key) => counts.get(key) ?? 0,
     lastNoteTime: tempo.tickToTime(lastTick),
+    firstNoteTime: Number.isFinite(firstTick) ? tempo.tickToTime(firstTick) : NaN,
     meta: raw.meta,
   };
 }

@@ -32,6 +32,10 @@ export interface Settings {
   timingBar: boolean;
   /** words at the top of the screen on charts that have lyrics */
   lyrics: boolean;
+  /** song speed for normal play (1 = as recorded); practice has its own */
+  songSpeed: number;
+  /** a countdown through long intros and breaks */
+  breakCountdown: boolean;
   missFeedback: MissFeedback;
   missSounds: boolean;
   volMaster: number;
@@ -41,6 +45,8 @@ export interface Settings {
   volCrowd: number;
   volPreview: number;
   quality: Quality;
+  /** lower the quality a step when frames cannot keep up */
+  autoQuality: boolean;
   theme: Theme;
   noteStyle: NoteStyle;
   songView: SongView;
@@ -68,6 +74,8 @@ export const DEFAULT_SETTINGS: Settings = {
   favouritesOnly: false,
   timingBar: true,
   lyrics: true,
+  breakCountdown: true,
+  songSpeed: 1,
   missFeedback: 'auto',
   missSounds: true,
   volMaster: 0.9,
@@ -77,6 +85,7 @@ export const DEFAULT_SETTINGS: Settings = {
   volCrowd: 0.5,
   volPreview: 0.6,
   quality: 'medium',
+  autoQuality: true,
   theme: 'system',
   noteStyle: 'theme',
   songView: 'list',

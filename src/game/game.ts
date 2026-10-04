@@ -20,6 +20,8 @@ import type { Quality } from '../settings.ts';
 import { Hud } from '../ui/hud.ts';
 import type { HudState } from '../ui/hud.ts';
 import { noteSkin, renderTheme } from '../ui/theme.ts';
+import { SKIP_CHORD, canSkip, findGaps, gapAt, skipTarget } from './gaps.ts';
+import type { Gap } from './gaps.ts';
 
 /** Misses are judged slightly behind real time so late-arriving input events are never pre-empted. */
 const JUDGE_LAG = 0.02;
@@ -44,6 +46,8 @@ export interface GameSetup {
   duration: number;
   bot: boolean;
   practice?: PracticeRange;
+  /** song speed outside practice (1 = as recorded) */
+  speed?: number;
 }
 
 export interface SectionResult {
@@ -54,9 +58,18 @@ export interface SectionResult {
 }
 
 const QUALITY_STEPS: Quality[] = ['high', 'medium', 'low'];
-/** Quality lowered this session because frames could not keep up; applies to later songs too. */
-let qualityCap: Quality | null = null;
-const capped = (q: Quality): Quality => (qualityCap && QUALITY_STEPS.indexOf(qualityCap) > QUALITY_STEPS.indexOf(q) ? qualityCap : q);
+/**
+ * Quality lowered this session because frames could not keep up; applies to later songs too. It is
+ * forgotten when the player picks another quality or turns automatic lowering off.
+ */
+let qualityCap: { cap: Quality; chosen: Quality } | null = null;
+
+/** The quality to render at: the chosen one, unless it was lowered automatically this session. */
+export function effectiveQuality(): Quality {
+  const q = settings.quality;
+  if (!qualityCap || !settings.autoQuality || qualityCap.chosen !== q) return q;
+  return QUALITY_STEPS.indexOf(qualityCap.cap) > QUALITY_STEPS.indexOf(q) ? qualityCap.cap : q;
+}
 
 /** Keep the screen awake while a song plays (released on pause and when the song ends). */
 class ScreenAwake {
@@ -162,7 +175,7 @@ export class Game {
   constructor(setup: GameSetup, canvas: HTMLCanvasElement, hud: Hud) {
     this.setup = setup;
     this.renderer = new Renderer(canvas);
-    this.renderer.setQuality(capped(settings.quality));
+    this.renderer.setQuality(effectiveQuality());
     // A lost GPU context (phones do this when backgrounded) pauses the song; once it is back the
     // renderer has rebuilt itself, so warm it up again and draw the paused frame.
     this.renderer.onContextChange = (available) => {
@@ -206,6 +219,10 @@ export class Game {
   }
 
   private autoIdx = 0;
+  /** intros and long breaks: counted down, and skippable */
+  private gaps: Gap[] = [];
+  /** how to skip, shown in the countdown (rebuilt when the controls in use change) */
+  private skipHint = '';
   /** every note hit with no overstrum, settled when the last note is hit */
   private fullCombo = false;
   private prepared = false;
@@ -232,19 +249,20 @@ export class Game {
    * (for the rest of the session), so a phone running Crystal stays smooth.
    */
   private checkFrameRate() {
+    if (!settings.autoQuality) return;
     this.playedFor += 0.5;
     if (this.playedFor < 3 || !Number.isFinite(this.minDt)) return;
     const slow = this.fps < (1 / this.minDt) * 0.72;
     this.slowWindows = slow ? this.slowWindows + 1 : 0;
     if (this.slowWindows < 6) return;
     this.slowWindows = 0;
-    const current = capped(settings.quality);
+    const current = effectiveQuality();
     const next = QUALITY_STEPS[QUALITY_STEPS.indexOf(current) + 1];
     if (!next) return;
-    qualityCap = next;
+    qualityCap = { cap: next, chosen: settings.quality };
     this.renderer.setQuality(next);
     this.hudCameraKey = '';
-    this.hud.toast(`Graphics quality lowered to ${next}`, 'info', 'to keep the song smooth');
+    this.hud.toast(`Graphics quality lowered to ${next}`, 'info', 'to keep the song smooth · Settings › Display turns this off');
   }
 
   private reset() {
@@ -255,10 +273,12 @@ export class Game {
     this.slowWindows = 0;
     const { track, chart, practice } = this.setup;
     const n = track.notes.length;
+    // At another song speed the windows are kept the same length in real time (practice stays lenient).
+    const scale = practice ? 1 : this.rate;
     this.engine = new Engine(
       track,
       chart.tempo,
-      { early: settings.hitWindowMs / 1000, late: settings.hitWindowMs / 1000, strumLeniency: settings.strumLeniencyMs / 1000 },
+      { early: (settings.hitWindowMs / 1000) * scale, late: (settings.hitWindowMs / 1000) * scale, strumLeniency: (settings.strumLeniencyMs / 1000) * scale },
       practice ? { first: practice.first, last: practice.last } : undefined,
     );
     this.base = baseScore(track, chart.tempo);
@@ -284,6 +304,7 @@ export class Game {
       const last = chart.lastNoteTime;
       this.endTime = Math.max(last + 2.5, Math.min(this.setup.duration, last + 6));
     }
+    this.gaps = practice ? findGaps(track.notes, this.startTime, practice.first, practice.last) : findGaps(track.notes, this.startTime);
     this.bot = this.setup.bot ? botActions(track, practice ? { from: practice.first, to: practice.last } : {}) : [];
     this.botIdx = 0;
   }
@@ -294,24 +315,25 @@ export class Game {
     this.prepared = true;
     const { song, practice } = this.setup;
     const t = this.setup.track;
-    this.hud.setTitle(song.name, song.artist, `${INSTRUMENT_LABEL[t.instrument]} · ${t.difficulty}`);
+    this.hud.setTitle(song.name, song.artist, `${INSTRUMENT_LABEL[t.instrument]} · ${t.difficulty}${!practice && this.rate !== 1 ? ` · ${Math.round(this.rate * 100)}%` : ''}`);
     this.hud.setSections(this.setup.chart.sections.map((s) => s.time), practice ? practice.start : this.startTime, this.endTime);
     this.hud.setLyrics(this.setup.chart.lyrics);
     if (practice) this.hud.toast(`PRACTICE · ${practice.label}`, 'info', `${Math.round(practice.speed * 100)}% speed`);
+    else if (this.rate !== 1) this.hud.toast(`${Math.round(this.rate * 100)}% SPEED`, 'info', this.rate < 1 ? 'best scores count at 100% and above' : undefined);
     const touch = !this.setup.bot && TouchFrets.wanted();
     this.hud.touch.setVisible(touch, this.setup.track.instrument === 'touch' ? TOUCH_LANES : undefined);
     this.hud.onTouchPause = () => this.pause();
+    this.hud.onSkip = () => void this.skipBreak();
     this.setKeyboardActive(!this.setup.bot && !input().hasPads && !touch);
   }
 
   start(): void {
     this.prepareStart();
-    const { practice } = this.setup;
     input().gameMode = true;
     input().setPollRate(4);
     input().clear();
     this.srcMask = { kb: 0, pad: input().padFretMask(), touch: 0 };
-    audio().play(this.startTime, practice?.speed ?? 1);
+    audio().play(this.startTime, this.rate);
     this.awake.on();
     this.lastFrame = performance.now();
     cancelAnimationFrame(this.raf);
@@ -329,7 +351,7 @@ export class Game {
     const v = this.video;
     if (!v) return;
     const want = t + this.videoOffset;
-    const rate = this.setup.practice?.speed ?? 1;
+    const rate = this.rate;
     if (this.paused || want < 0 || (v.duration && want > v.duration)) {
       if (!v.paused) v.pause();
       return;
@@ -371,13 +393,17 @@ export class Game {
 
   resume(): void {
     if (!this.paused) return;
-    this.paused = false;
-    this.pausedDrawn = false;
     const at = this.engine.time;
-    const rate = this.setup.practice?.speed ?? 1;
+    const rate = this.rate;
     // Rewind a little so notes approach again; judged notes stay judged.
     this.resumeAt = Number.isFinite(at) ? at : this.startTime;
-    audio().play(Math.max(this.startTime, this.resumeAt - 2 * rate), rate);
+    this.unpause(Math.max(this.startTime, this.resumeAt - 2 * rate));
+  }
+
+  private unpause(from: number) {
+    this.paused = false;
+    this.pausedDrawn = false;
+    audio().play(from, this.rate);
     this.awake.on();
     // the audio rewinds: let the beat pulse find its place again
     this.beatIdx = 0;
@@ -386,6 +412,40 @@ export class Game {
     input().clear();
     this.srcMask = { kb: 0, pad: input().padFretMask(), touch: 0 };
     this.lastFrame = performance.now();
+  }
+
+  /** Playback speed: the practice speed, or the song speed. */
+  get rate(): number {
+    return this.setup.practice?.speed ?? this.setup.speed ?? 1;
+  }
+
+  /** Song time now: the audio clock while playing, where the judge stopped while paused. */
+  private get now(): number {
+    return this.paused ? this.songPosition : audio().songTime(performance.now());
+  }
+
+  /** The intro or break the song is in, if skipping it would save some waiting; for the pause menu. */
+  get skippable(): 'intro' | 'break' | null {
+    if (this.ended) return null;
+    const t = this.now;
+    const g = gapAt(this.gaps, t);
+    return g && canSkip(g, t, this.rate) ? (g.intro ? 'intro' : 'break') : null;
+  }
+
+  /**
+   * Jump to a few seconds before the next note, from inside an intro or a long break (paused or not).
+   * Returns false when there is nothing worth skipping.
+   */
+  skipBreak(): boolean {
+    if (this.ended) return false;
+    const t = this.now;
+    const g = gapAt(this.gaps, t);
+    if (!g || !canSkip(g, t, this.rate)) return false;
+    const target = skipTarget(g, this.rate);
+    this.resumeAt = -Infinity;
+    if (this.paused) this.unpause(target);
+    else audio().play(target, this.rate);
+    return true;
   }
 
   /** Switch to another difficulty's track and start the song over. */
@@ -481,7 +541,8 @@ export class Game {
     }
 
     // countdown after resuming
-    this.hud.setCountdown(t < this.resumeAt ? Math.ceil((this.resumeAt - t) / (this.setup.practice?.speed ?? 1)) : 0);
+    this.hud.setCountdown(t < this.resumeAt ? Math.ceil((this.resumeAt - t) / this.rate) : 0);
+    this.updateBreak(t);
 
     // decays
     const hitDecay = Math.exp(-dt * 9);
@@ -583,6 +644,17 @@ export class Game {
     this.cpuMs += (performance.now() - cpuStart - this.cpuMs) * 0.05;
   };
 
+  /** The countdown through an intro or long break, hidden for its last second (the notes are in sight). */
+  private updateBreak(t: number) {
+    const g = settings.breakCountdown && !this.ended && t >= this.resumeAt ? gapAt(this.gaps, t) : null;
+    const rate = this.rate;
+    if (!g || (g.to - t) / rate < 1) {
+      this.hud.setBreak(0, 0, 0, null);
+      return;
+    }
+    this.hud.setBreak(g.intro ? 1 : 2, (g.to - t) / rate, (t - g.from) / (g.to - g.from), canSkip(g, t, rate) ? this.skipHint : null);
+  }
+
   private handleInput(ev: InputEvent) {
     const a = audio();
     const e = this.engine;
@@ -593,13 +665,17 @@ export class Game {
       const bit = 1 << fret;
       if (ev.down) this.srcMask[ev.source] |= bit;
       else this.srcMask[ev.source] &= ~bit;
+      // Red + yellow + blue + orange held together skips an intro or long break.
+      if (ev.down && ((this.srcMask.kb | this.srcMask.pad | this.srcMask.touch) & SKIP_CHORD) === SKIP_CHORD) this.skipBreak();
       if (this.setup.bot) return;
       if (ev.down && t >= e.time - 0.01) this.presses[ev.source]++;
       e.setFrets(Math.max(t, e.time), this.srcMask.kb | this.srcMask.pad | this.srcMask.touch);
       // Tap mode: the press is the strum (always on touch screens, optional on the keyboard). The
       // engine's strum leniency waits for the rest of a chord, so only the first fret of a chord strums.
       const taps = ev.source === 'touch' || (ev.source === 'kb' && settings.kbTapMode);
-      if (ev.down && taps && t >= e.time - 0.01 && !(Math.abs(t - this.lastTapStrum) <= TAP_CHORD_WINDOW)) {
+      // Fret presses in a long silence are not strums: reaching for the skip chord costs nothing.
+      const quiet = canSkip(gapAt(this.gaps, t), t, this.rate);
+      if (ev.down && taps && !quiet && t >= e.time - 0.01 && !(Math.abs(t - this.lastTapStrum) <= TAP_CHORD_WINDOW)) {
         this.lastTapStrum = t;
         e.strum(t);
       }
@@ -621,7 +697,11 @@ export class Game {
   private setKeyboardActive(on: boolean) {
     this.kbActive = on;
     const keys = input().keys;
-    this.hud.setKeyLabels(on ? FRET_ACTIONS.map((a) => (keys[a]?.[0] ? keyLabel(keys[a][0]) : '')) : null);
+    const labels = FRET_ACTIONS.map((a) => (keys[a]?.[0] ? keyLabel(keys[a][0]) : ''));
+    this.hud.setKeyLabels(on ? labels : null);
+    // The touch part has no red or blue pad: the skip button is the way there.
+    const touchOnly = this.setup.track.instrument === 'touch' && TouchFrets.wanted() && !on;
+    this.skipHint = touchOnly ? '' : on ? labels.slice(1).join(' ') : 'red + yellow + blue + orange';
   }
   private lastClank = -1;
 

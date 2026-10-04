@@ -1,6 +1,7 @@
 import { settings } from '../settings.ts';
 import { BuiltinSource } from '../starter/source.ts';
 import { idbGet, idbSet } from '../util/idb.ts';
+import { isHidden } from './hidden.ts';
 import { makeSongEntry } from './song.ts';
 import type { RawSongFolder, SongEntry } from './song.ts';
 import { FileListSource, FsSource, HttpSource } from './sources.ts';
@@ -20,6 +21,8 @@ export class Library {
   /** songs that ship with the game, listed alongside the player's own */
   readonly builtin = new BuiltinSource();
   songs: SongEntry[] = [];
+  /** songs left out of `songs` because the player hid them */
+  hiddenCount = 0;
 
   /** Reconnect to whatever library was used last time. */
   static async restore(): Promise<RestoreResult> {
@@ -96,12 +99,36 @@ export class Library {
   async index(): Promise<void> {
     const folders = settings.builtinSongs ? [...this.folders, ...(await this.builtin.scan())] : this.folders;
     const songs: SongEntry[] = [];
+    let hidden = 0;
     for (const f of folders) {
       const e = makeSongEntry(f);
-      if (e) songs.push(e);
+      if (!e) continue;
+      if (isHidden(e.id)) hidden++;
+      else songs.push(e);
     }
+    this.hiddenCount = hidden;
     songs.sort((a, b) => a.artist.localeCompare(b.artist) || a.name.localeCompare(b.name));
     this.songs = songs;
+  }
+
+  /** Whether a song's folder can be deleted from here (not the built-in songs, nor a folder picked as files). */
+  canDelete(song: SongEntry): boolean {
+    return !BuiltinSource.isBuiltin(song.path) && !!this.source?.deleteFolder && song.path !== '';
+  }
+
+  /**
+   * Delete a song's folder, and everything in it, from disk; then drop it from the list. Refuses a
+   * folder that holds other songs too.
+   */
+  async deleteSong(song: SongEntry): Promise<void> {
+    const source = this.source;
+    if (!this.canDelete(song) || !source?.deleteFolder) throw new Error('This song cannot be deleted from here.');
+    const inside = this.folders.filter((f) => f.path.startsWith(`${song.path}/`)).length;
+    if (inside) throw new Error(`Its folder also holds ${inside} other song${inside > 1 ? 's' : ''}.`);
+    await source.deleteFolder(song.path);
+    this.folders = this.folders.filter((f) => f.path !== song.path);
+    if (source.kind === 'fs') await idbSet(SCAN_KEY, { root: source.label, folders: this.folders });
+    await this.index();
   }
 
   private sourceFor(song: SongEntry): LibrarySource {

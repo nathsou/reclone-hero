@@ -70,6 +70,8 @@ export class Hud {
   /** on-screen frets for touch screens */
   readonly touch: TouchFrets;
   onTouchPause: (() => void) | null = null;
+  /** the skip button of the break countdown was pressed */
+  onSkip: (() => void) | null = null;
   private readonly left: HTMLDivElement;
   private readonly right: HTMLDivElement;
   private readonly score: HTMLDivElement;
@@ -104,6 +106,12 @@ export class Hud {
   private readonly partEl: HTMLSpanElement;
   private readonly fps: HTMLDivElement;
   private readonly countdown: HTMLDivElement;
+  private readonly breakEl: HTMLDivElement;
+  private readonly breakLabel: HTMLDivElement;
+  private readonly breakTime: HTMLDivElement;
+  private readonly breakFill: HTMLElement;
+  private readonly breakSkip: HTMLButtonElement;
+  private readonly breakKeys: HTMLSpanElement;
   private readonly keys: HTMLDivElement;
   private readonly keyCaps: HTMLSpanElement[] = [];
   private readonly lyricsEl: HTMLDivElement;
@@ -189,6 +197,23 @@ export class Hud {
     this.title = h('div', { class: 'hud-top' }, h('span', { class: 't' }), h('span', { class: 'a' }), h('span', { class: 'grow' }), this.partEl);
     this.fps = h('div', { class: 'hud-fps' });
     this.countdown = h('div', { class: 'hud-countdown' });
+    this.breakLabel = h('div', { class: 'lbl' });
+    this.breakTime = h('div', { class: 'n' });
+    this.breakFill = h('i');
+    this.breakKeys = h('span', { class: 'keys' });
+    this.breakSkip = h(
+      'button',
+      {
+        class: 'skip',
+        onpointerdown: (e: PointerEvent) => {
+          e.preventDefault();
+          this.onSkip?.();
+        },
+      },
+      h('span', { class: 'what' }, 'Skip'),
+      this.breakKeys,
+    );
+    this.breakEl = h('div', { class: 'hud-break' }, this.breakLabel, this.breakTime, h('div', { class: 'bar' }, this.breakFill), this.breakSkip);
     this.keys = h('div', { class: 'hud-keys' });
     for (let i = 0; i < 5; i++) {
       const cap = h('span', { class: `cap f${i}` });
@@ -211,6 +236,7 @@ export class Hud {
       this.timing,
       this.fps,
       this.countdown,
+      this.breakEl,
       this.keys,
     );
     this.touch = new TouchFrets(() => this.onTouchPause?.());
@@ -519,6 +545,41 @@ export class Hud {
       const spans = this.lyricCur.children;
       for (let j = this.lyricSung; j < k; j++) spans[j]?.classList.add('sung');
       this.lyricSung = k;
+    }
+  }
+
+  private lastBreakKind = 0;
+  private lastBreakSecond = -1;
+  private lastBreakFill = -1;
+  private lastSkipHint: string | null = '';
+
+  /**
+   * The countdown through an intro or a long break. kind: 0 hides it, 1 = intro, 2 = break.
+   * skipHint: how to skip (e.g. the keys), '' for the button alone, null when skipping is not offered.
+   * Called every frame; the DOM changes only when what is shown does.
+   */
+  setBreak(kind: number, secondsLeft: number, fill: number, skipHint: string | null): void {
+    if (kind !== this.lastBreakKind) {
+      this.lastBreakKind = kind;
+      this.breakEl.classList.toggle('on', kind !== 0);
+      if (kind) setText(this.breakLabel, kind === 1 ? 'First note in' : 'Next note in');
+      setText(this.breakSkip.firstChild as HTMLElement, kind === 1 ? 'Skip intro' : 'Skip break');
+    }
+    if (!kind) return;
+    const sec = Math.max(0, Math.ceil(secondsLeft));
+    if (sec !== this.lastBreakSecond) {
+      this.lastBreakSecond = sec;
+      setText(this.breakTime, formatTime(sec));
+    }
+    const f = Math.round(Math.min(1, Math.max(0, fill)) * 400);
+    if (f !== this.lastBreakFill) {
+      this.lastBreakFill = f;
+      this.breakFill.style.transform = `scaleX(${f / 400})`;
+    }
+    if (skipHint !== this.lastSkipHint) {
+      this.lastSkipHint = skipHint;
+      this.breakSkip.hidden = skipHint === null;
+      setText(this.breakKeys, skipHint ?? '');
     }
   }
 

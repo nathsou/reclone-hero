@@ -225,3 +225,30 @@ export function sortAndGroup(input: SongEntry[], by: SortKey, opts: SortOptions)
   });
   return { songs, groups };
 }
+
+/**
+ * What makes two songs the same song: artist and title, ignoring case, accents, punctuation, a leading
+ * "The", and "&" against "and".
+ */
+export function duplicateKey(s: Pick<SongEntry, 'artist' | 'name'>): string {
+  const norm = (x: string) =>
+    nameKey(x.normalize('NFKD'))
+      .replace(/\p{M}/gu, '')
+      .replace(/&/g, 'and')
+      .replace(/[^\p{L}\p{N}]+/gu, '');
+  return `${norm(s.artist)}|${norm(s.name)}`;
+}
+
+/** Songs that are in the library more than once: song id -> every copy (itself included). */
+export function findDuplicates(songs: readonly SongEntry[]): Map<string, SongEntry[]> {
+  const byKey = new Map<string, SongEntry[]>();
+  for (const s of songs) {
+    const k = duplicateKey(s);
+    const list = byKey.get(k);
+    if (list) list.push(s);
+    else byKey.set(k, [s]);
+  }
+  const out = new Map<string, SongEntry[]>();
+  for (const list of byKey.values()) if (list.length > 1) for (const s of list) out.set(s.id, list);
+  return out;
+}

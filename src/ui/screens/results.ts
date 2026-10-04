@@ -41,7 +41,9 @@ export class ResultsScreen implements Screen {
     const fc = (this.fc = r.fullCombo);
     let newBest = false;
     const key = scoreKey(song.id, trackKey(t.instrument, t.difficulty));
-    if (!req.bot && !req.practice) {
+    // A slowed-down song is easier: its score is shown but not kept as a best.
+    const slowed = (req.speed ?? 1) < 1;
+    if (!req.bot && !req.practice && !slowed) {
       newBest = recordScore(key, { score: r.score, stars: r.stars, accuracy: acc, fc, date: Date.now(), input: r.input });
     }
     const best = getBest(key);
@@ -100,7 +102,7 @@ export class ResultsScreen implements Screen {
         'div',
         { class: 'res-head' },
         art,
-        h('div', { class: 'res-song' }, h('div', { class: 'title' }, song.name), h('div', { class: 'artist' }, `${song.artist} · ${INSTRUMENT_LABEL[t.instrument]} ${t.difficulty}${req.bot ? ' · bot' : ` · played with ${PLAYED_WITH_LABEL[r.input].toLowerCase()}`}${req.practice ? ' · practice' : ''}`)),
+        h('div', { class: 'res-song' }, h('div', { class: 'title' }, song.name), h('div', { class: 'artist' }, `${song.artist} · ${INSTRUMENT_LABEL[t.instrument]} ${t.difficulty}${req.bot ? ' · bot' : ` · played with ${PLAYED_WITH_LABEL[r.input].toLowerCase()}`}${req.practice ? ' · practice' : ''}${!req.practice && req.speed && req.speed !== 1 ? ` · ${Math.round(req.speed * 100)}% speed` : ''}`)),
         h(
           'div',
           { class: 'res-nums' },
