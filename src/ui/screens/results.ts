@@ -14,6 +14,7 @@ import { settings } from '../../settings.ts';
 import type { App, Screen } from '../app.ts';
 import { h } from '../dom.ts';
 import type { GameRequest } from './gamescreen.ts';
+import type { SetlistRun } from '../setlistRun.ts';
 import { starsEl } from './songselect.ts';
 import { resultSummary } from '../resultAdvice.ts';
 
@@ -50,6 +51,8 @@ export class ResultsScreen implements Screen {
   private readonly r: GameResult;
   private readonly weakest: SectionResult | null;
   private readonly fc: boolean;
+  /** the setlist being played, if any */
+  private readonly run: SetlistRun | undefined;
   private stopConfetti: (() => void) | null = null;
   private readonly plot: HTMLCanvasElement;
   private readonly drift: HTMLCanvasElement;
@@ -79,6 +82,10 @@ export class ResultsScreen implements Screen {
       variantBest = recordRun(key, run);
       if (!slowed) newBest = recordScore(key, { score: r.score, stars: r.stars, accuracy: acc, fc, date: run.date, input: r.input });
     }
+    // In a setlist, remember how this song went (a retry replaces it).
+    const sl = req.practice || req.bot ? undefined : req.setlist;
+    this.run = sl;
+    if (sl) sl.results[sl.index] = { score: r.score, stars: r.stars, accuracy: acc, fc, failed, part: `${INSTRUMENT_LABEL[t.instrument]} · ${t.difficulty}` };
     const bestTag = newBest ? 'NEW BEST' : variantBest && variant !== '100' ? `BEST AT ${variantLabel(variant, MODIFIER_LABEL).toUpperCase()}` : null;
     const best = getBest(key);
     const weakest = (this.weakest = req.practice ? null : weakestSection(r.sections));
@@ -136,7 +143,7 @@ export class ResultsScreen implements Screen {
         'div',
         { class: 'res-head' },
         art,
-        h('div', { class: 'res-song' }, h('div', { class: 'title' }, song.name), h('div', { class: 'artist' }, `${song.artist} · ${INSTRUMENT_LABEL[t.instrument]} ${t.difficulty}${req.bot ? ' · bot' : ` · played with ${PLAYED_WITH_LABEL[r.input].toLowerCase()}`}${req.practice ? ' · practice' : ''}${!req.practice && req.speed && req.speed !== 1 ? ` · ${Math.round(req.speed * 100)}% speed` : ''}${mods.length ? ` · ${mods.map((m) => MODIFIER_LABEL[m]).join(', ')}` : ''}`)),
+        h('div', { class: 'res-song' }, h('div', { class: 'title' }, song.name), h('div', { class: 'artist' }, `${song.artist} · ${INSTRUMENT_LABEL[t.instrument]} ${t.difficulty}${req.bot ? ' · bot' : ` · played with ${PLAYED_WITH_LABEL[r.input].toLowerCase()}`}${req.practice ? ' · practice' : ''}${!req.practice && req.speed && req.speed !== 1 ? ` · ${Math.round(req.speed * 100)}% speed` : ''}${mods.length ? ` · ${mods.map((m) => MODIFIER_LABEL[m]).join(', ')}` : ''}`), sl ? h('div', { class: 'res-setlist' }, `${sl.name} · song ${sl.index + 1} of ${sl.songs.length}`) : null),
         h(
           'div',
           { class: 'res-nums' },
@@ -163,7 +170,10 @@ export class ResultsScreen implements Screen {
           { class: 'res-actions' },
           weakest ? h('button', { class: 'btn', onclick: () => this.practiceSection(weakest) }, h('i', { class: 'dot', style: 'background:var(--blue)' }), `Practice “${weakest.name}”`, h('kbd', null, 'P')) : null,
           h('button', { class: 'btn', onclick: () => this.retry() }, h('i', { class: 'dot', style: 'background:var(--yellow)' }), 'Retry', h('kbd', null, 'R')),
-          h('button', { class: 'btn primary', onclick: () => this.back() }, h('i', { class: 'dot ring' }), 'Song list', h('kbd', null, 'Enter')),
+          sl ? h('button', { class: 'btn', onclick: () => this.back() }, 'Quit setlist', h('kbd', null, 'Esc')) : null,
+          sl
+            ? h('button', { class: 'btn primary', onclick: () => this.next() }, h('i', { class: 'dot ring' }), sl.index + 1 < sl.songs.length ? `Next: ${sl.songs[sl.index + 1].name}` : 'Setlist results', h('kbd', null, 'Enter'))
+            : h('button', { class: 'btn primary', onclick: () => this.back() }, h('i', { class: 'dot ring' }), 'Song list', h('kbd', null, 'Enter')),
         ),
       ),
     );
@@ -410,19 +420,28 @@ export class ResultsScreen implements Screen {
     this.app.pushModal(new PracticeModal(this.app, this.req, idx >= 0 ? idx : 0));
   }
 
+  /** Setlists: on to the next song (or the setlist's results). */
+  private async next() {
+    if (!this.run) return this.back();
+    const { nextInSetlist } = await import('../setlistRun.ts');
+    await nextInSetlist(this.app, this.run);
+  }
+
   private async back() {
     const { SongSelect } = await import('./songselect.ts');
     this.app.show(new SongSelect(this.app));
   }
 
   nav(a: NavAction): void {
-    if (a === 'confirm' || a === 'back') void this.back();
+    if (a === 'confirm') void this.next();
+    else if (a === 'back') void this.back();
     else if (a === 'alt') void this.retry();
     else if (a === 'left' && this.weakest) void this.practiceSection(this.weakest);
   }
 
   key(e: KeyboardEvent): boolean {
-    if (e.key === 'Enter' || e.key === 'Escape') void this.back();
+    if (e.key === 'Enter') void this.next();
+    else if (e.key === 'Escape') void this.back();
     else if (e.key === 'r' || e.key === 'R') void this.retry();
     else if ((e.key === 'p' || e.key === 'P') && this.weakest) void this.practiceSection(this.weakest);
     else return false;

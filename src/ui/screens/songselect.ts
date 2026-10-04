@@ -31,6 +31,7 @@ import type { ChartIssue } from '../../chart/issues.ts';
 import { hideSong } from '../../library/hidden.ts';
 import { findDuplicates } from '../songlist.ts';
 import { BuiltinSource } from '../../starter/source.ts';
+import { addToSetlist, createSetlist, setlists } from '../../game/setlists.ts';
 
 const ROW_H = 56;
 const HEADER_H = 44;
@@ -700,6 +701,7 @@ export class SongSelect implements Screen {
         h('button', { class: 'btn', disabled: !canPlay, onclick: () => this.practice() }, 'Practice', h('kbd', null, 'P')),
         h('button', { class: 'btn ghost', disabled: !canPlay, onclick: () => this.play(true) }, 'Watch bot', h('kbd', null, 'B')),
         this.favToggle(song),
+        h('button', { class: 'btn ghost', title: 'Add to a setlist', onclick: () => this.addToSetlist() }, '+ Setlist'),
         h('button', { class: 'btn ghost icon remove-btn', title: 'Hide or delete this song (Del)', 'aria-label': 'Hide or delete this song', onclick: () => this.removeSong() }, '✕'),
         h('button', { class: 'btn mobile-song-options', onclick: () => this.openOptions() }, 'More'),
       ),
@@ -960,6 +962,32 @@ export class SongSelect implements Screen {
     this.app.pushModal(new PracticeModal(this.app, { song: this.filtered[this.sel], chart: this.chart!, instrument: this.instrument, difficulty: this.difficulty, mods: settings.modifiers }));
   }
 
+  private openSetlists(openId: string | null = null) {
+    void import('./setlists.ts').then(({ SetlistsModal }) => this.app.pushModal(new SetlistsModal(this.app, openId)));
+  }
+
+  /** Add the selected song to a setlist (or a new one). */
+  private addToSetlist() {
+    const song = this.filtered[this.sel];
+    if (!song) return;
+    const add = (id: string, name: string) => {
+      const added = addToSetlist(id, song.id);
+      this.app.toast(added ? `${song.name} added to ${name}` : `${song.name} is already in ${name}`);
+    };
+    const items: MenuItem[] = [
+      ...setlists().map((s) => ({ label: `${s.name} (${s.songs.length})`, action: () => add(s.id, s.name) })),
+      {
+        label: 'New setlist',
+        action: () => {
+          const s = createSetlist();
+          add(s.id, s.name);
+        },
+      },
+      { label: 'Cancel', action: () => {} },
+    ];
+    void import('./choice.ts').then(({ ChoiceModal }) => this.app.pushModal(new ChoiceModal(this.app, `Add “${song.name}” to a setlist`, ['L opens the setlists, to order and play them.'], items)));
+  }
+
   /** The modifiers menu: each one switches on and off with green or blue/orange. */
   private openModifiers() {
     const items = (): MenuItem[] =>
@@ -1132,6 +1160,8 @@ export class SongSelect implements Screen {
       items.push({ label: 'Play', action: () => void this.play(false) }, { label: 'Practice', action: () => void this.practice() }, { label: 'Watch the bot', action: () => void this.play(true) });
     }
     if (song) items.push({ label: isFavourite(song.id) ? '★ Remove from favourites' : '☆ Add to favourites', action: none, adjust: () => this.toggleFav() });
+    if (song) items.push({ label: 'Add to a setlist…', action: () => this.addToSetlist() });
+    items.push({ label: `Setlists${setlists().length ? ` (${setlists().length})` : ''}…`, action: () => this.openSetlists() });
     if (song) items.push({ label: 'Hide or delete this song…', action: () => this.removeSong() });
     if (this.available().length > 1) items.push({ label: `Instrument: ${INSTRUMENT_LABEL[this.instrument]}`, action: none, adjust: () => this.cycleInstrument() });
     if (ready) items.push({ label: `Difficulty: ${DIFF_LABEL[this.difficulty]}`, action: none, adjust: (d) => this.cycleDifficulty(d) });
@@ -1227,6 +1257,7 @@ export class SongSelect implements Screen {
     else if (e.key === '*') this.toggleFav();
     else if (e.key === 'Delete') this.removeSong();
     else if (e.key === 'm' || e.key === 'M') this.openModifiers();
+    else if (e.key === 'l' || e.key === 'L') this.openSetlists();
     else if (e.key === '-' || e.key === '_') this.changeSpeed(-1);
     else if (e.key === '=' || e.key === '+') this.changeSpeed(1);
     else if (e.key === '/') {

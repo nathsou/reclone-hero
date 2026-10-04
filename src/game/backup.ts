@@ -5,11 +5,12 @@
 import type { PlayStat } from './plays.ts';
 import type { BestScore } from './scores.ts';
 import { mergeHistory } from './history.ts';
+import { mergeSetlists } from './setlists.ts';
 import type { TrackHistory } from './history.ts';
 
 const APP = 'reclone-hero';
 const FORMAT = 1;
-const KEYS = { settings: 'chsq.settings', keys: 'chsq.keys', pads: 'chsq.pads', scores: 'chsq.scores', plays: 'chsq.plays', favourites: 'chsq.favourites', hidden: 'chsq.hidden', history: 'chsq.history' } as const;
+const KEYS = { settings: 'chsq.settings', keys: 'chsq.keys', pads: 'chsq.pads', scores: 'chsq.scores', plays: 'chsq.plays', favourites: 'chsq.favourites', hidden: 'chsq.hidden', history: 'chsq.history', setlists: 'chsq.setlists' } as const;
 type Section = keyof typeof KEYS;
 
 export interface Backup {
@@ -57,6 +58,7 @@ export interface BackupSummary {
   hidden: number;
   /** parts with a run history */
   history: number;
+  setlists: number;
   exportedAt: string;
 }
 
@@ -82,6 +84,7 @@ export function summarize(b: Backup): BackupSummary {
     favourites: Array.isArray(b.data.favourites) ? b.data.favourites.length : 0,
     hidden: Array.isArray(b.data.hidden) ? b.data.hidden.length : 0,
     history: isObj(b.data.history) ? Object.keys(b.data.history).length : 0,
+    setlists: Array.isArray(b.data.setlists) ? b.data.setlists.length : 0,
     exportedAt: b.exportedAt,
   };
 }
@@ -131,6 +134,7 @@ export function applyBackup(b: Backup): void {
     const stored = read(KEYS.history);
     write(KEYS.history, mergeHistory((isObj(stored) ? stored : {}) as Record<string, TrackHistory>, b.data.history));
   }
+  if (Array.isArray(b.data.setlists)) write(KEYS.setlists, mergeSetlists(read(KEYS.setlists), b.data.setlists));
   // Favourites and hidden songs: the union of both lists.
   for (const section of ['favourites', 'hidden'] as const) {
     const theirs = b.data[section];

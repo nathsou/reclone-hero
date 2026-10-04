@@ -95,6 +95,11 @@ before the next notes, which helps on a phone.
 - **Song speed**, as in Clone Hero: play whole songs at 50–150% (`-`/`+` in the song list, or the song
   options). The audio is time-stretched in a Web Worker while the song loads, and the hit window keeps its
   length in real time. Scores below 100% are shown but not kept as best scores.
+- **Setlists:** `L` (or the song options) opens the setlists: make one, name it, add songs with **+ Setlist**
+  (or Space › Add to a setlist), reorder or shuffle them, and play the setlist back to back with your current
+  instrument, difficulty, song speed and modifiers (each song falls back to the nearest part it has). Each
+  result offers the next song; the pause menu can skip one. The end shows every song's score, stars and
+  accuracy with the totals, Guitar Hero gig style. Setlists are kept in backups.
 - **Rock meter** (Settings › Gameplay › Rock meter), as in Guitar Hero: off by default (Clone Hero has
   none), shown, or shown and failing the song. Hits fill it, misses drain it (more on harder difficulties),
   an overstrum costs a little less than a miss, and setting off Star Power lifts it. It pulses red near the

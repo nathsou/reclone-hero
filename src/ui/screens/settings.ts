@@ -184,7 +184,7 @@ export class SettingsModal implements Screen {
       try {
         const backup = parseBackup(await file.text());
         const sum = summarize(backup);
-        const parts = [sum.settings && 'settings', sum.keys && 'keyboard keys', sum.controllers && `${sum.controllers} controller${sum.controllers > 1 ? 's' : ''}`, sum.scores && `${sum.scores} best score${sum.scores > 1 ? 's' : ''}`, sum.plays && `play history for ${sum.plays} song${sum.plays > 1 ? 's' : ''}`, sum.favourites && `${sum.favourites} favourite${sum.favourites > 1 ? 's' : ''}`, sum.hidden && `${sum.hidden} hidden song${sum.hidden > 1 ? 's' : ''}`, sum.history && `run history for ${sum.history} part${sum.history > 1 ? 's' : ''}`].filter(Boolean);
+        const parts = [sum.settings && 'settings', sum.keys && 'keyboard keys', sum.controllers && `${sum.controllers} controller${sum.controllers > 1 ? 's' : ''}`, sum.scores && `${sum.scores} best score${sum.scores > 1 ? 's' : ''}`, sum.plays && `play history for ${sum.plays} song${sum.plays > 1 ? 's' : ''}`, sum.favourites && `${sum.favourites} favourite${sum.favourites > 1 ? 's' : ''}`, sum.hidden && `${sum.hidden} hidden song${sum.hidden > 1 ? 's' : ''}`, sum.history && `run history for ${sum.history} part${sum.history > 1 ? 's' : ''}`, sum.setlists && `${sum.setlists} setlist${sum.setlists > 1 ? 's' : ''}`].filter(Boolean);
         replace(
           status,
           h('p', null, `Backup from ${new Date(sum.exportedAt).toLocaleString()} with ${parts.join(', ') || 'nothing'}.`),
@@ -231,7 +231,7 @@ export class SettingsModal implements Screen {
       h(
         'p',
         { class: 'hint' },
-        `Export saves your settings, keyboard keys, controller mappings, play and run history, favourites, hidden songs and ${scores} best score${scores === 1 ? '' : 's'} to a file. Import it on the other computer. Your songs are not included: point the game at your charts folder there.`,
+        `Export saves your settings, keyboard keys, controller mappings, play and run history, favourites, setlists, hidden songs and ${scores} best score${scores === 1 ? '' : 's'} to a file. Import it on the other computer. Your songs are not included: point the game at your charts folder there.`,
       ),
       h('div', { class: 'actions' }, h('button', { class: 'btn primary', onclick: () => downloadBackup() }, 'Export…'), h('button', { class: 'btn', onclick: () => fileInput.click() }, 'Import…')),
       fileInput,

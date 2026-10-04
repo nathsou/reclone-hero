@@ -6,6 +6,7 @@ import type { Difficulty, Instrument } from '../../chart/types.ts';
 import { DIFFICULTIES, INSTRUMENT_LABEL, trackKey } from '../../chart/types.ts';
 import { Game, effectiveQuality } from '../../game/game.ts';
 import { applyModifiers } from '../../game/modifiers.ts';
+import type { SetlistRun } from '../setlistRun.ts';
 import type { PracticeRange } from '../../game/game.ts';
 import type { NavAction } from '../../input/input.ts';
 import type { SongEntry } from '../../library/song.ts';
@@ -33,6 +34,8 @@ export interface GameRequest {
   speed?: number;
   /** modifier ids (game/modifiers.ts) */
   mods?: string[];
+  /** the setlist this song is part of */
+  setlist?: SetlistRun;
 }
 
 export class GameScreen implements Screen {
@@ -216,7 +219,8 @@ export class GameScreen implements Screen {
       ...(this.req.practice || this.req.bot ? [] : [{ label: 'Practice this section', action: () => void this.practiceHere() }]),
       ...(canFullscreen() ? [{ label: isFullscreen() ? 'Exit fullscreen' : 'Fullscreen', action: () => void toggleFullscreen().then(() => this.refreshPause()) }] : []),
       { label: 'Settings', action: () => void import('./settings.ts').then(({ SettingsModal }) => this.app.pushModal(new SettingsModal(this.app, true))) },
-      { label: 'Quit to song list', action: () => void this.back() },
+      ...(this.req.setlist && !this.req.practice ? [{ label: 'Skip to the next song', action: () => void this.skipSong() }] : []),
+      { label: this.req.setlist && !this.req.practice ? 'Quit the setlist' : 'Quit to song list', action: () => void this.back() },
     ];
     const menu = view === 'difficulty' ? new Menu('Difficulty · the song starts over', difficulties) : new Menu(`Paused · ${formatTime(st.time)} of ${formatTime(st.total)}`, main);
     const art = h('div', { class: 'art none' });
@@ -310,6 +314,14 @@ export class GameScreen implements Screen {
     for (let i = 0; i < secs.length; i++) if (secs[i].time <= t) idx = i;
     const { PracticeModal } = await import('./practice.ts');
     this.app.pushModal(new PracticeModal(this.app, this.req, idx));
+  }
+
+  /** Setlists: leave this song out and go on with the next. */
+  private async skipSong() {
+    const run = this.req.setlist!;
+    run.results[run.index] = { score: 0, stars: 0, accuracy: 0, fc: false, failed: false, part: '', skipped: 'skipped' };
+    const { nextInSetlist } = await import('../setlistRun.ts');
+    await nextInSetlist(this.app, run);
   }
 
   private async back() {
