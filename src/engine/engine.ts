@@ -145,6 +145,10 @@ export class Engine {
   rock = 0.5;
   /** song time the rock meter first ran out; NaN while it never has */
   rockOutAt = NaN;
+  /** drums: pad hits with no gem to hit (they cost nothing) */
+  overhits = 0;
+  /** a drum track: gems are hit with pad(), each on its own and in any order within the window */
+  readonly drums: boolean;
 
   private next: number;
   private readonly end: number;
@@ -172,6 +176,7 @@ export class Engine {
     this.hitDelta = new Float32Array(this.notes.length);
     this.spBroken = new Uint8Array(track.starPower.length);
     this.ghosted = new Uint8Array(this.notes.length);
+    this.drums = track.instrument === 'drums';
     this.next = range?.first ?? 0;
     this.end = range ? range.last + 1 : this.notes.length;
     while (this.soloCursor < track.solos.length && track.solos[this.soloCursor].last < this.next) this.soloCursor++;
@@ -278,6 +283,23 @@ export class Engine {
     this.pendingDeadline = t + this.cfg.strumLeniency;
   }
 
+  /**
+   * Drums: a pad (its bit) or the kick pedal (0) was hit at t. It plays the earliest gem of that pad still
+   * in reach; with none, it is an overhit, which costs nothing.
+   */
+  pad(t: number, mask: number): void {
+    t = this.advance(t);
+    const N = this.notes;
+    const { early, late } = this.cfg;
+    for (let i = this.next; i < this.end; i++) {
+      if (N.time[i] - early > t) break;
+      if (this.noteState[i] !== PENDING || N.mask[i] !== mask || N.time[i] + late < t) continue;
+      this.hit(i, t, true, false);
+      return;
+    }
+    this.overhits++;
+  }
+
   setWhammy(t: number, value: number): void {
     t = this.advance(t);
     if (Math.abs(value - this.whammy) > 0.04) this.lastWhammyMove = t;
@@ -302,9 +324,9 @@ export class Engine {
 
     if (this.hasPending && this.pendingDeadline <= t) this.failPending(this.pendingDeadline);
 
-    // HOPOs/taps whose fret state was set up before their window opened.
+    // HOPOs/taps whose fret state was set up before their window opened (not on drums: cymbals are HOPO-typed).
     const N = this.notes;
-    for (;;) {
+    for (; !this.drums; ) {
       const n = this.next;
       if (n >= this.end || N.type[n] === STRUM) break;
       const open = N.time[n] - early;
@@ -314,7 +336,9 @@ export class Engine {
 
     while (this.next < this.end && N.time[this.next] + late < t) {
       const n = this.next;
-      this.miss(n, N.time[n] + late, 'late');
+      // drums: gems hit out of order are already judged
+      if (this.noteState[n] !== PENDING) this.next++;
+      else this.miss(n, N.time[n] + late, 'late');
     }
 
     for (let i = this.sustains.length - 1; i >= 0; i--) {
@@ -425,12 +449,13 @@ export class Engine {
 
   private hit(n: number, t: number, strum: boolean, auto: boolean): void {
     const N = this.notes;
-    for (let i = this.next; i < n; i++) if (this.noteState[i] === PENDING) this.miss(i, t, 'skipped');
+    if (!this.drums) for (let i = this.next; i < n; i++) if (this.noteState[i] === PENDING) this.miss(i, t, 'skipped');
     const mask = N.mask[n];
     const time = N.time[n];
     this.noteState[n] = HIT;
     this.hitDelta[n] = t - time;
-    this.next = n + 1;
+    if (!this.drums) this.next = n + 1;
+    else while (this.next < this.end && this.noteState[this.next] !== PENDING) this.next++;
     this.hits++;
     this.rock = Math.min(1, this.rock + this.cfg.rockGain);
 
@@ -468,13 +493,21 @@ export class Engine {
     e.auto = auto;
 
     const sp = N.sp[n];
-    if (sp >= 0 && !this.spBroken[sp] && this.track.starPower[sp].last === n) {
+    if (sp >= 0 && !this.spBroken[sp] && this.phraseDone(sp, n)) {
       this.spBar = Math.min(1, this.spBar + SP_PHRASE_GAIN);
       this.spPhrasesHit++;
       const p = this.emit('spPhrase', t);
       p.phrase = sp;
       p.complete = true;
     }
+  }
+
+  /** Whether hitting note n completes star power phrase sp (drums: every gem of it hit, in any order). */
+  private phraseDone(sp: number, n: number): boolean {
+    const p = this.track.starPower[sp];
+    if (!this.drums) return p.last === n;
+    for (let i = p.first; i <= p.last; i++) if (this.noteState[i] !== HIT) return false;
+    return true;
   }
 
   private miss(n: number, t: number, reason: MissReason): void {

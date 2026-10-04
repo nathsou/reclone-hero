@@ -303,7 +303,7 @@ export class SettingsModal implements Screen {
             for (const a of [...ACTIONS, 'whammy' as const]) {
               const binds = a === 'whammy' ? null : (profile.digital[a] ?? []);
               const text = a === 'whammy' ? (profile.whammy ? describeAnalog(profile.whammy) : '—') : binds!.length ? binds!.map(describeBinding).join(' / ') : '—';
-              const optional = a === 'whammy' || a === 'tilt' || a === 'starPower';
+              const optional = a === 'whammy' || a === 'tilt' || a === 'starPower' || a === 'kick';
               rows.append(
                 h(
                   'div',

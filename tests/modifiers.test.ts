@@ -44,3 +44,11 @@ test('toggling keeps one note type at a time, and easier runs set no bests', () 
   assert.equal(windowScale(['precision']), 0.5);
   assert.equal(windowScale([]), 1);
 });
+
+test('on drums only Mirror applies, flipping the four pads', () => {
+  const drums: Track = { ...track, instrument: 'drums', notes: noteListOf([{ time: 0, mask: 0b0001, type: STRUM }, { time: 0, mask: 0, type: STRUM }, { time: 1, mask: 0b0010, type: HOPO }]) };
+  const m = applyModifiers(drums, ['mirror', 'taps']);
+  assert.deepEqual(Array.from(m.notes.mask), [0b1000, 0, 0b0100]);
+  assert.deepEqual(Array.from(m.notes.type), [STRUM, STRUM, HOPO]);
+  assert.equal(applyModifiers(drums, ['strums']), drums);
+});

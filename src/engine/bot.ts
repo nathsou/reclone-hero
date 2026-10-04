@@ -6,9 +6,11 @@ export type Action =
   | { t: number; kind: 'frets'; mask: number }
   | { t: number; kind: 'strum' }
   | { t: number; kind: 'whammy'; value: number }
-  | { t: number; kind: 'sp' };
+  | { t: number; kind: 'sp' }
+  /** drums: hit a pad (its bit) or the kick (0) */
+  | { t: number; kind: 'pad'; mask: number };
 
-const ORDER = { frets: 0, whammy: 1, strum: 2, sp: 3 };
+const ORDER = { frets: 0, whammy: 1, strum: 2, pad: 2, sp: 3 };
 
 /**
  * Generates a perfect (or, with jitter, humanly imprecise) input stream for a track.
@@ -21,6 +23,15 @@ export function botActions(track: Track, opts: { jitter?: number; random?: () =>
   const from = opts.from ?? 0;
   const to = opts.to ?? notes.length - 1;
   const out: Action[] = [];
+  if (track.instrument === 'drums') {
+    for (let i = from; i <= to; i++) {
+      const t = notes.time[i] + (jitter > 0 ? (rnd() * 2 - 1) * jitter : 0);
+      out.push({ t, kind: 'pad', mask: notes.mask[i] });
+      const sp = notes.sp[i];
+      if (sp >= 0 && track.starPower[sp].last === i) out.push({ t: notes.time[i] + 0.25, kind: 'sp' });
+    }
+    return out.sort((a, b) => a.t - b.t || ORDER[a.kind] - ORDER[b.kind]);
+  }
   let held = 0;
   let sustains: { mask: number; end: number }[] = [];
 
@@ -88,6 +99,9 @@ export function applyAction(engine: Engine, a: Action): void {
       break;
     case 'sp':
       engine.activateStarPower(a.t);
+      break;
+    case 'pad':
+      engine.pad(a.t, a.mask);
       break;
   }
 }

@@ -110,12 +110,13 @@ export function buildChart(raw: RawChart, opts: ChartOptions = {}): Chart {
       const { tick, len } = packed;
       let distinct = 0;
       for (let i = 0; i < tick.length; i++) {
-        if (i === 0 || tick[i] !== tick[i - 1]) distinct++;
+        // drums: every gem is a note of its own
+        if (i === 0 || tick[i] !== tick[i - 1] || instrument === 'drums') distinct++;
         lastTick = Math.max(lastTick, tick[i] + (len[i] > sustainCutoff ? len[i] : 0));
       }
       firstTick = Math.min(firstTick, tick[0]);
       counts.set(key, distinct);
-      tracks.add(key, () => buildTrack(packed, instrument, difficulty, tempo, hopoThreshold, sustainCutoff, format));
+      tracks.add(key, () => (instrument === 'drums' ? buildDrumTrack(packed, difficulty, tempo) : buildTrack(packed, instrument, difficulty, tempo, hopoThreshold, sustainCutoff, format)));
     }
   }
 
@@ -154,6 +155,8 @@ interface PackedTrack {
   forceStrum: Int32Array;
   starPower: TickRange[];
   solos: TickRange[];
+  /** drums: tick * 8 + lane of the gems played on cymbals, sorted */
+  cymbals: Int32Array;
 }
 
 function packRanges(ranges: TickRange[]): Int32Array {
@@ -189,6 +192,7 @@ function pack(rt: RawTrack): PackedTrack {
     forceStrum: packRanges(rt.forceStrum),
     starPower: rt.starPower,
     solos: rt.solos,
+    cymbals: Int32Array.from([...(rt.cymbals ?? [])].sort((a, b) => a - b)),
   };
 }
 
@@ -295,6 +299,28 @@ function buildTrack(
   const starPower = assignPhrases(notes, rt.starPower, tempo, notes.sp);
   const solos = assignPhrases(notes, rt.solos, tempo, notes.solo);
   return { instrument, difficulty, notes, starPower, solos };
+}
+
+/**
+ * Drums: one note per gem, in (tick, lane) order, so the kick comes first in a chord. mask 0 is the kick,
+ * bit 0..3 the red, yellow, blue and green pad; cymbals are HOPO-typed (they are drawn with a lit top).
+ */
+function buildDrumTrack(rt: PackedTrack, difficulty: Difficulty, tempo: TempoMap): Track {
+  const n = rt.tick.length;
+  const notes = allocNotes(n);
+  const cymbal = new TickCursor(rt.cymbals);
+  for (let i = 0; i < n; i++) {
+    const tick = rt.tick[i];
+    const lane = rt.lane[i];
+    notes.tick[i] = notes.endTick[i] = tick;
+    notes.time[i] = notes.endTime[i] = tempo.tickToTime(tick);
+    notes.mask[i] = lane === 0 ? 0 : 1 << (lane - 1);
+    // cymbal keys are tick * 8 + lane, ascending like the gems
+    notes.type[i] = cymbal.has(tick * 8 + lane) ? HOPO : STRUM;
+  }
+  const starPower = assignPhrases(notes, rt.starPower, tempo, notes.sp);
+  const solos = assignPhrases(notes, rt.solos, tempo, notes.solo);
+  return { instrument: 'drums', difficulty, notes, starPower, solos };
 }
 
 function assignPhrases(notes: NoteList, ranges: TickRange[], tempo: TempoMap, out: Int16Array): Phrase[] {

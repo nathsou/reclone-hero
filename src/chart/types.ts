@@ -1,4 +1,4 @@
-export const INSTRUMENTS = ['guitar', 'bass', 'rhythm', 'keys', 'guitarcoop', 'touch'] as const;
+export const INSTRUMENTS = ['guitar', 'bass', 'rhythm', 'keys', 'guitarcoop', 'drums', 'touch'] as const;
 export type Instrument = (typeof INSTRUMENTS)[number];
 export const DIFFICULTIES = ['easy', 'medium', 'hard', 'expert'] as const;
 export type Difficulty = (typeof DIFFICULTIES)[number];
@@ -9,8 +9,17 @@ export const INSTRUMENT_LABEL: Record<Instrument, string> = {
   rhythm: 'Rhythm',
   keys: 'Keys',
   guitarcoop: 'Guitar Co-op',
+  drums: 'Drums',
   touch: 'Touch',
 };
+
+/**
+ * Drums (4-lane, as in Rock Band and Clone Hero): one note per gem. mask bit 0..3 = red, yellow, blue and
+ * green pad; mask 0 = the kick pedal; type STRUM = a tom (or plain pad), HOPO = a cymbal (pro drums).
+ */
+export const DRUM_PADS = 4;
+/** Raw drum lanes: 0 = kick, 1..4 = red, yellow, blue, green. */
+export const DRUM_KICK = 0;
 
 /** The touch part has three frets, drawn on these lanes of the highway. */
 export const TOUCH_LANES = [0, 2, 4] as const;
@@ -59,6 +68,8 @@ export interface RawTrack {
   forceStrum: TickRange[];
   starPower: TickRange[];
   solos: TickRange[];
+  /** drums: gems played on a cymbal, as tick * 8 + raw lane (pro drums) */
+  cymbals?: Set<number>;
 }
 
 export interface RawTempo {

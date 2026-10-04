@@ -45,6 +45,7 @@ const DIFF_KEYS: Record<Instrument, string> = {
   rhythm: 'diff_rhythm',
   keys: 'diff_keys',
   guitarcoop: 'diff_guitar_coop',
+  drums: 'diff_drums',
   touch: 'diff_guitar',
 };
 

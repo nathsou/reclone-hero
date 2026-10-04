@@ -9,6 +9,7 @@ const PLAYER_STEMS: Record<Instrument, string[]> = {
   bass: ['bass'],
   rhythm: ['rhythm'],
   keys: ['keys'],
+  drums: ['drums', 'drums_1', 'drums_2', 'drums_3', 'drums_4'],
   touch: ['guitar'],
 };
 

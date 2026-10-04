@@ -666,7 +666,7 @@ export class SongSelect implements Screen {
       }
     }
     const canPlay = chartReady && this.chart!.tracks.has(trackKey(this.instrument, this.difficulty));
-    const stemNote = chartReady && !song.stems[this.instrument === 'guitarcoop' || this.instrument === 'touch' ? 'guitar' : this.instrument] ? h('div', { class: 'note' }, 'No separate instrument audio: misses muffle the whole mix instead of muting your part.') : null;
+    const stemNote = chartReady && !(this.instrument === 'drums' ? song.stems.drums ?? song.stems.drums_1 : song.stems[this.instrument === 'guitarcoop' || this.instrument === 'touch' ? 'guitar' : this.instrument]) ? h('div', { class: 'note' }, 'No separate instrument audio: misses muffle the whole mix instead of muting your part.') : null;
     replace(
       this.detail,
       h(

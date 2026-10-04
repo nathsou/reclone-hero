@@ -28,7 +28,15 @@ import { MODIFIER_LABEL, isModifier, windowScale } from './modifiers.ts';
 const JUDGE_LAG = 0.02;
 /** In keyboard tap mode, fret keys pressed this close together form one chord, i.e. one strum. */
 const TAP_CHORD_WINDOW = 0.04;
-const FRET_INDEX: Record<string, number> = { green: 0, red: 1, yellow: 2, blue: 3, orange: 4, strumUp: -1, strumDown: -1, starPower: -1, tilt: -1, start: -1 };
+const FRET_INDEX: Record<string, number> = { green: 0, red: 1, yellow: 2, blue: 3, orange: 4, strumUp: -1, strumDown: -1, starPower: -1, tilt: -1, start: -1, kick: -1 };
+/**
+ * Drums: what each action hits. The red, yellow, blue and orange frets (keys S D F G) are the red, yellow,
+ * blue and green pads; the kick pedal action and the green fret are the kick (KICK_BIT stands for it while
+ * it is held, for the key labels).
+ */
+const KICK_BIT = 1 << 4;
+const DRUM_HIT: Record<string, number> = { red: 1, yellow: 2, blue: 4, orange: 8, green: KICK_BIT, kick: KICK_BIT };
+const DRUM_PADS_ALL = 0b1111;
 
 export interface PracticeRange {
   start: number;
@@ -125,6 +133,8 @@ export interface GameResult {
   missByType: { strum: number; hopo: number; tap: number };
   wrongFret: number;
   lateMiss: number;
+  /** drums: pad hits with nothing to hit */
+  overhits: number;
   /** per-note outcome and timing (seconds, negative = early), parallel to setup.track.notes */
   noteState: Uint8Array;
   hitDelta: Float32Array;
@@ -224,6 +234,10 @@ export class Game {
   }
 
   private autoIdx = 0;
+  /** a drum part: pads and kick instead of frets and strums */
+  private get drums(): boolean {
+    return this.setup.track.instrument === 'drums';
+  }
   /** intros and long breaks: counted down, and skippable */
   private gaps: Gap[] = [];
   /** how to skip, shown in the countdown (rebuilt when the controls in use change) */
@@ -330,6 +344,7 @@ export class Game {
     this.hud.touch.setVisible(touch, this.setup.track.instrument === 'touch' ? TOUCH_LANES : undefined);
     this.hud.onTouchPause = () => this.pause();
     this.hud.onSkip = () => void this.skipBreak();
+    this.hud.setDrums(this.drums);
     this.setKeyboardActive(!this.setup.bot && !input().hasPads && !touch);
   }
 
@@ -598,13 +613,14 @@ export class Game {
     rs.sustainHeld = this.sustainHeld;
     rs.sustainDrop = this.sustainDrop;
     rs.sustainMask = sustainMask;
-    rs.frets = this.setup.bot ? engine.frets : this.srcMask.kb | this.srcMask.pad | this.srcMask.touch;
+    rs.frets = this.drums ? (this.srcMask.kb | this.srcMask.pad | this.srcMask.touch) & DRUM_PADS_ALL : this.setup.bot ? engine.frets : this.srcMask.kb | this.srcMask.pad | this.srcMask.touch;
+    rs.drums = this.drums;
     rs.spActive = engine.spActive;
     rs.multiplier = engine.multiplier > 4 ? 4 : engine.multiplier;
     rs.missPulse = this.missPulse;
     rs.whammy = this.setup.bot ? 0.5 + 0.5 * Math.sin(now / 60) : engine.whammy;
     rs.lefty = settings.lefty;
-    rs.laneMask = this.setup.track.instrument === 'touch' ? 0b10101 : 0b11111;
+    rs.laneMask = this.setup.track.instrument === 'touch' ? 0b10101 : this.drums ? DRUM_PADS_ALL : 0b11111;
     rs.solo = engine.activeSolo >= 0;
     rs.beatPulse = beatPulse;
     rs.theme = renderTheme();
@@ -615,7 +631,11 @@ export class Game {
       this.hudCameraKey = r.cameraKey;
       const half = r.highwayHalfWidth;
       this.hud.layout(r.toScreen(-half - 0.25, 0, 0.3, this.p0), r.toScreen(half + 0.25, 0, 0.3, this.p1), r.toScreen(0, 0, 0.9, this.p2), r.toScreen(0, 0, -15, this.p3));
-      for (let i = 0; i < 5; i++) r.toScreen(r.laneX(i), 0, 0.55, this.lanePts[i]);
+      for (let i = 0; i < 5; i++) {
+        // drums: four pad keys, and the kick's centred below them
+        if (this.drums && i === 4) r.toScreen(0, 0, 1.1, this.lanePts[i]);
+        else r.toScreen(r.laneX(i), 0, 0.55, this.lanePts[i]);
+      }
       this.hud.layoutKeys(this.lanePts);
     }
     this.hud.setKeysDown(this.srcMask.kb);
@@ -665,10 +685,38 @@ export class Game {
     this.hud.setBreak(g.intro ? 1 : 2, (g.to - t) / rate, (t - g.from) / (g.to - g.from), canSkip(g, t, rate) ? this.skipHint : null);
   }
 
+  /** Drums: pads and the kick are hits (no strum); held keys only light the pads. */
+  private drumInput(ev: InputEvent, t: number) {
+    const e = this.engine;
+    const bit = DRUM_HIT[ev.action];
+    if (bit === undefined) {
+      if (!ev.down) return;
+      if (ev.action === 'start') this.pause();
+      // Space is the kick on drums, not Star Power (Shift or select still is)
+      else if ((ev.action === 'starPower' || ev.action === 'tilt') && !(ev.source === 'kb' && input().keys.kick.includes(ev.code)) && !this.setup.bot && t >= e.time - 0.01) e.activateStarPower(t);
+      return;
+    }
+    if (ev.down) this.srcMask[ev.source] |= bit;
+    else this.srcMask[ev.source] &= ~bit;
+    if (!ev.down) return;
+    if (!this.setup.bot && (ev.source === 'kb') !== this.kbActive) this.setKeyboardActive(ev.source === 'kb');
+    const held = this.srcMask.kb | this.srcMask.pad | this.srcMask.touch;
+    if ((held & DRUM_PADS_ALL) === DRUM_PADS_ALL) this.skipBreak();
+    if (this.setup.bot || t < e.time - 0.01) return;
+    this.presses[ev.source]++;
+    // in a long silence, reaching for the skip chord hits nothing
+    if (canSkip(gapAt(this.gaps, t), t, this.rate)) return;
+    e.pad(t, bit === KICK_BIT ? 0 : bit);
+  }
+
   private handleInput(ev: InputEvent) {
     const a = audio();
     const e = this.engine;
     const t = a.songTime(ev.time);
+    if (this.drums) {
+      this.drumInput(ev, t);
+      return;
+    }
     const fret = FRET_INDEX[ev.action];
     if (fret >= 0) {
       if (ev.down && !this.setup.bot && (ev.source === 'kb') !== this.kbActive) this.setKeyboardActive(ev.source === 'kb');
@@ -707,6 +755,14 @@ export class Game {
   private setKeyboardActive(on: boolean) {
     this.kbActive = on;
     const keys = input().keys;
+    const label = (a: keyof typeof keys) => (keys[a]?.[0] ? keyLabel(keys[a][0]) : '');
+    if (this.drums) {
+      // four pads, and the kick under them
+      const pads = (['red', 'yellow', 'blue', 'orange'] as const).map(label);
+      this.hud.setKeyLabels(on ? [...pads, `${label('kick')} kick`] : null);
+      this.skipHint = on ? pads.join(' ') : 'red + yellow + blue + green pads';
+      return;
+    }
     const labels = FRET_ACTIONS.map((a) => (keys[a]?.[0] ? keyLabel(keys[a][0]) : ''));
     this.hud.setKeyLabels(on ? labels : null);
     // The touch part has no red or blue pad: the skip button is the way there.
@@ -948,6 +1004,7 @@ export class Game {
       missByType,
       wrongFret: this.wrongFret,
       lateMiss: this.lateMiss,
+      overhits: e.overhits,
       input: this.playedWith(),
       fullCombo: this.setup.practice ? e.misses === 0 && e.overstrums === 0 && notes.length > 0 : this.fullCombo,
       noteState: e.noteState.slice(),

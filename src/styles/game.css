@@ -842,6 +842,21 @@
 .hud-keys .f4.down {
   border-color: var(--orange);
 }
+.hud-keys.drums .f0.down {
+  border-color: var(--red);
+}
+.hud-keys.drums .f1.down {
+  border-color: var(--yellow);
+}
+.hud-keys.drums .f2.down {
+  border-color: var(--blue);
+}
+.hud-keys.drums .f3.down {
+  border-color: var(--green);
+}
+.hud-keys.drums .f4 {
+  white-space: nowrap;
+}
 
 .hud-countdown {
   position: absolute;

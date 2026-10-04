@@ -19,6 +19,7 @@ import { starsEl } from './songselect.ts';
 import { resultSummary } from '../resultAdvice.ts';
 
 const LANE_NAMES = ['Green', 'Red', 'Yellow', 'Blue', 'Orange'];
+const DRUM_NAMES = ['Red pad', 'Yellow pad', 'Blue pad', 'Green pad', 'Kick'];
 
 /** The last runs of this part as bars (score, relative to the best of them); this run is the last, lit. */
 function runsChart(runs: Run[]): HTMLElement | null {
@@ -271,7 +272,7 @@ export class ResultsScreen implements Screen {
         const cy = l * laneH + laneH / 2;
         if (hit) {
           g.globalAlpha = dens[i];
-          g.fillStyle = hex[l];
+          g.fillStyle = hex[r.setup.track.instrument === 'drums' ? [1, 2, 3, 0][l] : l];
           g.beginPath();
           g.roundRect(px - pillW / 2, cy - pillH / 2, pillW, pillH, pillW / 2.2);
           g.fill();
@@ -350,21 +351,34 @@ export class ResultsScreen implements Screen {
     const r = this.r;
     const totalMissed = r.total - r.hits;
     if (!totalMissed) return h('p', { class: 'res-note' }, 'Nothing. Every note was hit.');
-    const max = Math.max(1, ...r.missByLane);
+    const drums = r.setup.track.instrument === 'drums';
+    // drums: the four pads (red, yellow, blue, green) and the kick
+    const counts = drums ? [...r.missByLane.slice(0, 4), r.missOpen] : r.missByLane;
+    const colorOf = drums ? [1, 2, 3, 0, 5] : [0, 1, 2, 3, 4];
+    const names = drums ? DRUM_NAMES : LANE_NAMES;
+    const max = Math.max(1, ...counts);
     const lanes = h(
       'div',
       { class: 'lane-bars' },
-      ...r.missByLane.map((n, i) => {
-        const c = skinHex(noteSkin().colors[i]);
+      ...counts.map((n, i) => {
+        const c = skinHex(noteSkin().colors[colorOf[i]]);
         return h(
           'div',
-          { class: 'lane-bar', title: `${LANE_NAMES[i]}: ${n} missed` },
+          { class: 'lane-bar', title: `${names[i]}: ${n} missed` },
           h('div', { class: 'fill', style: `height:${(n / max) * 100}%;background:${c}` }),
           h('span', null, String(n)),
         );
       }),
     );
     const t = r.missByType;
+    if (drums) {
+      return h(
+        'div',
+        null,
+        lanes,
+        h('p', { class: 'res-note' }, 'Not played ', h('b', null, String(r.lateMiss)), ' · Cymbals ', h('b', null, String(t.hopo)), ' · Kicks ', h('b', null, String(r.missOpen)), ' · Extra hits ', h('b', null, String(r.overhits))),
+      );
+    }
     const kinds = [
       ['HOPOs', t.hopo],
       ['Taps', t.tap],
@@ -391,6 +405,11 @@ export class ResultsScreen implements Screen {
     if (r.wrongFret > r.lateMiss && r.wrongFret >= 5) tips.push('Most misses were wrong frets, not timing. A slowed-down practice loop helps the shapes sink in.');
     if (r.lateMiss > r.wrongFret && r.lateMiss >= 5) tips.push('Most misses were notes you never played. Practise the weakest section at a slower speed until the pattern feels familiar.');
     if (r.sustainDrops >= 3) tips.push(`${r.sustainDrops} sustains were let go early. Keep the fret down until the tail passes the line.`);
+    const drums = r.setup.track.instrument === 'drums';
+    if (drums) {
+      if (lost >= 8 && r.missOpen > lost * 0.4) tips.push('The kick cost you the most. Count the kicks with your foot (or Space) even where nothing else is hit.');
+      return tips;
+    }
     if (lost >= 8 && r.missByType.hopo > lost * 0.4) tips.push(tapping ? 'HOPOs cost you the most. Use a fresh fret press for each note, including repeated frets.' : 'HOPOs cost you the most. After a miss, the next HOPO has to be strummed.');
     if (lost >= 8 && r.missChords > lost * 0.4) tips.push('Chords cost you the most. Chords need exactly their frets: no extra lower frets.');
     const worstLane = r.missByLane.indexOf(Math.max(...r.missByLane));

@@ -59,10 +59,21 @@ function mirrorMask(m: number): number {
   return out;
 }
 
-/** A copy of the track with the note modifiers applied (the track itself is never changed). */
+/** Drums: pad i <-> pad 3 - i (red <-> green, yellow <-> blue); the kick stays. */
+function mirrorPads(m: number): number {
+  let out = 0;
+  for (let i = 0; i < 4; i++) if (m & (1 << i)) out |= 1 << (3 - i);
+  return out;
+}
+
+/**
+ * A copy of the track with the note modifiers applied (the track itself is never changed). On drums only
+ * Mirror applies: the note types there are toms and cymbals, not strums and hammer-ons.
+ */
 export function applyModifiers(track: Track, mods: readonly string[]): Track {
+  const drums = track.instrument === 'drums';
   const mirror = mods.includes('mirror');
-  const type = mods.includes('strums') ? STRUM : mods.includes('hopos') ? HOPO : mods.includes('taps') ? TAP : -1;
+  const type = drums ? -1 : mods.includes('strums') ? STRUM : mods.includes('hopos') ? HOPO : mods.includes('taps') ? TAP : -1;
   if (!mirror && type < 0) return track;
   const src = track.notes;
   const notes = allocNotes(src.length);
@@ -74,7 +85,7 @@ export function applyModifiers(track: Track, mods: readonly string[]): Track {
   notes.solo.set(src.solo);
   for (let i = 0; i < src.length; i++) {
     const mask = src.mask[i];
-    notes.mask[i] = mirror ? mirrorMask(mask) : mask;
+    notes.mask[i] = mirror ? (drums ? mirrorPads(mask) : mirrorMask(mask)) : mask;
     // an open note cannot be tapped: it becomes a hammer-on
     notes.type[i] = type < 0 ? src.type[i] : type === TAP && mask === 0 ? HOPO : type;
   }

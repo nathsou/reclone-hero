@@ -52,7 +52,11 @@ export function chartIssues(chart: Chart, song: { lengthMs: number }, opts: { de
       if (inst === 'touch') continue; // folded from the guitar part
       const notes = chart.tracks.get(trackKey(inst, 'expert'))?.notes;
       if (!notes) continue;
-      for (let i = 1; i < notes.length; i++) if (notes.time[i] - notes.time[i - 1] < STACKED) stacked++;
+      // (drum gems of one chord share a time: only near misses count)
+      for (let i = 1; i < notes.length; i++) {
+        const dt = notes.time[i] - notes.time[i - 1];
+        if (dt > 0 && dt < STACKED) stacked++;
+      }
     }
     if (stacked) {
       out.push({ level: 'warn', code: 'stacked-notes', text: `${stacked} note${stacked > 1 ? 's sit' : ' sits'} less than 10 ms after the one before: chord gems that should share a tick probably don't.` });

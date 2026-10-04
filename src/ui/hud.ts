@@ -282,6 +282,11 @@ export class Hud {
     if (labels) for (let i = 0; i < 5; i++) setText(this.keyCaps[i], labels[i] ?? '');
   }
 
+  /** Drums: the key caps take the pad colours (red, yellow, blue, green) and the kick's. */
+  setDrums(on: boolean): void {
+    this.keys.classList.toggle('drums', on);
+  }
+
   setKeysDown(mask: number): void {
     if (mask === this.lastKeysDown) return;
     this.lastKeysDown = mask;

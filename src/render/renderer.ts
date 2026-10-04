@@ -64,11 +64,17 @@ const CRYSTAL = 1;
 
 const SUSTAIN_W = 0.14;
 
+/** Drums: lane width (four lanes across the five-lane highway) and the skin colour of each pad. */
+const DRUM_LANE_W = 1.25;
+const DRUM_COLORS = [1, 2, 3, 0];
+
 export interface RenderState {
   /** song time to draw (already video-calibrated) */
   time: number;
   /** lanes in play (bit per lane, green first); the touch part leaves out red and blue. Default: all five. */
   laneMask?: number;
+  /** drums: a 4-lane highway (red, yellow, blue, green pads; the kick is the bar across it) */
+  drums?: boolean;
   dt: number;
   /** world units per second */
   speed: number;
@@ -177,6 +183,8 @@ export class Renderer {
   /** drawn highway length in world units */
   private len = LEN;
   private lefty = false;
+  /** drums: four wider lanes, and lane k is coloured like pad k (red, yellow, blue, green) */
+  private four = false;
   /** 1 while the inked dome look is on (Daylight ink theme with the dome note style) */
   private inkGems = 0;
   private inkCol: RenderTheme['inkColor'] = [0.01, 0.009, 0.007];
@@ -509,8 +517,18 @@ export class Renderer {
   }
 
   laneX(lane: number): number {
-    const x = lane - 2;
+    const x = this.four ? (lane - 1.5) * DRUM_LANE_W : lane - 2;
     return this.lefty ? -x : x;
+  }
+
+  /** Colour index (skin colours: green, red, yellow, blue, orange) of a lane. */
+  private laneColor(lane: number): number {
+    return this.four ? DRUM_COLORS[lane] : lane;
+  }
+
+  /** Lanes on the highway: five frets, or four drum pads. */
+  get laneCount(): number {
+    return this.four ? 4 : 5;
   }
 
   // ---------------------------------------------------------------- effects
@@ -534,7 +552,7 @@ export class Renderer {
     for (let lane = 0; lane < 5; lane++) {
       if (mask !== 0 && !(mask & (1 << lane))) continue;
       const x = mask === 0 ? 0 : this.laneX(lane);
-      const c = sp ? colors[6] : colors[mask === 0 ? 5 : lane];
+      const c = sp ? colors[6] : colors[mask === 0 ? 5 : this.laneColor(lane)];
       const r = c[0] + (GOLD[0] - c[0]) * fx.gold;
       const g = c[1] + (GOLD[1] - c[1]) * fx.gold;
       const b = c[2] + (GOLD[2] - c[2]) * fx.gold;
@@ -576,7 +594,7 @@ export class Renderer {
     const rate = fx.sustainRate * dt;
     for (let lane = 0; lane < 5; lane++) {
       if (!(mask & (1 << lane))) continue;
-      const c = sp ? colors[6] : colors[lane];
+      const c = sp ? colors[6] : colors[this.laneColor(lane)];
       const x = this.laneX(lane);
       for (let k = 0; k < rate; k++) {
         if (Math.random() > rate - k) break;
@@ -670,6 +688,7 @@ export class Renderer {
     if (this.lost) return;
     const gl = this.gl;
     this.lefty = s.lefty;
+    this.four = !!s.drums;
     this.time = s.time;
     this.len = LEN * Math.min(1, Math.max(0.2, s.length ?? 1));
     this.setSkin(s.skin);
@@ -817,15 +836,18 @@ export class Renderer {
     gl.uniform3f(p.u.u_strike, th.strike[0], th.strike[1], th.strike[2]);
     const lanes = this.lanes;
     const laneCol = this.laneCol;
-    for (let i = 0; i < 5; i++) {
-      const slot = this.lefty ? 4 - i : i;
+    const count = this.laneCount;
+    lanes.fill(0);
+    for (let i = 0; i < count; i++) {
+      const slot = this.lefty ? count - 1 - i : i;
       lanes[slot] = this.buttonPress[i];
-      const col = this.skin.colors[i];
+      const col = this.skin.colors[this.laneColor(i)];
       laneCol[slot * 3] = col[0];
       laneCol[slot * 3 + 1] = col[1];
       laneCol[slot * 3 + 2] = col[2];
     }
     gl.uniform1fv(p.u.u_lanes, lanes);
+    gl.uniform1f(p.u.u_four, this.four ? 1 : 0);
     gl.uniform3fv(p.u.u_laneCol, laneCol);
     gl.bindVertexArray(this.highwayVao);
     gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
@@ -953,7 +975,7 @@ export class Renderer {
           d[o + 1] = 0;
           d[o + 2] = z;
           d[o + 3] = 1;
-          d[o + 4] = lane;
+          d[o + 4] = this.laneColor(lane);
           d[o + 5] = type === TAP ? 2 : type === HOPO ? 1 : 0;
           d[o + 6] = flags;
           d[o + 7] = 0;
@@ -962,7 +984,7 @@ export class Renderer {
             list[k] = d[o];
             list[k + 1] = 0.13;
             list[k + 2] = z;
-            list[k + 3] = lane + (sp ? 8 : 0);
+            list[k + 3] = this.laneColor(lane) + (sp ? 8 : 0);
           }
         }
       }
@@ -988,7 +1010,7 @@ export class Renderer {
     const inst = this.buttons.inst;
     inst.count = 0;
     const k = 1 - Math.exp(-s.dt * 40);
-    for (let lane = 0; lane < 5; lane++) {
+    for (let lane = 0; lane < this.laneCount; lane++) {
       if (s.laneMask !== undefined && !(s.laneMask & (1 << lane))) continue;
       const pressed = s.frets & (1 << lane) ? 1 : 0;
       this.buttonPress[lane] += (pressed - this.buttonPress[lane]) * k;
@@ -996,7 +1018,7 @@ export class Renderer {
       const o = inst.push();
       const d = inst.data;
       d[o] = this.laneX(lane);
-      d[o + 1] = lane;
+      d[o + 1] = this.laneColor(lane);
       d[o + 2] = this.buttonPress[lane];
       d[o + 3] = s.laneHit[lane];
       d[o + 4] = s.laneWrong[lane];
