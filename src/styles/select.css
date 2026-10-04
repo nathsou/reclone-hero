@@ -1400,3 +1400,7 @@
   background: color-mix(in srgb, currentColor 18%, transparent);
   font: 600 11px/1.2 var(--font-mono);
 }
+
+.song-detail .history-note {
+  color: var(--dim);
+}

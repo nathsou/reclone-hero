@@ -4,10 +4,12 @@
 
 import type { PlayStat } from './plays.ts';
 import type { BestScore } from './scores.ts';
+import { mergeHistory } from './history.ts';
+import type { TrackHistory } from './history.ts';
 
 const APP = 'reclone-hero';
 const FORMAT = 1;
-const KEYS = { settings: 'chsq.settings', keys: 'chsq.keys', pads: 'chsq.pads', scores: 'chsq.scores', plays: 'chsq.plays', favourites: 'chsq.favourites', hidden: 'chsq.hidden' } as const;
+const KEYS = { settings: 'chsq.settings', keys: 'chsq.keys', pads: 'chsq.pads', scores: 'chsq.scores', plays: 'chsq.plays', favourites: 'chsq.favourites', hidden: 'chsq.hidden', history: 'chsq.history' } as const;
 type Section = keyof typeof KEYS;
 
 export interface Backup {
@@ -53,6 +55,8 @@ export interface BackupSummary {
   plays: number;
   favourites: number;
   hidden: number;
+  /** parts with a run history */
+  history: number;
   exportedAt: string;
 }
 
@@ -77,6 +81,7 @@ export function summarize(b: Backup): BackupSummary {
     plays: b.data.plays ? Object.keys(b.data.plays as object).length : 0,
     favourites: Array.isArray(b.data.favourites) ? b.data.favourites.length : 0,
     hidden: Array.isArray(b.data.hidden) ? b.data.hidden.length : 0,
+    history: isObj(b.data.history) ? Object.keys(b.data.history).length : 0,
     exportedAt: b.exportedAt,
   };
 }
@@ -120,6 +125,11 @@ export function applyBackup(b: Backup): void {
       mine[k] = m ? { count: Math.max(m.count, p.count), last: Math.max(m.last, p.last) } : p;
     }
     write(KEYS.plays, mine);
+  }
+  // Run history: runs combined, the better best at each speed and set of modifiers.
+  if (isObj(b.data.history)) {
+    const stored = read(KEYS.history);
+    write(KEYS.history, mergeHistory((isObj(stored) ? stored : {}) as Record<string, TrackHistory>, b.data.history));
   }
   // Favourites and hidden songs: the union of both lists.
   for (const section of ['favourites', 'hidden'] as const) {

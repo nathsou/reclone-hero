@@ -4,6 +4,8 @@ import { HIT } from '../../engine/engine.ts';
 import { formatTime } from '../../util/text.ts';
 import type { GameResult, SectionResult } from '../../game/game.ts';
 import { getBest, PLAYED_WITH_LABEL, recordScore, scoreKey } from '../../game/scores.ts';
+import { getHistory, recordRun, variantKey, variantLabel } from '../../game/history.ts';
+import type { Run } from '../../game/history.ts';
 import type { NavAction } from '../../input/input.ts';
 import { skinHex } from '../../render/skins.ts';
 import { noteSkin } from '../theme.ts';
@@ -15,6 +17,30 @@ import { starsEl } from './songselect.ts';
 import { resultSummary } from '../resultAdvice.ts';
 
 const LANE_NAMES = ['Green', 'Red', 'Yellow', 'Blue', 'Orange'];
+
+/** The last runs of this part as bars (score, relative to the best of them); this run is the last, lit. */
+function runsChart(runs: Run[]): HTMLElement | null {
+  const last = runs.slice(-12);
+  if (last.length < 2) return null;
+  const max = Math.max(1, ...last.map((x) => x.score));
+  const day = (d: number) => new Date(d).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+  return h(
+    'div',
+    { class: 'res-runs', title: 'Your last runs of this part' },
+    h('span', { class: 'lbl' }, `Run ${runs.length >= 25 ? '25+' : runs.length}`),
+    h(
+      'span',
+      { class: 'bars' },
+      ...last.map((x, i) =>
+        h('i', {
+          class: `${i === last.length - 1 ? 'now' : ''}${x.fc ? ' fc' : ''}`,
+          style: `height:${Math.max(8, Math.round((x.score / max) * 100))}%`,
+          title: `${day(x.date)} · ${x.score.toLocaleString('en-US')} · ${(x.accuracy * 100).toFixed(1)}%${x.fc ? ' · FC' : ''}${x.speed !== 1 ? ` · ${Math.round(x.speed * 100)}%` : ''}${x.mods.length ? ` · ${x.mods.join(', ')}` : ''}`,
+        }),
+      ),
+    ),
+  );
+}
 
 export class ResultsScreen implements Screen {
   readonly el: HTMLElement;
@@ -43,9 +69,14 @@ export class ResultsScreen implements Screen {
     const key = scoreKey(song.id, trackKey(t.instrument, t.difficulty));
     // A slowed-down song is easier: its score is shown but not kept as a best.
     const slowed = (req.speed ?? 1) < 1;
-    if (!req.bot && !req.practice && !slowed) {
-      newBest = recordScore(key, { score: r.score, stars: r.stars, accuracy: acc, fc, date: Date.now(), input: r.input });
+    const run: Run = { score: r.score, stars: r.stars, accuracy: acc, fc, date: Date.now(), input: r.input, speed: req.speed ?? 1, mods: [] };
+    const variant = variantKey(run.speed, run.mods);
+    let variantBest = false;
+    if (!req.bot && !req.practice) {
+      variantBest = recordRun(key, run);
+      if (!slowed) newBest = recordScore(key, { score: r.score, stars: r.stars, accuracy: acc, fc, date: run.date, input: r.input });
     }
+    const bestTag = newBest ? 'NEW BEST' : variantBest && variant !== '100' ? `BEST AT ${variantLabel(variant).toUpperCase()}` : null;
     const best = getBest(key);
     const weakest = (this.weakest = req.practice ? null : weakestSection(r.sections));
     const mean = r.deltas.length ? r.deltas.reduce((a, b) => a + b, 0) / r.deltas.length : 0;
@@ -106,7 +137,7 @@ export class ResultsScreen implements Screen {
         h(
           'div',
           { class: 'res-nums' },
-          h('div', { class: 'res-num' }, h('div', { class: 'label' }, 'Score'), h('div', { class: 'v' }, r.score.toLocaleString('en-US')), newBest ? h('span', { class: 'tag best' }, 'NEW BEST') : null, h('div', { class: 'res-best' }, `Best score: ${best ? best.score.toLocaleString('en-US') : '—'}`, best?.input ? ` · ${PLAYED_WITH_LABEL[best.input]}` : '')),
+          h('div', { class: 'res-num' }, h('div', { class: 'label' }, 'Score'), h('div', { class: 'v' }, r.score.toLocaleString('en-US')), bestTag ? h('span', { class: 'tag best' }, bestTag) : null, h('div', { class: 'res-best' }, `Best score: ${best ? best.score.toLocaleString('en-US') : '—'}`, best?.input ? ` · ${PLAYED_WITH_LABEL[best.input]}` : ''), req.bot || req.practice ? null : runsChart(getHistory(key)?.runs ?? [])),
           h('div', { class: 'res-num' }, h('div', { class: 'label' }, 'Max streak'), h('div', { class: 'v' }, r.maxStreak.toLocaleString('en-US'))),
           h('div', { class: 'res-num' }, h('div', { class: 'label' }, 'Accuracy'), h('div', { class: 'v' }, `${(acc * 100).toFixed(1)}%`), fc ? h('span', { class: 'tag fc' }, 'FULL COMBO') : null),
           h('div', { class: 'res-num' }, h('div', { class: 'label' }, 'Stars'), h('div', { class: 'res-stars' }, starsEl(r.stars))),

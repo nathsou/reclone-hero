@@ -95,6 +95,9 @@ before the next notes, which helps on a phone.
 - **Song speed**, as in Clone Hero: play whole songs at 50–150% (`-`/`+` in the song list, or the song
   options). The audio is time-stretched in a Web Worker while the song loads, and the hit window keeps its
   length in real time. Scores below 100% are shown but not kept as best scores.
+- **Score history:** every run of a part is kept (the last 25), with the best at each song speed and set
+  of modifiers. The results screen shows your last runs as bars and tags a best at another speed; the song
+  details list the run count, the last accuracy and the bests at other speeds. History travels in backups.
 - **Long intros and breaks:** an intro of 5 s or more, or a break of 12 s or more, shows a countdown to the
   next note. Hold red + yellow + blue + orange (on the keyboard `S D F G`), press **Skip**, or pick
   *Skip intro* in the pause menu to jump to 3 s before it. Fret presses there do not count as overstrums.

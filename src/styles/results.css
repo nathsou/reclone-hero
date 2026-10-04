@@ -337,3 +337,38 @@
     gap: 28px;
   }
 }
+
+/* the last runs of this part, as bars */
+.res-runs {
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+  margin-top: 6px;
+  height: 22px;
+}
+
+.res-runs .lbl {
+  font: 500 11px var(--font-mono);
+  color: var(--dim);
+}
+
+.res-runs .bars {
+  display: flex;
+  align-items: flex-end;
+  gap: 2px;
+  height: 100%;
+}
+
+.res-runs .bars i {
+  width: 6px;
+  border-radius: 1px;
+  background: var(--fainter);
+}
+
+.res-runs .bars i.fc {
+  background: var(--star, var(--ok));
+}
+
+.res-runs .bars i.now {
+  background: var(--accent);
+}

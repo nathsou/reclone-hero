@@ -4,6 +4,7 @@ import type { Difficulty, Instrument } from '../../chart/types.ts';
 import { DIFFICULTIES, INSTRUMENTS, INSTRUMENT_LABEL, trackKey } from '../../chart/types.ts';
 import { chartFor } from '../../game/charts.ts';
 import { getBest, PLAYED_WITH_LABEL, scoreKey } from '../../game/scores.ts';
+import { getHistory, variantLabel } from '../../game/history.ts';
 import { TouchFrets } from '../touchFrets.ts';
 import type { NavAction } from '../../input/input.ts';
 import type { SongEntry } from '../../library/song.ts';
@@ -688,6 +689,7 @@ export class SongSelect implements Screen {
       this.copiesNote(song),
       chartReady ? parts : h('div', { class: 'loading-chart' }, error ? '' : 'Reading chart…'),
       chartReady ? diffs : null,
+      chartReady ? historyNote(scoreKey(song.id, trackKey(this.instrument, this.difficulty))) : null,
       stemNote,
       h(
         'div',
@@ -1217,6 +1219,19 @@ export class SongSelect implements Screen {
     } else return false;
     return true;
   }
+}
+
+/** Runs of the selected part so far, and its bests at other speeds and modifiers. */
+function historyNote(key: string): HTMLElement | null {
+  const hist = getHistory(key);
+  if (!hist?.runs.length) return null;
+  const last = hist.runs[hist.runs.length - 1];
+  const others = Object.entries(hist.bests)
+    .filter(([v]) => v !== '100')
+    .sort((a, b) => a[0].localeCompare(b[0], undefined, { numeric: true }))
+    .map(([v, r]) => `${variantLabel(v)} ${r.score.toLocaleString('en-US')}`);
+  const runs = hist.runs.length >= 25 ? '25+ runs' : `${hist.runs.length} run${hist.runs.length === 1 ? '' : 's'}`;
+  return h('div', { class: 'note history-note' }, `${runs} · last ${(last.accuracy * 100).toFixed(1)}%${others.length ? ` · best at ${others.join(' · ')}` : ''}`);
 }
 
 /** The song speed on the Play button, when it is not 100%. */
