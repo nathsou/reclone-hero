@@ -188,14 +188,40 @@ function inRanges(ranges: TickRange[], tick: number): boolean {
 /** Phrase markers in PART VOCALS (Rock Band: 105, and 106 for the second player). */
 const PHRASE_NOTES = [105, 106];
 
-/** Lyrics: every text or lyric event that is not a [bracketed] event, and the phrase notes as lines. */
+/** Sung notes in PART VOCALS: MIDI pitches 36-84 (Rock Band), each with the lyric event on its tick. */
+const VOCAL_LOW = 36;
+const VOCAL_HIGH = 84;
+
+/**
+ * Lyrics: every text or lyric event that is not a [bracketed] event, and the phrase notes as lines. Also
+ * the pitched notes, for singing (with the overdrive / star power note, 116).
+ */
 function readVocals(track: MidiTrack, chart: RawChart) {
   const open = new Map<number, number>();
   const phrases: TickRange[] = [];
+  const sung = new Map<number, number>();
+  const notes: { tick: number; end: number; pitch: number; text: string }[] = [];
+  const texts = new Map<number, string>();
+  let spStart = -1;
+  const starPower: TickRange[] = [];
   for (const ev of track.events) {
+    if ((ev.type === EV_NOTE_ON || ev.type === EV_NOTE_OFF) && ev.a >= VOCAL_LOW && ev.a <= VOCAL_HIGH) {
+      const start = sung.get(ev.a);
+      if (start !== undefined) {
+        notes.push({ tick: start, end: ev.tick, pitch: ev.a, text: '' });
+        sung.delete(ev.a);
+      }
+      if (ev.type === EV_NOTE_ON) sung.set(ev.a, ev.tick);
+    } else if ((ev.type === EV_NOTE_ON || ev.type === EV_NOTE_OFF) && ev.a === 116) {
+      if (spStart >= 0) starPower.push({ start: spStart, end: Math.max(ev.tick, spStart + 1) });
+      spStart = ev.type === EV_NOTE_ON ? ev.tick : -1;
+    }
     if (ev.type === EV_TEXT && ev.text && (ev.a === 0x01 || ev.a === 0x05)) {
       const text = ev.text.trim();
-      if (text && !text.startsWith('[')) chart.lyrics.push({ tick: ev.tick, text });
+      if (text && !text.startsWith('[')) {
+        chart.lyrics.push({ tick: ev.tick, text });
+        texts.set(ev.tick, text);
+      }
     } else if ((ev.type === EV_NOTE_ON || ev.type === EV_NOTE_OFF) && PHRASE_NOTES.includes(ev.a)) {
       const start = open.get(ev.a);
       if (start !== undefined) {
@@ -204,6 +230,11 @@ function readVocals(track: MidiTrack, chart: RawChart) {
       }
       if (ev.type === EV_NOTE_ON) open.set(ev.a, ev.tick);
     }
+  }
+  if (notes.length) {
+    notes.sort((a, b) => a.tick - b.tick || a.pitch - b.pitch);
+    for (const n of notes) n.text = texts.get(n.tick) ?? '';
+    chart.vocals = { notes, starPower };
   }
   // 105 and 106 often mark the same phrases: keep each range once
   phrases.sort((a, b) => a.start - b.start || a.end - b.end);

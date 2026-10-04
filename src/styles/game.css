@@ -1576,3 +1576,23 @@
 .hud.narrow .hud-stars {
   font-size: 16px;
 }
+
+/* vocals: the scrolling pitch lane takes the highway's place */
+.hud-vocals {
+  position: absolute;
+  left: max(24px, 4vw);
+  right: max(24px, 4vw);
+  top: 110px;
+  height: min(42vh, 360px);
+  display: none;
+}
+
+.hud-vocals.on {
+  display: block;
+}
+
+.hud-vocals canvas {
+  width: 100%;
+  height: 100%;
+  display: block;
+}

@@ -1,5 +1,5 @@
 import { audio } from '../../audio/audio.ts';
-import { DIFFICULTIES, INSTRUMENT_LABEL, trackKey } from '../../chart/types.ts';
+import { DIFFICULTIES, INSTRUMENT_LABEL, TAP, trackKey } from '../../chart/types.ts';
 import { HIT } from '../../engine/engine.ts';
 import { formatTime } from '../../util/text.ts';
 import type { GameResult, SectionResult } from '../../game/game.ts';
@@ -7,6 +7,7 @@ import { getBest, PLAYED_WITH_LABEL, recordScore, scoreKey } from '../../game/sc
 import { getHistory, recordRun, variantKey, variantLabel } from '../../game/history.ts';
 import type { Run } from '../../game/history.ts';
 import { MODIFIER_LABEL, countsForBest, isModifier } from '../../game/modifiers.ts';
+import { PHRASE_RATINGS } from '../../engine/vocals.ts';
 import type { NavAction } from '../../input/input.ts';
 import { skinHex } from '../../render/skins.ts';
 import { noteSkin } from '../theme.ts';
@@ -255,11 +256,27 @@ export class ResultsScreen implements Screen {
     const pillW = Math.max(3, Math.min(9, w / 200));
     const pillH = Math.min(14, laneH - 8);
     const missed: [number, number][] = [];
+    // vocals: notes at their pitch, from the lowest to the highest sung
+    const vocal = r.setup.track.instrument === 'vocals';
+    let lo = 127;
+    let hi = 0;
+    if (vocal) for (let i = 0; i < notes.length; i++) if (notes.type[i] !== TAP) (lo = Math.min(lo, notes.mask[i])), (hi = Math.max(hi, notes.mask[i]));
     for (let i = 0; i < notes.length; i++) {
       if (r.failedAt !== undefined && notes.time[i] > r.failedAt) break;
       const mask = notes.mask[i];
       const px = x(notes.time[i]);
       const hit = r.noteState[i] === HIT;
+      if (vocal) {
+        const cy = notes.type[i] === TAP || hi <= lo ? H / 2 : H - 8 - ((mask - lo) / (hi - lo)) * (H - 16);
+        if (hit) {
+          g.globalAlpha = dens[i];
+          g.fillStyle = hex[2];
+          g.beginPath();
+          g.roundRect(px - pillW / 2, cy - 4, Math.max(pillW, x(notes.endTime[i]) - px), 8, 4);
+          g.fill();
+        } else missed.push([px, cy]);
+        continue;
+      }
       if (mask === 0) {
         g.globalAlpha = hit ? 0.45 : 0.9;
         g.fillStyle = hex[5];
@@ -351,6 +368,7 @@ export class ResultsScreen implements Screen {
     const r = this.r;
     const totalMissed = r.total - r.hits;
     if (!totalMissed) return h('p', { class: 'res-note' }, 'Nothing. Every note was hit.');
+    if (r.setup.track.instrument === 'vocals') return this.vocalBreakdown();
     const drums = r.setup.track.instrument === 'drums';
     // drums: the four pads (red, yellow, blue, green) and the kick
     const counts = drums ? [...r.missByLane.slice(0, 4), r.missOpen] : r.missByLane;
@@ -394,6 +412,26 @@ export class ResultsScreen implements Screen {
     );
   }
 
+  /** Vocals: how the phrases were rated, and the notes missed (sung and spoken). */
+  private vocalBreakdown(): HTMLElement {
+    const r = this.r;
+    const counts = PHRASE_RATINGS.map(() => 0);
+    for (const x of r.ratings ?? []) counts[x]++;
+    const max = Math.max(1, ...counts);
+    return h(
+      'div',
+      null,
+      h(
+        'div',
+        { class: 'lane-bars ratings' },
+        ...counts.map((n, i) =>
+          h('div', { class: 'lane-bar', title: `${PHRASE_RATINGS[i]}: ${n} phrase${n === 1 ? '' : 's'}` }, h('div', { class: 'fill', style: `height:${(n / max) * 100}%;background:${i >= 4 ? 'var(--good)' : i >= 2 ? 'var(--ok)' : 'var(--bad)'}` }), h('span', null, String(n)), h('small', null, PHRASE_RATINGS[i])),
+        ),
+      ),
+      h('p', { class: 'res-note' }, 'Sung notes missed ', h('b', null, String(r.missByType.strum)), ' · Spoken ', h('b', null, String(r.missByType.tap))),
+    );
+  }
+
   /** Plain-language advice derived from how notes were lost. */
   private tips(): string[] {
     const r = this.r;
@@ -405,6 +443,10 @@ export class ResultsScreen implements Screen {
     if (r.wrongFret > r.lateMiss && r.wrongFret >= 5) tips.push('Most misses were wrong frets, not timing. A slowed-down practice loop helps the shapes sink in.');
     if (r.lateMiss > r.wrongFret && r.lateMiss >= 5) tips.push('Most misses were notes you never played. Practise the weakest section at a slower speed until the pattern feels familiar.');
     if (r.sustainDrops >= 3) tips.push(`${r.sustainDrops} sustains were let go early. Keep the fret down until the tail passes the line.`);
+    if (r.setup.track.instrument === 'vocals') {
+      if (lost >= 8) tips.push('Pitch counts in any octave: sing where it is comfortable. If notes fill in late, raise Settings › Audio › Microphone delay.');
+      return tips;
+    }
     const drums = r.setup.track.instrument === 'drums';
     if (drums) {
       if (lost >= 8 && r.missOpen > lost * 0.4) tips.push('The kick cost you the most. Count the kicks with your foot (or Space) even where nothing else is hit.');

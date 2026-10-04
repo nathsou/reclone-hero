@@ -2,6 +2,7 @@ import type { LyricLine } from '../chart/lyrics.ts';
 import { TouchFrets } from './touchFrets.ts';
 import { formatTime } from '../util/text.ts';
 import { h, setText } from './dom.ts';
+import { VocalLane } from './vocalLane.ts';
 
 const MULT_CLASS = ['', 'm1', 'm2', 'm3', 'm4'];
 const MULT_TEXT = ['', '×1', '×2', '×3', '×4', '×5', '×6', '×7', '×8'];
@@ -73,6 +74,8 @@ export class Hud {
   /** on-screen frets for touch screens */
   readonly touch: TouchFrets;
   onTouchPause: (() => void) | null = null;
+  /** vocals: the scrolling pitch lane (shown only for a vocal part) */
+  readonly vocals = new VocalLane();
   /** the skip button of the break countdown was pressed */
   onSkip: (() => void) | null = null;
   private readonly left: HTMLDivElement;
@@ -243,6 +246,7 @@ export class Hud {
       this.timing,
       this.fps,
       this.countdown,
+      this.vocals.el,
       this.breakEl,
       this.keys,
     );

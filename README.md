@@ -60,7 +60,7 @@ On the results screen `Enter` returns to the song list, `R` retries and `P` prac
 Charts with a drum part (`[ExpertDrums]` in a `.chart`, `PART DRUMS` in a `.mid`) offer **Drums** next to
 Guitar and Bass. It is 4-lane drums as in Rock Band and Clone Hero: red, yellow, blue and green pads on a
 four-lane highway, and the kick as a bar across it. On the keyboard the pads are `S D F G` and the kick is
-`Space` (or `A`); Star Power is `Shift` (or turn on Auto Star Power). A drum kit is set up like a guitar in
+`Space` (or `A`); Star Power is the right `Shift` (or turn on Auto Star Power). A drum kit is set up like a guitar in
 Settings › Controls: its pads as the red, yellow, blue and orange frets and the pedal as the (optional) kick.
 
 - Every gem is judged on its own and in any order within the hit window; hitting a pad with nothing there
@@ -71,6 +71,23 @@ Settings › Controls: its pads as the red, yellow, blue and orange frets and th
   cymbal, green the green tom).
 - The drum stems (`drums.ogg`, `drums_1-4.ogg`) are your part: they mute when you miss.
 - Not supported yet: drum rolls and swells, drum-fill Star Power activation, 2× kick (Expert+).
+
+## Singing
+
+Charts whose `notes.mid` has pitched notes in `PART VOCALS` offer **Vocals**. Sing into a microphone (the
+browser asks for it the first time; Settings › Audio › Microphone picks one and **Test** shows the note it
+hears). The highway gives way to a vocal lane, Rock Band style: the notes are bars at their pitch scrolling
+towards the line on the left, with their syllables under them; your voice is the trail and the dot on the
+line, and a note fills in green as you sing it in tune.
+
+- Any octave counts. The difficulty sets how close the pitch must be (±3 semitones on Easy to ±1 on Expert)
+  and how much of each note has to be in tune (30% to 60%). Spoken words (dashed bars) only need a voice.
+- Each phrase is rated as it ends (Awful, Messy, OK, Good, Strong, Awesome); the results show how many of
+  each. Notes score like sustains, by how much of them was in tune; streak, multiplier, Star Power (right
+  `Shift`, select or Auto Star Power), the rock meter and best scores work as on the other parts.
+- Pitch is found with YIN on the microphone signal, in the page (nothing is recorded or sent anywhere). If
+  notes fill in late when you sing on time, raise Settings › Audio › Microphone delay.
+- `.chart` files carry lyrics but no sung pitches, so they have no Vocals part; harmonies are not supported.
 
 ## Playing on a phone or tablet
 
@@ -90,7 +107,7 @@ before the next notes, which helps on a phone.
 
 ## What's in it
 
-- **Charts:** `.chart` and `.mid` for guitar, bass, rhythm, keys, guitar co-op and drums on all four difficulties:
+- **Charts:** `.chart` and `.mid` for guitar, bass, rhythm, keys, guitar co-op and drums, and `.mid` vocals, on all four difficulties:
   chords, sustains (including extended sustains), natural and forced HOPOs, tap notes, open notes, star power
   phrases, solos, sections, lyrics, tempo and time-signature changes, and `song.ini` options (`hopo_frequency`,
   `eighthnote_hopo`, `sustain_cutoff_threshold`, `multiplier_note`, `delay`).

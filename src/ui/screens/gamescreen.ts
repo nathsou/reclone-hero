@@ -6,6 +6,7 @@ import type { Difficulty, Instrument } from '../../chart/types.ts';
 import { DIFFICULTIES, INSTRUMENT_LABEL, trackKey } from '../../chart/types.ts';
 import { Game, effectiveQuality } from '../../game/game.ts';
 import { applyModifiers } from '../../game/modifiers.ts';
+import type { Mic } from '../../audio/mic.ts';
 import type { SetlistRun } from '../setlistRun.ts';
 import type { PracticeRange } from '../../game/game.ts';
 import type { NavAction } from '../../input/input.ts';
@@ -52,6 +53,7 @@ export class GameScreen implements Screen {
   private pauseEl: HTMLElement | null = null;
   private destroyed = false;
   private videoUrl: string | null = null;
+  private mic: Mic | null = null;
 
   constructor(app: App, req: GameRequest) {
     this.app = app;
@@ -146,6 +148,17 @@ export class GameScreen implements Screen {
     }
     this.progress(0.97, 'Warming up…');
     this.game = new Game({ song, chart, track, instrument, duration: loaded.duration, bot: this.req.bot, practice, speed, mods }, this.canvas, this.hud);
+    if (instrument === 'vocals' && !this.req.bot) {
+      this.progress(0.98, 'Opening the microphone…');
+      const { Mic } = await import('../../audio/mic.ts');
+      const mic = await Mic.open(audio().ctx);
+      if (this.destroyed) {
+        mic.close();
+        return;
+      }
+      this.mic = mic;
+      this.game.setMic(mic);
+    }
     if (song.video) {
       try {
         const url = await lib.fileUrl(song, song.video);
@@ -287,7 +300,7 @@ export class GameScreen implements Screen {
     this.hidePause();
     // Settings may have changed from the pause menu.
     this.game?.renderer.setQuality(effectiveQuality());
-    this.hud.showTimingBar(settings.timingBar);
+    this.hud.showTimingBar(settings.timingBar && this.req.instrument !== 'vocals');
     audio().applyVolumes();
     this.game?.resume();
   }
@@ -296,7 +309,7 @@ export class GameScreen implements Screen {
   private skipBreak() {
     this.hidePause();
     this.game?.renderer.setQuality(effectiveQuality());
-    this.hud.showTimingBar(settings.timingBar);
+    this.hud.showTimingBar(settings.timingBar && this.req.instrument !== 'vocals');
     audio().applyVolumes();
     this.game?.skipBreak();
   }
@@ -350,6 +363,8 @@ export class GameScreen implements Screen {
     document.removeEventListener('fullscreenchange', this.onFullscreenChange);
     this.destroyed = true;
     this.game?.stop();
+    this.mic?.close();
+    this.hud.vocals.destroy();
     audio().unload();
     if (this.videoUrl) this.app.library.release(this.videoUrl);
   }

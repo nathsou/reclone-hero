@@ -10,6 +10,8 @@ const PLAYER_STEMS: Record<Instrument, string[]> = {
   rhythm: ['rhythm'],
   keys: ['keys'],
   drums: ['drums', 'drums_1', 'drums_2', 'drums_3', 'drums_4'],
+  // the guide vocals stay in the band's mix: a missed note is not silenced
+  vocals: [],
   touch: ['guitar'],
 };
 

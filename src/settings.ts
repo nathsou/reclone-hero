@@ -40,6 +40,10 @@ export interface Settings {
   rockMeter: 'off' | 'meter' | 'fail';
   /** a countdown through long intros and breaks */
   breakCountdown: boolean;
+  /** vocals: the microphone (deviceId; '' = the system's default) */
+  micDevice: string;
+  /** vocals: extra delay (ms) of the microphone, on top of what the browser reports */
+  micLatencyMs: number;
   missFeedback: MissFeedback;
   missSounds: boolean;
   volMaster: number;
@@ -79,6 +83,8 @@ export const DEFAULT_SETTINGS: Settings = {
   timingBar: true,
   lyrics: true,
   breakCountdown: true,
+  micDevice: '',
+  micLatencyMs: 0,
   rockMeter: 'off',
   songSpeed: 1,
   modifiers: [],

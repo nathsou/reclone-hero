@@ -23,6 +23,14 @@ export function botActions(track: Track, opts: { jitter?: number; random?: () =>
   const from = opts.from ?? 0;
   const to = opts.to ?? notes.length - 1;
   const out: Action[] = [];
+  if (track.instrument === 'vocals') {
+    // the vocal judge sings by itself for the bot (autoSing): only Star Power to set off
+    for (let i = from; i <= to; i++) {
+      const sp = notes.sp[i];
+      if (sp >= 0 && track.starPower[sp].last === i) out.push({ t: notes.endTime[i] + 0.25, kind: 'sp' });
+    }
+    return out;
+  }
   if (track.instrument === 'drums') {
     for (let i = from; i <= to; i++) {
       const t = notes.time[i] + (jitter > 0 ? (rnd() * 2 - 1) * jitter : 0);

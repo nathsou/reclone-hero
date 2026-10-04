@@ -1,4 +1,4 @@
-import { buildLyrics } from './lyrics.ts';
+import { buildLyrics, cleanSyllable } from './lyrics.ts';
 import type { LyricLine } from './lyrics.ts';
 import { foldToTouch } from './touch.ts';
 import { TempoMap } from './tempo.ts';
@@ -96,7 +96,20 @@ export function buildChart(raw: RawChart, opts: ChartOptions = {}): Chart {
   const counts = new Map<string, number>();
   let lastTick = 0;
   let firstTick = Infinity;
+  const vocals = raw.vocals;
+  if (vocals && vocals.notes.length) {
+    // One sung part for every difficulty: the difficulty sets how close the pitch has to be.
+    const v = vocals.notes;
+    firstTick = Math.min(firstTick, v[0].tick);
+    for (const n of v) lastTick = Math.max(lastTick, n.end);
+    for (const difficulty of DIFFICULTIES) {
+      const key = trackKey('vocals', difficulty);
+      counts.set(key, v.length);
+      tracks.add(key, () => buildVocalTrack(vocals, raw.phrases, difficulty, tempo));
+    }
+  }
   for (const instrument of INSTRUMENTS) {
+    if (instrument === 'vocals') continue;
     for (const difficulty of DIFFICULTIES) {
       const key = trackKey(instrument, difficulty);
       let rt = raw.tracks.get(key);
@@ -321,6 +334,31 @@ function buildDrumTrack(rt: PackedTrack, difficulty: Difficulty, tempo: TempoMap
   const starPower = assignPhrases(notes, rt.starPower, tempo, notes.sp);
   const solos = assignPhrases(notes, rt.solos, tempo, notes.solo);
   return { instrument: 'drums', difficulty, notes, starPower, solos };
+}
+
+/**
+ * Vocals: one note per sung syllable, the MIDI pitch in mask; spoken syllables (lyrics ending in # or ^)
+ * are TAP-typed, pitched ones STRUM. A "+" lyric slides on from the last syllable: it shows no text.
+ */
+function buildVocalTrack(v: NonNullable<RawChart['vocals']>, phrases: TickRange[], difficulty: Difficulty, tempo: TempoMap): Track {
+  const n = v.notes.length;
+  const notes = allocNotes(n);
+  const syllables: string[] = [];
+  for (let i = 0; i < n; i++) {
+    const s = v.notes[i];
+    notes.tick[i] = s.tick;
+    notes.endTick[i] = Math.max(s.end, s.tick + 1);
+    notes.time[i] = tempo.tickToTime(s.tick);
+    notes.endTime[i] = tempo.tickToTime(notes.endTick[i]);
+    notes.mask[i] = s.pitch;
+    notes.type[i] = /[#^*]\s*$/.test(s.text) ? TAP : STRUM;
+    syllables.push(cleanSyllable(s.text)?.text ?? '');
+  }
+  const starPower = assignPhrases(notes, v.starPower, tempo, notes.sp);
+  // phrases (lines) for the ratings: the solo slots serve as scratch, then are cleared
+  const lines = assignPhrases(notes, phrases.length ? phrases : [{ start: notes.tick[0] ?? 0, end: (notes.endTick[n - 1] ?? 0) + 1 }], tempo, notes.solo);
+  notes.solo.fill(-1);
+  return { instrument: 'vocals', difficulty, notes, starPower, solos: [], syllables, lines };
 }
 
 function assignPhrases(notes: NoteList, ranges: TickRange[], tempo: TempoMap, out: Int16Array): Phrase[] {

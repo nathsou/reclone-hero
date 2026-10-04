@@ -138,6 +138,9 @@ export class SettingsModal implements Screen {
       slider('Crowd', 'volCrowd', 0, 1, 0.05, pct, 'Mixed in when a song loads (saves memory), so changes apply to the next song.'),
       slider('Sound effects', 'volSfx', 0, 1, 0.05, pct, '', apply),
       slider('Song preview', 'volPreview', 0, 1, 0.05, pct),
+      h('div', { class: 'sec-label' }, 'Microphone (vocals)'),
+      this.micRow(),
+      slider('Microphone delay', 'micLatencyMs', 0, 300, 5, (v) => `${v} ms`, 'Raise this if notes fill in late when you sing on time (Bluetooth or USB headsets add delay).'),
       h('div', { class: 'sec-label' }, 'Latency'),
       slider('Audio offset', 'audioOffsetMs', -200, 300, 1, (v) => `${v} ms`, 'Raise this if you consistently hit late (Bluetooth headphones need 150+).'),
       this.inGame ? null : h('div', { class: 'actions' }, h('button', { class: 'btn', onclick: () => this.calibrate('audio') }, 'Calibrate audio offset…')),
@@ -237,6 +240,69 @@ export class SettingsModal implements Screen {
       fileInput,
       status,
     );
+  }
+
+  /** The microphone to sing into, and a live test: the note it hears and how loud. */
+  private micRow(): HTMLElement {
+    const choices = h('div', { class: 'chips', role: 'radiogroup', 'aria-label': 'Microphone', 'data-stop': '', 'data-items': '.chip', tabindex: '0' });
+    const readout = h('span', { class: 'mic-readout' }, '');
+    let stop: (() => void) | null = null;
+    const render = (devices: { id: string; label: string }[]) =>
+      replace(
+        choices,
+        ...[{ id: '', label: 'System default' }, ...devices].map((d) =>
+          h(
+            'button',
+            {
+              class: `chip ${settings.micDevice === d.id ? 'on' : ''}`,
+              role: 'radio',
+              tabindex: '-1',
+              'aria-checked': String(settings.micDevice === d.id),
+              onclick: () => {
+                updateSettings({ micDevice: d.id });
+                render(devices);
+              },
+            },
+            d.label,
+          ),
+        ),
+      );
+    const test = h('button', {
+      class: 'btn small',
+      onclick: async () => {
+        if (stop) {
+          stop();
+          return;
+        }
+        const { Mic } = await import('../../audio/mic.ts');
+        const { noteName } = await import('../../audio/pitch.ts');
+        try {
+          await audio().resume();
+          const mic = await Mic.open(audio().ctx);
+          void Mic.devices().then(render);
+          let raf = 0;
+          const tick = () => {
+            const r = mic.read();
+            readout.textContent = r.pitch === r.pitch ? `${noteName(r.pitch)} · level ${Math.round(r.level * 100)}` : `— · level ${Math.round(r.level * 100)}`;
+            raf = requestAnimationFrame(tick);
+            if (!readout.isConnected) stop?.();
+          };
+          stop = () => {
+            cancelAnimationFrame(raf);
+            mic.close();
+            stop = null;
+            test.textContent = 'Test';
+            readout.textContent = '';
+          };
+          test.textContent = 'Stop';
+          tick();
+        } catch (err) {
+          readout.textContent = (err as Error).message;
+        }
+      },
+    }, 'Test');
+    void import('../../audio/mic.ts').then(({ Mic }) => Mic.devices()).then(render, () => render([]));
+    return h('div', { class: 'row stack' }, h('span', { class: 'lbl' }, 'Microphone', h('small', null, 'Sing into it on a vocal part. Test shows the note it hears.')), choices, h('div', { class: 'mic-test' }, test, readout));
   }
 
   /** How many songs are hidden from the song list, with a way to bring them back. */

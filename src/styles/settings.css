@@ -686,3 +686,15 @@
 .setlists-modal .dim {
   color: var(--dim);
 }
+
+.mic-test {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 10px;
+}
+
+.mic-readout {
+  font: 500 12px var(--font-mono);
+  color: var(--dim);
+}

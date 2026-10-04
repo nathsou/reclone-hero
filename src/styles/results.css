@@ -425,3 +425,10 @@
   font: 500 11px var(--font-mono);
   color: var(--dim);
 }
+
+.lane-bars.ratings .lane-bar small {
+  display: block;
+  font: 500 9px var(--font-mono);
+  color: var(--dim);
+  text-align: center;
+}

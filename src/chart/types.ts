@@ -1,4 +1,4 @@
-export const INSTRUMENTS = ['guitar', 'bass', 'rhythm', 'keys', 'guitarcoop', 'drums', 'touch'] as const;
+export const INSTRUMENTS = ['guitar', 'bass', 'rhythm', 'keys', 'guitarcoop', 'drums', 'vocals', 'touch'] as const;
 export type Instrument = (typeof INSTRUMENTS)[number];
 export const DIFFICULTIES = ['easy', 'medium', 'hard', 'expert'] as const;
 export type Difficulty = (typeof DIFFICULTIES)[number];
@@ -10,8 +10,10 @@ export const INSTRUMENT_LABEL: Record<Instrument, string> = {
   keys: 'Keys',
   guitarcoop: 'Guitar Co-op',
   drums: 'Drums',
+  vocals: 'Vocals',
   touch: 'Touch',
 };
+
 
 /**
  * Drums (4-lane, as in Rock Band and Clone Hero): one note per gem. mask bit 0..3 = red, yellow, blue and
@@ -96,6 +98,8 @@ export interface RawChart {
   tracks: Map<string, RawTrack>;
   /** metadata from the .chart [Song] section, if any */
   meta: Record<string, string>;
+  /** pitched vocal notes (PART VOCALS of a .mid), with their lyric, and vocal star power phrases */
+  vocals?: { notes: { tick: number; end: number; pitch: number; text: string }[]; starPower: TickRange[] };
 }
 
 /**
@@ -171,6 +175,13 @@ export interface Track {
   notes: NoteList;
   starPower: Phrase[];
   solos: Phrase[];
+  /**
+   * Vocals only: notes are sung syllables, mask holding the MIDI pitch (36-84) and type STRUM for a
+   * pitched note or TAP for a spoken one ("talkie", judged on voice alone). syllables is each note's text
+   * ('' for a slide continuing the last one), lines the vocal phrases, rated as they end.
+   */
+  syllables?: string[];
+  lines?: Phrase[];
 }
 
 /** Beat lines as parallel arrays. */

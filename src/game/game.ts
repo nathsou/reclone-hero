@@ -21,6 +21,9 @@ import { Hud } from '../ui/hud.ts';
 import type { HudState } from '../ui/hud.ts';
 import { noteSkin, renderTheme } from '../ui/theme.ts';
 import { SKIP_CHORD, canSkip, findGaps, gapAt, skipTarget } from './gaps.ts';
+import { PHRASE_RATINGS, VocalJudge } from '../engine/vocals.ts';
+import type { Mic } from '../audio/mic.ts';
+import { SILENCE_RMS } from '../audio/pitch.ts';
 import type { Gap } from './gaps.ts';
 import { MODIFIER_LABEL, isModifier, windowScale } from './modifiers.ts';
 
@@ -135,6 +138,8 @@ export interface GameResult {
   lateMiss: number;
   /** drums: pad hits with nothing to hit */
   overhits: number;
+  /** vocals: the rating (index into PHRASE_RATINGS) of each phrase */
+  ratings?: number[];
   /** per-note outcome and timing (seconds, negative = early), parallel to setup.track.notes */
   noteState: Uint8Array;
   hitDelta: Float32Array;
@@ -234,6 +239,26 @@ export class Game {
   }
 
   private autoIdx = 0;
+  /** a vocal part: sung into the microphone, drawn as the vocal lane instead of the highway */
+  private get vocals(): boolean {
+    return this.setup.track.instrument === 'vocals';
+  }
+
+  private mic: Mic | null = null;
+
+  /** The microphone to sing into (vocals; none for the bot). */
+  setMic(mic: Mic | null): void {
+    this.mic = mic;
+  }
+
+  /**
+   * How far behind the song clock the judge runs: what the microphone hears now was sung this long ago
+   * (vocals), or a little lag so late input events are not pre-empted.
+   */
+  private get judgeLag(): number {
+    return this.vocals && this.mic ? this.mic.latency + JUDGE_LAG : JUDGE_LAG;
+  }
+
   /** a drum part: pads and kick instead of frets and strums */
   private get drums(): boolean {
     return this.setup.track.instrument === 'drums';
@@ -294,12 +319,13 @@ export class Game {
     const n = track.notes.length;
     // At another song speed the windows are kept the same length in real time (practice stays lenient).
     const scale = (practice ? 1 : this.rate) * windowScale(this.setup.mods ?? []);
-    this.engine = new Engine(
-      track,
-      chart.tempo,
-      { early: (settings.hitWindowMs / 1000) * scale, late: (settings.hitWindowMs / 1000) * scale, strumLeniency: (settings.strumLeniencyMs / 1000) * scale, rockLoss: ROCK_LOSS[track.difficulty] },
-      practice ? { first: practice.first, last: practice.last } : undefined,
-    );
+    const cfg = { early: (settings.hitWindowMs / 1000) * scale, late: (settings.hitWindowMs / 1000) * scale, strumLeniency: (settings.strumLeniencyMs / 1000) * scale, rockLoss: ROCK_LOSS[track.difficulty] };
+    const range = practice ? { first: practice.first, last: practice.last } : undefined;
+    if (track.instrument === 'vocals') {
+      const judge = new VocalJudge(track, chart.tempo, cfg, range);
+      judge.autoSing = this.setup.bot;
+      this.engine = judge;
+    } else this.engine = new Engine(track, chart.tempo, cfg, range);
     this.base = baseScore(track, chart.tempo);
     this.sustainHeld = new Uint8Array(n);
     this.sustainDrop = new Float32Array(n).fill(NaN);
@@ -337,14 +363,19 @@ export class Game {
     const extras = [!practice && this.rate !== 1 ? `${Math.round(this.rate * 100)}%` : '', ...(this.setup.mods ?? []).filter(isModifier).map((m) => MODIFIER_LABEL[m])].filter(Boolean);
     this.hud.setTitle(song.name, song.artist, [`${INSTRUMENT_LABEL[t.instrument]} · ${t.difficulty}`, ...extras].join(' · '));
     this.hud.setSections(this.setup.chart.sections.map((s) => s.time), practice ? practice.start : this.startTime, this.endTime);
-    this.hud.setLyrics(this.setup.chart.lyrics);
+    // vocals: the lyrics are under the notes in the vocal lane
+    this.hud.setLyrics(this.vocals ? [] : this.setup.chart.lyrics);
+    this.hud.vocals.setTrack(this.vocals ? t : null);
     if (practice) this.hud.toast(`PRACTICE · ${practice.label}`, 'info', `${Math.round(practice.speed * 100)}% speed`);
     else if (this.rate !== 1) this.hud.toast(`${Math.round(this.rate * 100)}% SPEED`, 'info', this.rate < 1 ? 'best scores count at 100% and above' : undefined);
     const touch = !this.setup.bot && TouchFrets.wanted();
-    this.hud.touch.setVisible(touch, this.setup.track.instrument === 'touch' ? TOUCH_LANES : undefined);
+    // vocals on a touch screen: no pads, only Star Power and pause
+    this.hud.touch.setVisible(touch, this.setup.track.instrument === 'touch' ? TOUCH_LANES : this.vocals ? [] : undefined);
     this.hud.onTouchPause = () => this.pause();
     this.hud.onSkip = () => void this.skipBreak();
     this.hud.setDrums(this.drums);
+    // sung notes have no early or late
+    this.hud.showTimingBar(settings.timingBar && !this.vocals);
     this.setKeyboardActive(!this.setup.bot && !input().hasPads && !touch);
   }
 
@@ -555,7 +586,8 @@ export class Game {
       } else if (t >= engine.time) {
         engine.setWhammy(t, inp.whammy(now));
       }
-      engine.advance(t - JUDGE_LAG);
+      if (this.vocals) this.listen(t);
+      engine.advance(t - this.judgeLag);
       if (settings.autoStarPower && !this.setup.bot) this.autoStarPower(t);
       for (let i = 0; i < engine.pendingEvents; i++) this.handleEvent(engine.event(i));
       engine.clearEvents();
@@ -600,7 +632,8 @@ export class Game {
       sustainMask |= s.mask;
       if (s.sp >= 0 && !engine.spBroken[s.sp]) sustainSp = true;
     }
-    if (!this.paused) this.renderer.sustainSparks(sustainMask, sustainSp || engine.spActive, dt);
+    if (!this.paused && !this.vocals) this.renderer.sustainSparks(sustainMask, sustainSp || engine.spActive, dt);
+    if (this.vocals) this.hud.vocals.draw(t - this.judgeLag, engine as VocalJudge);
 
     // The render and HUD state objects are reused every frame (no per-frame garbage).
     const rs = this.rs;
@@ -615,6 +648,7 @@ export class Game {
     rs.sustainMask = sustainMask;
     rs.frets = this.drums ? (this.srcMask.kb | this.srcMask.pad | this.srcMask.touch) & DRUM_PADS_ALL : this.setup.bot ? engine.frets : this.srcMask.kb | this.srcMask.pad | this.srcMask.touch;
     rs.drums = this.drums;
+    rs.noHighway = this.vocals;
     rs.spActive = engine.spActive;
     rs.multiplier = engine.multiplier > 4 ? 4 : engine.multiplier;
     rs.missPulse = this.missPulse;
@@ -685,6 +719,36 @@ export class Game {
     this.hud.setBreak(g.intro ? 1 : 2, (g.to - t) / rate, (t - g.from) / (g.to - g.from), canSkip(g, t, rate) ? this.skipHint : null);
   }
 
+  /** Vocals: hand the judge what the microphone hears (the bot sings the notes themselves, for show). */
+  private listen(t: number) {
+    const judge = this.engine as VocalJudge;
+    const at = t - this.judgeLag;
+    if (this.mic) {
+      const r = this.mic.read();
+      judge.sing(at, r.pitch, r.level > SILENCE_RMS * 2);
+      this.hud.vocals.push(at, r.pitch);
+    } else if (this.setup.bot) {
+      const N = this.setup.track.notes;
+      let p = NaN;
+      for (let i = judge.nextNote; i < N.length && N.time[i] <= at; i++) if (at < N.endTime[i] && N.type[i] === 0) p = N.mask[i];
+      this.hud.vocals.push(at, p);
+    }
+  }
+
+  /** Vocals: no frets to play; they only make the skip chord. Pause and Star Power work as ever. */
+  private vocalInput(ev: InputEvent, t: number) {
+    const fret = FRET_INDEX[ev.action];
+    if (fret >= 0) {
+      if (ev.down) this.srcMask[ev.source] |= 1 << fret;
+      else this.srcMask[ev.source] &= ~(1 << fret);
+      if (ev.down && ((this.srcMask.kb | this.srcMask.pad | this.srcMask.touch) & SKIP_CHORD) === SKIP_CHORD) this.skipBreak();
+      return;
+    }
+    if (!ev.down) return;
+    if (ev.action === 'start') this.pause();
+    else if ((ev.action === 'starPower' || ev.action === 'tilt') && !this.setup.bot && t >= this.engine.time - 0.01) this.engine.activateStarPower(t);
+  }
+
   /** Drums: pads and the kick are hits (no strum); held keys only light the pads. */
   private drumInput(ev: InputEvent, t: number) {
     const e = this.engine;
@@ -715,6 +779,10 @@ export class Game {
     const t = a.songTime(ev.time);
     if (this.drums) {
       this.drumInput(ev, t);
+      return;
+    }
+    if (this.vocals) {
+      this.vocalInput(ev, t);
       return;
     }
     const fret = FRET_INDEX[ev.action];
@@ -756,6 +824,11 @@ export class Game {
     this.kbActive = on;
     const keys = input().keys;
     const label = (a: keyof typeof keys) => (keys[a]?.[0] ? keyLabel(keys[a][0]) : '');
+    if (this.vocals) {
+      this.hud.setKeyLabels(null);
+      this.skipHint = on ? FRET_ACTIONS.slice(1).map(label).join(' ') : 'red + yellow + blue + orange';
+      return;
+    }
     if (this.drums) {
       // four pads, and the kick under them
       const pads = (['red', 'yellow', 'blue', 'orange'] as const).map(label);
@@ -798,8 +871,10 @@ export class Game {
         const mask = notes.mask[ev.note];
         const sp = notes.sp[ev.note];
         a.setPlayerAudible(true);
-        for (let i = 0; i < 5; i++) if (mask & (1 << i) || mask === 0) this.laneHit[i] = 1;
-        this.renderer.hitBurst(mask, engine.spActive || (sp >= 0 && !engine.spBroken[sp]));
+        if (!this.vocals) {
+          for (let i = 0; i < 5; i++) if (mask & (1 << i) || mask === 0) this.laneHit[i] = 1;
+          this.renderer.hitBurst(mask, engine.spActive || (sp >= 0 && !engine.spBroken[sp]));
+        }
         if (!ev.auto) this.hud.timingTick(ev.delta);
         // The final note of a flawless run: that settles the full combo (a stray strum once the notes
         // are over does not take it back), and it is celebrated straight away.
@@ -819,7 +894,8 @@ export class Game {
       }
       case 'miss': {
         const mask = notes.mask[ev.note];
-        this.missAudio(ev.t);
+        // the guide vocals keep playing over a missed note
+        if (!this.vocals) this.missAudio(ev.t);
         if (ev.reason === 'wrong') this.wrongFret++;
         else this.lateMiss++;
         if (ev.reason === 'wrong') {
@@ -888,6 +964,11 @@ export class Game {
       case 'spEnd':
         a.playSfx('spEnd', 0.6);
         break;
+      case 'vocalPhrase': {
+        const rating = PHRASE_RATINGS[ev.value];
+        this.hud.toast(rating.toUpperCase(), ev.value >= 4 ? 'streak' : ev.value <= 1 ? 'bad' : 'info', `${ev.hits} / ${ev.total} notes`);
+        break;
+      }
       case 'soloStart':
         this.soloHits = this.soloSeen = 0;
         this.updateSolo();
@@ -950,9 +1031,16 @@ export class Game {
     let missChords = 0;
     let missOpen = 0;
     const deltas: number[] = [];
+    const sung = this.vocals;
     for (let i = 0; i < notes.length; i++) {
       if (e.noteState[i] === HIT) {
-        deltas.push(e.hitDelta[i]);
+        // vocal notes have no timing to show
+        if (!sung) deltas.push(e.hitDelta[i]);
+        continue;
+      }
+      if (sung) {
+        if (notes.type[i] === TAP) missByType.tap++;
+        else missByType.strum++;
         continue;
       }
       const mask = notes.mask[i];
@@ -1005,6 +1093,7 @@ export class Game {
       wrongFret: this.wrongFret,
       lateMiss: this.lateMiss,
       overhits: e.overhits,
+      ratings: e instanceof VocalJudge ? [...e.ratings] : undefined,
       input: this.playedWith(),
       fullCombo: this.setup.practice ? e.misses === 0 && e.overstrums === 0 && notes.length > 0 : this.fullCombo,
       noteState: e.noteState.slice(),

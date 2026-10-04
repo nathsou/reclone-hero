@@ -75,6 +75,8 @@ export interface RenderState {
   laneMask?: number;
   /** drums: a 4-lane highway (red, yellow, blue, green pads; the kick is the bar across it) */
   drums?: boolean;
+  /** vocals: no highway at all, only the background (the HUD draws the vocal lane) */
+  noHighway?: boolean;
   dt: number;
   /** world units per second */
   speed: number;
@@ -706,16 +708,19 @@ export class Renderer {
     gl.disable(gl.CULL_FACE);
 
     const glass = this.skin.style === CRYSTAL;
-    this.fillNotes(s);
+    if (s.noHighway) this.gemCount = 0;
+    else this.fillNotes(s);
     this.drawBackground(s);
-    // Crystal refracts what is behind it: copy the frame before the highway and before the gems.
-    if (glass) this.grab(0, fbo);
-    this.drawHighway(s);
-    this.drawBeats(s);
-    this.drawSustains();
-    this.drawButtons(s);
-    if (glass) this.grab(1, fbo);
-    this.drawGems();
+    if (!s.noHighway) {
+      // Crystal refracts what is behind it: copy the frame before the highway and before the gems.
+      if (glass) this.grab(0, fbo);
+      this.drawHighway(s);
+      this.drawBeats(s);
+      this.drawSustains();
+      this.drawButtons(s);
+      if (glass) this.grab(1, fbo);
+      this.drawGems();
+    }
     this.drawParticles();
 
     if (this.msFbo) {
