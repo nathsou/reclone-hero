@@ -101,13 +101,14 @@ before the next notes, which helps on a phone.
   Favourites are kept in backups.
 - **Genre filter:** show only, or hide, whole genre families (hiding *Metal* also hides metalcore, djent,
   deathcore…) or exact genres.
-- **Themes:** Classic dark (the default: a textured board, steel rails, domed gems and wheel frets) and
+- **Themes:** Classic dark (the default: a textured board, steel rails, cone gems and wheel frets) and
   Daylight ink (a paper highway with inked outlines). "Match system" switches between the two. The earlier
   colour schemes (Swiss, Baroque, Synthwave, Terminal, Paper, Midnight) are still there under Settings › Display.
-- **Note styles**, independent of the theme: Classic dome (the default) and Crystal (lit glass beads on a
-  flowing glass highway that refracts what is behind it; see [Graphics](#graphics)). Both read the same way
-  at a glance: strums are the fret colour with a bright centre, HOPOs are white inside a coloured ring, taps
-  are dark inside a glowing coloured ring, and every gem has a dark outline that holds up on any board.
+- **Note styles**, independent of the theme: Cone (the Classic theme's: Clone Hero-style gems), Classic dome
+  (the Daylight ink theme's) and Crystal (lit glass beads on a flowing glass highway that refracts what is
+  behind it; see [Graphics](#graphics)). All three tell strums from HOPOs by light, the way Clone Hero does:
+  a HOPO's top glows white (bloom turns it into a halo), a strum's never does, and taps are dark inside a
+  glowing coloured ring. Every gem keeps its fret colour and an outline that holds up on any board.
 - **Backups:** Settings › Data exports settings, key and controller mappings, favourites and best scores to a
   file, to import on another computer (scores merge, keeping the best; favourites are combined).
 - **Controls:** remap any single guitar input (Settings › Controls › Change) without redoing the rest.
@@ -238,15 +239,17 @@ beat lines, fret buttons, particles), so the CPU only uploads the handful of not
 scene renders to an HDR (half-float), multisampled target, then goes through a bloom chain and an ACES tonemap.
 The look is neon-on-dark, emissive shapes carry most of the meaning, and a miss reads as missing light.
 
-The gems are designed to be read at a glance, at any distance. **Classic dome** gems sit in a dark graphite
-base that outlines them against the board; a rounded bezel ring of the fret colour frames a saturated domed
-face, and a small white cap glows just enough to bloom. HOPOs swap the face for white and taps for dark
-glass, so the type survives even when a gem is a few pixels wide; open notes, star power (ice blue) and
-misses (grey) keep the same structure. Sustains are ribbons of the fret colour with a light core and the
-same dark outline. The colours are authored in sRGB and mapped through the inverse of the tone curve, so they
-land on screen as designed instead of washing out.
+The gems are designed to be read at a glance, at any distance, and the note type is carried by light
+rather than by small markings: a HOPO's top glows white and blooms into a halo, a strum's top is matte, a
+tap's is dark inside a glowing ring of the fret colour. **Cone** gems follow Clone Hero's: a silver base band
+under a sloped cone of the fret colour (the slope faces the player, so the colour reads from far away)
+topped by a matte silver cap in a black ring on strums. **Classic dome** gems sit in a dark graphite base that
+outlines them; a bezel ring of the fret colour frames a saturated domed face with a small silver cap. Open
+notes, star power (ice blue) and misses (grey) keep the same structure. Sustains are ribbons of the fret
+colour with a light core and a dark outline. The colours are authored in sRGB and mapped through the inverse
+of the tone curve, so they land on screen as designed instead of washing out.
 
-**Crystal** gems are solid lit glass: strums glow from a white-hot core, HOPOs are frosted, taps are smoked,
+**Crystal** gems are solid lit glass: strums are coloured, HOPOs are frosted glass that glows, taps are smoked,
 and a dark band inside a bright silhouette outlines each bead. They refract for real, in screen space: the frame is copied just before the highway is drawn and
 again just before the gems, and each glass surface samples the copy of what is behind it, offset by its
 surface normal. The three colour channels are offset by slightly different amounts, so edges split into

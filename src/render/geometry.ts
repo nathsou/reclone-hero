@@ -167,6 +167,55 @@ export function domeBarMesh(halfWidth: number): Float32Array {
   return all;
 }
 
+// ---------------------------------------------------------------- Cone (Clone Hero style)
+
+/** Cone gem radii: the silver base band, the top of the coloured cone, the cap. */
+export const CONE_R = 0.445;
+export const CONE_TOP = 0.275;
+export const CONE_CAP = 0.2;
+
+/**
+ * Cone gem, after Clone Hero's: a silver base band (0) under a sloped cone of the fret colour (1), a ring
+ * round the top (3) and a flat cap (2), over a shadow disc (4). The cone's slope faces the player, so the
+ * colour reads from far away; the top carries the note type (matte cap in a black ring on strums, a cap
+ * that glows white on HOPOs, a dark cap in a glowing ring on taps).
+ */
+export function coneMesh(): Float32Array {
+  return lathe(
+    [
+      ...chain([[0, 0.292], [0.1, 0.29], [CONE_CAP - 0.02, 0.285], [CONE_CAP, 0.28]], 2),
+      ...chain([[CONE_CAP, 0.28], [CONE_TOP - 0.02, 0.28], [CONE_TOP, 0.272]], 3),
+      ...chain([[CONE_TOP, 0.272], [0.36, 0.185], [0.42, 0.11], [0.435, 0.085]], 1),
+      ...chain([[0.435, 0.085], [CONE_R, 0.075], [CONE_R, 0.02], [0.43, 0]], 0),
+      ...chain([[0, 0.012], [0.5, 0.012]], 4),
+    ],
+    48,
+    DOME_ZS,
+    false,
+    0,
+    true,
+  );
+}
+
+/** Open note in the cone style: a bar with the gem's regions and rounded ends. */
+export function coneBarMesh(halfWidth: number): Float32Array {
+  const R = OPEN_R;
+  return lathe(
+    [
+      ...chain([[0, 0.19], [0.04, 0.188], [0.06, 0.184]], 2),
+      ...chain([[0.06, 0.184], [0.085, 0.184], [0.095, 0.178]], 3),
+      ...chain([[0.095, 0.178], [0.16, 0.11], [0.19, 0.075]], 1),
+      ...chain([[0.19, 0.075], [R, 0.065], [R, 0.015], [R - 0.01, 0]], 0),
+      ...chain([[0, 0.012], [R + 0.05, 0.012]], 4),
+    ],
+    32,
+    1,
+    false,
+    halfWidth - R,
+    true,
+  );
+}
+
 /**
  * Wheel fret button. Regions: base disc (0), fret ring (1), well with spokes (2), hub dome (3).
  * The base is drawn a little to the front by the shader, as a shadow and as the ink outline.

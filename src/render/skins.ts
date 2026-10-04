@@ -1,14 +1,14 @@
 // Note skins: how gems, sustains, fret buttons and hit particles look. Independent of the page theme.
 // Colour order: green, red, yellow, blue, orange, open, star power, missed (linear light).
 
-export const SKIN_IDS = ['dome', 'glass'] as const;
+export const SKIN_IDS = ['dome', 'cone', 'glass'] as const;
 export type SkinId = (typeof SKIN_IDS)[number];
 
 export interface NoteSkin {
   id: SkinId;
   name: string;
   description: string;
-  /** index passed to shaders to pick a shading style: 0 dome, 1 crystal */
+  /** index passed to shaders to pick a shading style: 0 dome, 1 crystal, 2 cone */
   style: number;
   colors: number[][];
   particles: 'sparks' | 'glitter';
@@ -20,7 +20,7 @@ export const SKINS: Record<SkinId, NoteSkin> = {
   dome: {
     id: 'dome',
     name: 'Classic dome',
-    description: 'Domed gems in a dark outline: colour for strums, white for HOPOs, dark for taps. Wheel frets.',
+    description: 'Domed gems in a dark outline: the fret colour with a silver cap for strums, a glowing white face for HOPOs, a dark face for taps. Wheel frets.',
     style: 0,
     // the gem faces' colours (FRET in the shaders), in linear light
     colors: [
@@ -36,10 +36,29 @@ export const SKINS: Record<SkinId, NoteSkin> = {
     particles: 'sparks',
     hopoScale: 0.95,
   },
+  cone: {
+    id: 'cone',
+    name: 'Cone',
+    description: 'Clone Hero-style cones: the colour on the slope, a silver cap on strums, a glowing white top on HOPOs, a dark cap in a glowing ring on taps.',
+    style: 2,
+    // the same face colours as the dome (FRET in the shaders), in linear light
+    colors: [
+      [0.01, 0.646, 0.066],
+      [0.891, 0.015, 0.04],
+      [1.0, 0.612, 0.003],
+      [0.012, 0.167, 1.0],
+      [1.0, 0.198, 0.002],
+      [0.389, 0.072, 1.0],
+      [0.076, 0.774, 1.0],
+      [0.28, 0.259, 0.227],
+    ],
+    particles: 'sparks',
+    hopoScale: 1,
+  },
   glass: {
     id: 'glass',
     name: 'Crystal',
-    description: 'Lit glass beads on a flowing glass highway: coloured for strums, frosted for HOPOs, smoked for taps.',
+    description: 'Lit glass beads on a flowing glass highway: coloured for strums, glowing frosted glass for HOPOs, smoked for taps.',
     style: 1,
     colors: [
       [0.1, 0.85, 0.3],

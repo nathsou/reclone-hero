@@ -50,18 +50,36 @@ export function skinPreviewSvg(id: SkinId): string {
         body +=
           kind === 2
             ? `<ellipse cx="${x}" cy="${cy - 1.6}" rx="5.4" ry="3.6" fill="#2a2930"/><ellipse cx="${x}" cy="${cy - 1.6}" rx="2.6" ry="1.8" fill="${c.light}"/>`
-            : `<ellipse cx="${x}" cy="${cy - 1.6}" rx="5.4" ry="3.6" fill="#ffffff"/>`;
+            : kind === 1
+              ? `<ellipse cx="${x}" cy="${cy - 1.6}" rx="9" ry="6" fill="#ffffff" opacity=".55"/><ellipse cx="${x}" cy="${cy - 1.6}" rx="5.4" ry="3.6" fill="#ffffff"/>`
+              : `<ellipse cx="${x}" cy="${cy - 1.6}" rx="5.6" ry="3.8" fill="#0d0d0f"/><ellipse cx="${x}" cy="${cy - 1.6}" rx="4.3" ry="2.9" fill="#d9d7d3"/>`;
+        break;
+      }
+      case 'cone': {
+        // a silver base band, a cone of the fret colour, and the top: a matte silver cap in a black ring
+        // (strum), a glowing white top (HOPO) or a dark cap in a glowing coloured ring (tap)
+        const c = DOME[idx];
+        defs += `<linearGradient id="cone-s${idx}" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="${mixHex(c.fret, c.light, 0.4)}"/><stop offset=".55" stop-color="${c.fret}"/><stop offset="1" stop-color="${c.shade}"/></linearGradient>`;
+        if (kind === 1) defs += `<radialGradient id="cone-g${idx}"><stop offset=".45" stop-color="#ffffff" stop-opacity=".9"/><stop offset="1" stop-color="#ffffff" stop-opacity="0"/></radialGradient>`;
+        body += `<ellipse cx="${x}" cy="${cy + 8}" rx="17" ry="6" fill="#e9e7e3"/>`;
+        body += `<path d="M${x - 17} ${cy + 6} L${x - 10} ${cy - 5} L${x + 10} ${cy - 5} L${x + 17} ${cy + 6} Z" fill="url(#cone-s${idx})"/>`;
+        body += `<ellipse cx="${x}" cy="${cy + 6}" rx="17" ry="5.5" fill="url(#cone-s${idx})"/>`;
+        const ring = kind === 0 ? '#0d0d0f' : kind === 1 ? '#ffffff' : mixHex(c.fret, c.light, 0.35);
+        const cap = kind === 0 ? '#d9d7d3' : kind === 2 ? '#1c1b20' : '#ffffff';
+        if (kind === 1) body += `<ellipse cx="${x}" cy="${cy - 6}" rx="16" ry="8" fill="url(#cone-g${idx})"/>`;
+        body += `<ellipse cx="${x}" cy="${cy - 5}" rx="10" ry="4.2" fill="${ring}"/>`;
+        body += `<ellipse cx="${x}" cy="${cy - 5}" rx="7" ry="2.9" fill="${cap}"/>`;
         break;
       }
       case 'glass': {
-        // a lit glass bead: coloured with a white-hot core (strum), frosted white in a coloured rim (HOPO)
+        // a lit glass bead: coloured (strum), frosted white in a coloured rim (HOPO)
         // or smoked in a glowing rim (tap); a dark band inside a bright silhouette outlines each one
         const face =
           kind === 1
             ? `<stop offset="0" stop-color="#f2f3f6"/><stop offset=".62" stop-color="#d9dbe0"/><stop offset=".68" stop-color="${col}"/><stop offset="1" stop-color="${col}"/>`
             : kind === 2
               ? `<stop offset="0" stop-color="${col}"/><stop offset=".18" stop-color="#101012"/><stop offset=".62" stop-color="#0b0b0d"/><stop offset=".68" stop-color="${col}"/><stop offset="1" stop-color="${col}"/>`
-              : `<stop offset="0" stop-color="#ffffff"/><stop offset=".3" stop-color="${mixHex(col, '#ffffff', 0.45)}"/><stop offset="1" stop-color="${col}"/>`;
+              : `<stop offset="0" stop-color="${mixHex(col, '#ffffff', 0.25)}"/><stop offset="1" stop-color="${col}"/>`;
         defs += `<radialGradient id="glass-b${idx}" cx=".5" cy=".5" r=".5">${face}</radialGradient>`;
         body += `<ellipse cx="${x}" cy="${cy + 3}" rx="18" ry="12" fill="rgba(0,0,0,.45)"/>`;
         body += `<ellipse cx="${x}" cy="${cy}" rx="16" ry="11" fill="url(#glass-b${idx})"/>`;
