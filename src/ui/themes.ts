@@ -69,9 +69,9 @@ export const THEMES: Record<ThemeId, ThemeDef> = {
   classic: {
     id: 'classic',
     name: 'Classic dark',
-    description: 'Textured board, domed gems, wheel frets.',
+    description: 'Textured board, cone gems, wheel frets.',
     swatch: ['#0d0c0b', '#171614', '#ff7038', '#f2efe9'],
-    skin: 'dome',
+    skin: 'cone',
     render: scene({
       light: false,
       bgBottom: [0.004, 0.0035, 0.003],

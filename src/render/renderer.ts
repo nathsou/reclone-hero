@@ -2,7 +2,7 @@ import type { BeatList, NoteList } from '../chart/types.ts';
 import { HOPO, TAP, noteListOf } from '../chart/types.ts';
 import { HIT, MISSED } from '../engine/engine.ts';
 import type { Quality } from '../settings.ts';
-import { OPEN_R, QUAD, beadMesh, domeBarMesh, domeMesh, glassBarMesh, glassButtonMesh, stripMesh, wheelMesh } from './geometry.ts';
+import { OPEN_R, QUAD, beadMesh, coneBarMesh, coneMesh, domeBarMesh, domeMesh, glassBarMesh, glassButtonMesh, stripMesh, wheelMesh } from './geometry.ts';
 import { InstanceBuffer, deleteTarget, program, staticBuffer, target } from './gl.ts';
 import type { GL, Program, Target } from './gl.ts';
 import { lookAt, multiply, perspective, project } from './math.ts';
@@ -129,6 +129,7 @@ export class Renderer {
   private gems!: Mesh;
   /** per skin style: gems, open bars and fret buttons */
   private styleMeshes!: { gems: Mesh; opens: Mesh; buttons: Mesh }[];
+  private wheels!: Mesh;
   private skin: NoteSkin = SKINS.dome;
   private colorsFlat = new Float32Array(SKINS.dome.colors.flat());
   private opens!: Mesh;
@@ -273,10 +274,13 @@ export class Renderer {
       const inst = new InstanceBuffer(gl, instLayout, 3, cap);
       return { vao, count: mesh.length / 7, inst };
     };
-    // Both skins' meshes are small; build them all now so switching skins costs nothing.
+    // Every skin's meshes are small; build them all now so switching skins costs nothing.
+    // the dome and the cone share the wheel frets
+    this.wheels = lit(wheelMesh(), 5, [4, 4]);
     this.styleMeshes = [
-      { gems: lit(domeMesh(), 1024, [4, 4]), opens: lit(domeBarMesh(HALF - 0.28), 128, [4, 4]), buttons: lit(wheelMesh(), 5, [4, 4]) },
+      { gems: lit(domeMesh(), 1024, [4, 4]), opens: lit(domeBarMesh(HALF - 0.28), 128, [4, 4]), buttons: this.wheels },
       { gems: lit(beadMesh(), 1024, [4, 4]), opens: lit(glassBarMesh(HALF - 0.28), 128, [4, 4]), buttons: lit(glassButtonMesh(), 5, [4, 4]) },
+      { gems: lit(coneMesh(), 1024, [4, 4]), opens: lit(coneBarMesh(HALF - 0.28), 128, [4, 4]), buttons: this.wheels },
     ];
     ({ gems: this.gems, opens: this.opens, buttons: this.buttons } = this.styleMeshes[this.skin.style]);
 
