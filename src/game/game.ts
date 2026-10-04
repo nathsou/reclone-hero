@@ -22,6 +22,7 @@ import type { HudState } from '../ui/hud.ts';
 import { noteSkin, renderTheme } from '../ui/theme.ts';
 import { SKIP_CHORD, canSkip, findGaps, gapAt, skipTarget } from './gaps.ts';
 import type { Gap } from './gaps.ts';
+import { MODIFIER_LABEL, isModifier, windowScale } from './modifiers.ts';
 
 /** Misses are judged slightly behind real time so late-arriving input events are never pre-empted. */
 const JUDGE_LAG = 0.02;
@@ -48,6 +49,8 @@ export interface GameSetup {
   practice?: PracticeRange;
   /** song speed outside practice (1 = as recorded) */
   speed?: number;
+  /** modifiers on for this run (the track already has the note ones applied) */
+  mods?: string[];
 }
 
 export interface SectionResult {
@@ -274,7 +277,7 @@ export class Game {
     const { track, chart, practice } = this.setup;
     const n = track.notes.length;
     // At another song speed the windows are kept the same length in real time (practice stays lenient).
-    const scale = practice ? 1 : this.rate;
+    const scale = (practice ? 1 : this.rate) * windowScale(this.setup.mods ?? []);
     this.engine = new Engine(
       track,
       chart.tempo,
@@ -315,7 +318,8 @@ export class Game {
     this.prepared = true;
     const { song, practice } = this.setup;
     const t = this.setup.track;
-    this.hud.setTitle(song.name, song.artist, `${INSTRUMENT_LABEL[t.instrument]} · ${t.difficulty}${!practice && this.rate !== 1 ? ` · ${Math.round(this.rate * 100)}%` : ''}`);
+    const extras = [!practice && this.rate !== 1 ? `${Math.round(this.rate * 100)}%` : '', ...(this.setup.mods ?? []).filter(isModifier).map((m) => MODIFIER_LABEL[m])].filter(Boolean);
+    this.hud.setTitle(song.name, song.artist, [`${INSTRUMENT_LABEL[t.instrument]} · ${t.difficulty}`, ...extras].join(' · '));
     this.hud.setSections(this.setup.chart.sections.map((s) => s.time), practice ? practice.start : this.startTime, this.endTime);
     this.hud.setLyrics(this.setup.chart.lyrics);
     if (practice) this.hud.toast(`PRACTICE · ${practice.label}`, 'info', `${Math.round(practice.speed * 100)}% speed`);

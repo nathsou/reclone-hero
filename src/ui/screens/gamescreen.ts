@@ -5,6 +5,7 @@ import type { Chart } from '../../chart/build.ts';
 import type { Difficulty, Instrument } from '../../chart/types.ts';
 import { DIFFICULTIES, INSTRUMENT_LABEL, trackKey } from '../../chart/types.ts';
 import { Game, effectiveQuality } from '../../game/game.ts';
+import { applyModifiers } from '../../game/modifiers.ts';
 import type { PracticeRange } from '../../game/game.ts';
 import type { NavAction } from '../../input/input.ts';
 import type { SongEntry } from '../../library/song.ts';
@@ -30,6 +31,8 @@ export interface GameRequest {
   practice?: PracticeRange;
   /** song speed outside practice (1 or absent: as recorded) */
   speed?: number;
+  /** modifier ids (game/modifiers.ts) */
+  mods?: string[];
 }
 
 export class GameScreen implements Screen {
@@ -95,8 +98,10 @@ export class GameScreen implements Screen {
     const { song, chart, instrument, difficulty, practice } = this.req;
     const speed = practice ? 1 : (this.req.speed ?? 1);
     const lib = this.app.library;
-    const track = chart.tracks.get(trackKey(instrument, difficulty));
-    if (!track) throw new Error('This part is not charted');
+    const charted = chart.tracks.get(trackKey(instrument, difficulty));
+    if (!charted) throw new Error('This part is not charted');
+    const mods = this.req.mods ?? [];
+    const track = applyModifiers(charted, mods);
     await audio().resume();
 
     const stems = Object.entries(song.stems).filter(([k]) => k !== 'preview');
@@ -137,7 +142,7 @@ export class GameScreen implements Screen {
       a.setBuffers({ player: b.player ? stretched[0] : null, backing: b.backing ? stretched[b.player ? 1 : 0] : null, origin: from });
     }
     this.progress(0.97, 'Warming up…');
-    this.game = new Game({ song, chart, track, instrument, duration: loaded.duration, bot: this.req.bot, practice, speed }, this.canvas, this.hud);
+    this.game = new Game({ song, chart, track, instrument, duration: loaded.duration, bot: this.req.bot, practice, speed, mods }, this.canvas, this.hud);
     if (song.video) {
       try {
         const url = await lib.fileUrl(song, song.video);
@@ -248,8 +253,9 @@ export class GameScreen implements Screen {
   }
 
   private changeDifficulty(d: Difficulty) {
-    const track = this.req.chart.tracks.get(trackKey(this.req.instrument, d));
-    if (!track || !this.game) return;
+    const charted = this.req.chart.tracks.get(trackKey(this.req.instrument, d));
+    if (!charted || !this.game) return;
+    const track = applyModifiers(charted, this.req.mods ?? []);
     if (d === this.req.difficulty) {
       this.refreshPause();
       return;

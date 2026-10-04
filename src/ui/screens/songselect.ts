@@ -5,6 +5,7 @@ import { DIFFICULTIES, INSTRUMENTS, INSTRUMENT_LABEL, trackKey } from '../../cha
 import { chartFor } from '../../game/charts.ts';
 import { getBest, PLAYED_WITH_LABEL, scoreKey } from '../../game/scores.ts';
 import { getHistory, variantLabel } from '../../game/history.ts';
+import { MODIFIERS, MODIFIER_HINT, MODIFIER_LABEL, countsForBest, isModifier, toggleModifier } from '../../game/modifiers.ts';
 import { TouchFrets } from '../touchFrets.ts';
 import type { NavAction } from '../../input/input.ts';
 import type { SongEntry } from '../../library/song.ts';
@@ -690,6 +691,7 @@ export class SongSelect implements Screen {
       chartReady ? parts : h('div', { class: 'loading-chart' }, error ? '' : 'Reading chart…'),
       chartReady ? diffs : null,
       chartReady ? historyNote(scoreKey(song.id, trackKey(this.instrument, this.difficulty))) : null,
+      settings.modifiers.length ? h('button', { class: 'note mods-line', title: 'Change modifiers (M)', onclick: () => this.openModifiers() }, `Modifiers: ${modifierText()}${countsForBest(settings.modifiers) ? '' : ' (no best scores)'}`) : null,
       stemNote,
       h(
         'div',
@@ -948,14 +950,29 @@ export class SongSelect implements Screen {
     updateSettings({ instrument: this.instrument, difficulty: this.difficulty });
     this.preview.cancel();
     const { GameScreen } = await import('./gamescreen.ts');
-    this.app.show(new GameScreen(this.app, { song: this.filtered[this.sel], chart: this.chart!, instrument: this.instrument, difficulty: this.difficulty, bot, speed: settings.songSpeed }));
+    this.app.show(new GameScreen(this.app, { song: this.filtered[this.sel], chart: this.chart!, instrument: this.instrument, difficulty: this.difficulty, bot, speed: settings.songSpeed, mods: settings.modifiers }));
   }
 
   private async practice() {
     if (!this.ready()) return;
     updateSettings({ instrument: this.instrument, difficulty: this.difficulty });
     const { PracticeModal } = await import('./practice.ts');
-    this.app.pushModal(new PracticeModal(this.app, { song: this.filtered[this.sel], chart: this.chart!, instrument: this.instrument, difficulty: this.difficulty }));
+    this.app.pushModal(new PracticeModal(this.app, { song: this.filtered[this.sel], chart: this.chart!, instrument: this.instrument, difficulty: this.difficulty, mods: settings.modifiers }));
+  }
+
+  /** The modifiers menu: each one switches on and off with green or blue/orange. */
+  private openModifiers() {
+    const items = (): MenuItem[] =>
+      MODIFIERS.map((m) => ({
+        label: `${settings.modifiers.includes(m) ? '●' : '○'} ${MODIFIER_LABEL[m]} · ${MODIFIER_HINT[m]}`,
+        action: () => {},
+        adjust: () => {
+          updateSettings({ modifiers: toggleModifier(settings.modifiers, m) });
+          const song = this.filtered[this.sel];
+          if (song) this.renderDetail(song);
+        },
+      }));
+    void import('./songOptions.ts').then(({ SongOptions }) => this.app.pushModal(new SongOptions(this.app, 'Modifiers · All HOPOs and All taps set no best scores', items)));
   }
 
   /** Song speed in 5% steps, 50% to 150%, like Clone Hero's song speed. */
@@ -1119,6 +1136,7 @@ export class SongSelect implements Screen {
     if (this.available().length > 1) items.push({ label: `Instrument: ${INSTRUMENT_LABEL[this.instrument]}`, action: none, adjust: () => this.cycleInstrument() });
     if (ready) items.push({ label: `Difficulty: ${DIFF_LABEL[this.difficulty]}`, action: none, adjust: (d) => this.cycleDifficulty(d) });
     items.push({ label: `Song speed: ${Math.round(settings.songSpeed * 100)}%${settings.songSpeed < 1 ? ' (no best scores)' : ''}`, action: none, adjust: (d) => this.changeSpeed(d) });
+    items.push({ label: `Modifiers: ${modifierText() || 'none'}…`, action: () => this.openModifiers() });
     items.push(
       { label: `Sort: ${SORT_LABEL[settings.sort]}`, action: none, adjust: (d) => this.cycleSort(d) },
       { label: `Order: ${settings.sortReverse ? reversed : natural}`, action: none, adjust: () => this.sortDir.click() },
@@ -1208,6 +1226,7 @@ export class SongSelect implements Screen {
     else if (e.key === ' ') this.openOptions();
     else if (e.key === '*') this.toggleFav();
     else if (e.key === 'Delete') this.removeSong();
+    else if (e.key === 'm' || e.key === 'M') this.openModifiers();
     else if (e.key === '-' || e.key === '_') this.changeSpeed(-1);
     else if (e.key === '=' || e.key === '+') this.changeSpeed(1);
     else if (e.key === '/') {
@@ -1229,9 +1248,14 @@ function historyNote(key: string): HTMLElement | null {
   const others = Object.entries(hist.bests)
     .filter(([v]) => v !== '100')
     .sort((a, b) => a[0].localeCompare(b[0], undefined, { numeric: true }))
-    .map(([v, r]) => `${variantLabel(v)} ${r.score.toLocaleString('en-US')}`);
+    .map(([v, r]) => `${variantLabel(v, MODIFIER_LABEL)} ${r.score.toLocaleString('en-US')}`);
   const runs = hist.runs.length >= 25 ? '25+ runs' : `${hist.runs.length} run${hist.runs.length === 1 ? '' : 's'}`;
   return h('div', { class: 'note history-note' }, `${runs} · last ${(last.accuracy * 100).toFixed(1)}%${others.length ? ` · best at ${others.join(' · ')}` : ''}`);
+}
+
+/** The modifiers switched on, by name ('' for none). */
+function modifierText(): string {
+  return settings.modifiers.filter(isModifier).map((m) => MODIFIER_LABEL[m]).join(' · ');
 }
 
 /** The song speed on the Play button, when it is not 100%. */

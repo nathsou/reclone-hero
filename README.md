@@ -95,6 +95,10 @@ before the next notes, which helps on a phone.
 - **Song speed**, as in Clone Hero: play whole songs at 50–150% (`-`/`+` in the song list, or the song
   options). The audio is time-stretched in a Web Worker while the song loads, and the hit window keeps its
   length in real time. Scores below 100% are shown but not kept as best scores.
+- **Modifiers** (`M` or the song options), as in Clone Hero: *Mirror* (green ↔ orange), *All strums*, *All
+  HOPOs*, *All taps* and *Precision* (half the hit window). They stay on until switched off and show in the
+  song details and the in-game title. All HOPOs and All taps make a part easier, so those runs set no best score
+  (they still get a best of their own in the score history).
 - **Score history:** every run of a part is kept (the last 25), with the best at each song speed and set
   of modifiers. The results screen shows your last runs as bars and tags a best at another speed; the song
   details list the run count, the last accuracy and the bests at other speeds. History travels in backups.

@@ -32,6 +32,8 @@ export interface Settings {
   timingBar: boolean;
   /** words at the top of the screen on charts that have lyrics */
   lyrics: boolean;
+  /** modifier ids switched on for the next runs (see game/modifiers.ts) */
+  modifiers: string[];
   /** song speed for normal play (1 = as recorded); practice has its own */
   songSpeed: number;
   /** a countdown through long intros and breaks */
@@ -76,6 +78,7 @@ export const DEFAULT_SETTINGS: Settings = {
   lyrics: true,
   breakCountdown: true,
   songSpeed: 1,
+  modifiers: [],
   missFeedback: 'auto',
   missSounds: true,
   volMaster: 0.9,
@@ -119,6 +122,7 @@ function load(): Settings {
       else if (stored.theme === 'light') stored.theme = 'ink';
       // Only the Classic dome, Cone and Crystal note styles are left.
       if (stored.noteStyle !== undefined && stored.noteStyle !== 'dome' && stored.noteStyle !== 'cone' && stored.noteStyle !== 'glass') delete stored.noteStyle;
+      if (stored.modifiers !== undefined && !(Array.isArray(stored.modifiers) && stored.modifiers.every((m) => typeof m === 'string'))) delete stored.modifiers;
       delete stored.v;
       return { ...DEFAULT_SETTINGS, ...(stored as Partial<Settings>) };
     }

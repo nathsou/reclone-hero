@@ -1404,3 +1404,15 @@
 .song-detail .history-note {
   color: var(--dim);
 }
+
+.song-detail .mods-line {
+  display: block;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--accent);
+  font: inherit;
+  font-size: 12px;
+  text-align: left;
+  cursor: pointer;
+}

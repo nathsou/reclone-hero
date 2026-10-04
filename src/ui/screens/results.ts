@@ -6,6 +6,7 @@ import type { GameResult, SectionResult } from '../../game/game.ts';
 import { getBest, PLAYED_WITH_LABEL, recordScore, scoreKey } from '../../game/scores.ts';
 import { getHistory, recordRun, variantKey, variantLabel } from '../../game/history.ts';
 import type { Run } from '../../game/history.ts';
+import { MODIFIER_LABEL, countsForBest, isModifier } from '../../game/modifiers.ts';
 import type { NavAction } from '../../input/input.ts';
 import { skinHex } from '../../render/skins.ts';
 import { noteSkin } from '../theme.ts';
@@ -35,7 +36,7 @@ function runsChart(runs: Run[]): HTMLElement | null {
         h('i', {
           class: `${i === last.length - 1 ? 'now' : ''}${x.fc ? ' fc' : ''}`,
           style: `height:${Math.max(8, Math.round((x.score / max) * 100))}%`,
-          title: `${day(x.date)} · ${x.score.toLocaleString('en-US')} · ${(x.accuracy * 100).toFixed(1)}%${x.fc ? ' · FC' : ''}${x.speed !== 1 ? ` · ${Math.round(x.speed * 100)}%` : ''}${x.mods.length ? ` · ${x.mods.join(', ')}` : ''}`,
+          title: `${day(x.date)} · ${x.score.toLocaleString('en-US')} · ${(x.accuracy * 100).toFixed(1)}%${x.fc ? ' · FC' : ''}${x.speed !== 1 ? ` · ${Math.round(x.speed * 100)}%` : ''}${x.mods.length ? ` · ${x.mods.map((m) => (isModifier(m) ? MODIFIER_LABEL[m] : m)).join(', ')}` : ''}`,
         }),
       ),
     ),
@@ -68,15 +69,16 @@ export class ResultsScreen implements Screen {
     let newBest = false;
     const key = scoreKey(song.id, trackKey(t.instrument, t.difficulty));
     // A slowed-down song is easier: its score is shown but not kept as a best.
-    const slowed = (req.speed ?? 1) < 1;
-    const run: Run = { score: r.score, stars: r.stars, accuracy: acc, fc, date: Date.now(), input: r.input, speed: req.speed ?? 1, mods: [] };
+    const mods = (req.mods ?? []).filter(isModifier);
+    const slowed = (req.speed ?? 1) < 1 || !countsForBest(mods);
+    const run: Run = { score: r.score, stars: r.stars, accuracy: acc, fc, date: Date.now(), input: r.input, speed: req.speed ?? 1, mods: [...mods].sort() };
     const variant = variantKey(run.speed, run.mods);
     let variantBest = false;
     if (!req.bot && !req.practice) {
       variantBest = recordRun(key, run);
       if (!slowed) newBest = recordScore(key, { score: r.score, stars: r.stars, accuracy: acc, fc, date: run.date, input: r.input });
     }
-    const bestTag = newBest ? 'NEW BEST' : variantBest && variant !== '100' ? `BEST AT ${variantLabel(variant).toUpperCase()}` : null;
+    const bestTag = newBest ? 'NEW BEST' : variantBest && variant !== '100' ? `BEST AT ${variantLabel(variant, MODIFIER_LABEL).toUpperCase()}` : null;
     const best = getBest(key);
     const weakest = (this.weakest = req.practice ? null : weakestSection(r.sections));
     const mean = r.deltas.length ? r.deltas.reduce((a, b) => a + b, 0) / r.deltas.length : 0;
@@ -133,7 +135,7 @@ export class ResultsScreen implements Screen {
         'div',
         { class: 'res-head' },
         art,
-        h('div', { class: 'res-song' }, h('div', { class: 'title' }, song.name), h('div', { class: 'artist' }, `${song.artist} · ${INSTRUMENT_LABEL[t.instrument]} ${t.difficulty}${req.bot ? ' · bot' : ` · played with ${PLAYED_WITH_LABEL[r.input].toLowerCase()}`}${req.practice ? ' · practice' : ''}${!req.practice && req.speed && req.speed !== 1 ? ` · ${Math.round(req.speed * 100)}% speed` : ''}`)),
+        h('div', { class: 'res-song' }, h('div', { class: 'title' }, song.name), h('div', { class: 'artist' }, `${song.artist} · ${INSTRUMENT_LABEL[t.instrument]} ${t.difficulty}${req.bot ? ' · bot' : ` · played with ${PLAYED_WITH_LABEL[r.input].toLowerCase()}`}${req.practice ? ' · practice' : ''}${!req.practice && req.speed && req.speed !== 1 ? ` · ${Math.round(req.speed * 100)}% speed` : ''}${mods.length ? ` · ${mods.map((m) => MODIFIER_LABEL[m]).join(', ')}` : ''}`)),
         h(
           'div',
           { class: 'res-nums' },
