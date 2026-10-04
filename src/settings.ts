@@ -36,6 +36,8 @@ export interface Settings {
   modifiers: string[];
   /** song speed for normal play (1 = as recorded); practice has its own */
   songSpeed: number;
+  /** Guitar Hero's rock meter: hidden, shown, or shown and failing the song when it runs out */
+  rockMeter: 'off' | 'meter' | 'fail';
   /** a countdown through long intros and breaks */
   breakCountdown: boolean;
   missFeedback: MissFeedback;
@@ -77,6 +79,7 @@ export const DEFAULT_SETTINGS: Settings = {
   timingBar: true,
   lyrics: true,
   breakCountdown: true,
+  rockMeter: 'off',
   songSpeed: 1,
   modifiers: [],
   missFeedback: 'auto',

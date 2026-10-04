@@ -219,6 +219,9 @@ export class AudioEngine {
     this.playing = true;
     this.anchored = false;
     this.setPlayerAudible(true, true);
+    // a failed song faded the band out
+    this.musicBus.gain.cancelScheduledValues(0);
+    this.musicBus.gain.value = 1;
   }
 
   stop(): void {
@@ -305,6 +308,21 @@ export class AudioEngine {
     g.cancelScheduledValues(now);
     if (immediate) g.setValueAtTime(on ? 1 : 0, now);
     else g.setTargetAtTime(on ? 1 : 0, now, on ? 0.004 : 0.012);
+  }
+
+  /** The song failed: the band winds down (slows and fades out) over about a second and a half. */
+  failOut(): void {
+    const now = this.ctx.currentTime;
+    for (const s of this.sources) {
+      const r = s.playbackRate;
+      r.cancelScheduledValues(now);
+      r.setValueAtTime(r.value, now);
+      r.linearRampToValueAtTime(0.25, now + 1.5);
+    }
+    const g = this.musicBus.gain;
+    g.cancelScheduledValues(now);
+    g.setValueAtTime(g.value, now);
+    g.linearRampToValueAtTime(0, now + 1.5);
   }
 
   /** Briefly muffle the whole mix: miss feedback for songs without a separate instrument stem. */

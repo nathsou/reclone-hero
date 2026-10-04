@@ -6,7 +6,7 @@ import { applyAction, botActions } from '../engine/bot.ts';
 import type { PlayedWith } from './scores.ts';
 import { TouchFrets } from '../ui/touchFrets.ts';
 import type { Action as BotAction } from '../engine/bot.ts';
-import { Engine, HIT, baseScore, starProgress } from '../engine/engine.ts';
+import { Engine, HIT, ROCK_LOSS, baseScore, starProgress } from '../engine/engine.ts';
 import type { EngineEvent } from '../engine/engine.ts';
 import { FRET_ACTIONS, keyLabel } from '../input/bindings.ts';
 import { input } from '../input/input.ts';
@@ -131,6 +131,8 @@ export interface GameResult {
   /** song time the results timeline spans */
   start: number;
   end: number;
+  /** the rock meter ran out at this song time (fail mode); the run stops there */
+  failedAt?: number;
 }
 
 export class Game {
@@ -281,7 +283,7 @@ export class Game {
     this.engine = new Engine(
       track,
       chart.tempo,
-      { early: (settings.hitWindowMs / 1000) * scale, late: (settings.hitWindowMs / 1000) * scale, strumLeniency: (settings.strumLeniencyMs / 1000) * scale },
+      { early: (settings.hitWindowMs / 1000) * scale, late: (settings.hitWindowMs / 1000) * scale, strumLeniency: (settings.strumLeniencyMs / 1000) * scale, rockLoss: ROCK_LOSS[track.difficulty] },
       practice ? { first: practice.first, last: practice.last } : undefined,
     );
     this.base = baseScore(track, chart.tempo);
@@ -500,7 +502,7 @@ export class Game {
   private readonly lanePts = Array.from({ length: 5 }, () => new Float64Array(2));
   /** the keyboard played the last fret press: key labels show under the frets */
   private kbActive = false;
-  private readonly hs: HudState = { score: 0, multiplier: 1, streak: 0, spBar: 0, spActive: false, stars: 0, accuracy: 1, progress: 0, elapsed: 0, total: 0, spSeconds: 0, fps: 0, cpuMs: 0, worstMs: 0, showFps: false };
+  private readonly hs: HudState = { score: 0, multiplier: 1, streak: 0, spBar: 0, spActive: false, stars: 0, accuracy: 1, progress: 0, elapsed: 0, total: 0, spSeconds: 0, fps: 0, cpuMs: 0, worstMs: 0, showFps: false, rock: 0.5, rockOn: false };
   private rs!: RenderState;
 
   private frame = (now: number) => {
@@ -639,8 +641,12 @@ export class Game {
     hs.cpuMs = this.cpuMs;
     hs.worstMs = this.worstFrame * 1000;
     hs.showFps = settings.showFps;
+    hs.rock = engine.rock;
+    hs.rockOn = settings.rockMeter !== 'off' && !this.setup.bot && !practice;
     this.hud.update(hs);
 
+    // Fail mode: the rock meter ran out (not in practice, nor for the bot).
+    if (!this.ended && this.canFail && engine.rockOutAt === engine.rockOutAt) this.fail(engine.rockOutAt);
     if (!this.paused && !this.ended && t > this.endTime) {
       if (practice) this.loopPractice();
       else this.finish();
@@ -858,11 +864,31 @@ export class Game {
     audio().play(this.startTime, p.speed);
   }
 
-  private finish() {
+  private get canFail(): boolean {
+    return settings.rockMeter === 'fail' && !this.setup.bot && !this.setup.practice;
+  }
+
+  /** The rock meter ran out: the band winds down, SONG FAILED, then the results of what was played. */
+  private fail(at: number) {
+    this.ended = true;
+    const a = audio();
+    a.failOut();
+    a.playSfx('streakBreak', 0.9);
+    this.hud.songFailed();
+    this.missPulse = 1;
+    setTimeout(() => {
+      a.stop();
+      this.finish(at);
+    }, 2400);
+  }
+
+  private finish(failedAt?: number) {
     this.ended = true;
     const e = this.engine;
     const { track, chart } = this.setup;
-    const notes = track.notes;
+    // A failed run only counts the notes reached before the fail.
+    const all = track.notes;
+    const notes = failedAt === undefined ? all : { ...all, length: e.nextNote };
     const missByLane = [0, 0, 0, 0, 0];
     const missByType = { strum: 0, hopo: 0, tap: 0 };
     let missChords = 0;
@@ -927,8 +953,9 @@ export class Game {
       noteState: e.noteState.slice(),
       hitDelta: e.hitDelta.slice(),
       start: Math.min(0, notes.length ? notes.time[0] : 0),
-      end: Math.max(this.endTime, notes.length ? notes.time[notes.length - 1] + 1 : 1),
+      end: failedAt === undefined ? Math.max(this.endTime, notes.length ? notes.time[notes.length - 1] + 1 : 1) : failedAt + 1,
+      failedAt,
     };
-    setTimeout(() => this.onEnd?.(result), 600);
+    setTimeout(() => this.onEnd?.(result), failedAt === undefined ? 600 : 0);
   }
 }

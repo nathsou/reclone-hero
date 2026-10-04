@@ -372,3 +372,8 @@
 .res-runs .bars i.now {
   background: var(--accent);
 }
+
+.res-num .tag.failed {
+  background: var(--bad);
+  color: #fff;
+}

@@ -110,6 +110,11 @@ export class SettingsModal implements Screen {
       toggle('Timing bar', 'timingBar', 'Shows early/late ticks under the strike line.'),
       toggle('Lyrics', 'lyrics', 'Shows the words at the top of the screen on charts that have them.'),
       toggle('Countdown in long breaks', 'breakCountdown', 'Counts down to the first note of a long intro (5 s or more) and through breaks of 12 s or more. Hold red + yellow + blue + orange, or pick Skip in the pause menu, to jump to just before the next note.'),
+      select('Rock meter', 'rockMeter', [
+        ['off', 'Off (Clone Hero)'],
+        ['meter', 'Show it'],
+        ['fail', 'Show it, and fail the song when it runs out (Guitar Hero)'],
+      ]),
       toggle('Auto Star Power', 'autoStarPower', 'Star Power goes off by itself as soon as it can, just before the next notes. Handy on touch screens.'),
       select('When you miss', 'missFeedback', [
         ['auto', 'Mute my part (or muffle)'],

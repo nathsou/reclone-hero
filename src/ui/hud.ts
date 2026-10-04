@@ -62,6 +62,9 @@ export interface HudState {
   /** longest frame interval over the last half second */
   worstMs: number;
   showFps: boolean;
+  /** rock meter 0..1, and whether it is shown */
+  rock: number;
+  rockOn: boolean;
 }
 
 /** DOM overlay for score, multiplier, star power, streak, toasts and the timing bar. */
@@ -79,6 +82,9 @@ export class Hud {
   private readonly multText: HTMLSpanElement;
   private readonly streak: HTMLDivElement;
   private readonly meter: HTMLDivElement;
+  private readonly rock: HTMLDivElement;
+  private lastRock = -1;
+  private lastRockOn = false;
   private readonly spFills: HTMLElement[] = [];
   private readonly spMeter: HTMLDivElement;
   private readonly spText: HTMLDivElement;
@@ -149,7 +155,8 @@ export class Hud {
     this.mult = h('div', { class: 'hud-mult m1' }, this.multText);
     this.streak = h('div', { class: 'hud-streak' }, '');
     this.meter = h('div', { class: 'hud-meter' });
-    this.left = h('div', { class: 'hud-left', 'data-m': '1' }, this.score, h('div', { class: 'hud-row' }, this.streak, this.mult), this.meter);
+    this.rock = h('div', { class: 'hud-rock', title: 'Rock meter' }, h('span', { class: 'zone bad' }), h('span', { class: 'zone meh' }), h('span', { class: 'zone good' }), h('i', { class: 'needle' }));
+    this.left = h('div', { class: 'hud-left', 'data-m': '1' }, this.score, h('div', { class: 'hud-row' }, this.streak, this.mult), this.meter, this.rock);
     this.spMeter = h('div', { class: 'hud-sp' });
     for (let i = 0; i < SP_SEGMENTS; i++) {
       const fill = h('i');
@@ -381,6 +388,17 @@ export class Hud {
       setText(this.elapsed, formatTime(second));
       setText(this.totalEl, formatTime(s.total));
     }
+    if (s.rockOn !== this.lastRockOn) {
+      this.lastRockOn = s.rockOn;
+      this.rock.classList.toggle('on', s.rockOn);
+    }
+    const rock = Math.round(s.rock * 200);
+    if (s.rockOn && rock !== this.lastRock) {
+      this.lastRock = rock;
+      this.rock.style.setProperty('--r', String(rock / 200));
+      this.rock.classList.toggle('danger', rock < 50);
+      this.root.classList.toggle('rock-danger', rock < 50);
+    }
     if (s.showFps) {
       if ((this.fpsFrame & 63) === 0) setText(this.fps, `${s.fps.toFixed(0)} fps · ${s.cpuMs.toFixed(2)} ms cpu · worst frame ${s.worstMs.toFixed(1)} ms`);
     } else if (this.fps.firstChild) setText(this.fps, '');
@@ -441,6 +459,11 @@ export class Hud {
     }, 2500);
   }
 
+  /** The rock meter ran out: the song is over. */
+  songFailed(): void {
+    this.root.append(h('div', { class: 'hud-failed' }, h('div', { class: 't' }, 'SONG FAILED'), h('div', { class: 's' }, 'The crowd has had enough.')));
+  }
+
   /** The last note is in and nothing was missed: a title, confetti from the frets and fireworks. */
   fullCombo(): void {
     const word = (text: string, from: number) => h('span', { class: 'w' }, ...[...text].map((c, i) => h('span', { style: `--i:${from + i}` }, c)));
@@ -467,7 +490,9 @@ export class Hud {
     clearTimeout(this.soloTimer);
     this.soloTimer = 0;
     this.solo.classList.remove('on', 'done', 'perfect', 'slipping');
-    this.root.querySelectorAll('.hud-fc').forEach((el) => el.remove());
+    this.root.querySelectorAll('.hud-fc, .hud-failed').forEach((el) => el.remove());
+    this.root.classList.remove('rock-danger');
+    this.lastRock = -1;
     this.stopConfetti?.();
     this.stopConfetti = null;
   }

@@ -74,7 +74,8 @@ export class ResultsScreen implements Screen {
     const run: Run = { score: r.score, stars: r.stars, accuracy: acc, fc, date: Date.now(), input: r.input, speed: req.speed ?? 1, mods: [...mods].sort() };
     const variant = variantKey(run.speed, run.mods);
     let variantBest = false;
-    if (!req.bot && !req.practice) {
+    const failed = r.failedAt !== undefined;
+    if (!req.bot && !req.practice && !failed) {
       variantBest = recordRun(key, run);
       if (!slowed) newBest = recordScore(key, { score: r.score, stars: r.stars, accuracy: acc, fc, date: run.date, input: r.input });
     }
@@ -139,7 +140,7 @@ export class ResultsScreen implements Screen {
         h(
           'div',
           { class: 'res-nums' },
-          h('div', { class: 'res-num' }, h('div', { class: 'label' }, 'Score'), h('div', { class: 'v' }, r.score.toLocaleString('en-US')), bestTag ? h('span', { class: 'tag best' }, bestTag) : null, h('div', { class: 'res-best' }, `Best score: ${best ? best.score.toLocaleString('en-US') : '—'}`, best?.input ? ` · ${PLAYED_WITH_LABEL[best.input]}` : ''), req.bot || req.practice ? null : runsChart(getHistory(key)?.runs ?? [])),
+          h('div', { class: 'res-num' }, h('div', { class: 'label' }, 'Score'), h('div', { class: 'v' }, r.score.toLocaleString('en-US')), bestTag ? h('span', { class: 'tag best' }, bestTag) : null, failed ? h('span', { class: 'tag failed' }, `FAILED AT ${formatTime(r.failedAt!)}`) : null, h('div', { class: 'res-best' }, `Best score: ${best ? best.score.toLocaleString('en-US') : '—'}`, best?.input ? ` · ${PLAYED_WITH_LABEL[best.input]}` : ''), req.bot || req.practice ? null : runsChart(getHistory(key)?.runs ?? [])),
           h('div', { class: 'res-num' }, h('div', { class: 'label' }, 'Max streak'), h('div', { class: 'v' }, r.maxStreak.toLocaleString('en-US'))),
           h('div', { class: 'res-num' }, h('div', { class: 'label' }, 'Accuracy'), h('div', { class: 'v' }, `${(acc * 100).toFixed(1)}%`), fc ? h('span', { class: 'tag fc' }, 'FULL COMBO') : null),
           h('div', { class: 'res-num' }, h('div', { class: 'label' }, 'Stars'), h('div', { class: 'res-stars' }, starsEl(r.stars))),
@@ -244,6 +245,7 @@ export class ResultsScreen implements Screen {
     const pillH = Math.min(14, laneH - 8);
     const missed: [number, number][] = [];
     for (let i = 0; i < notes.length; i++) {
+      if (r.failedAt !== undefined && notes.time[i] > r.failedAt) break;
       const mask = notes.mask[i];
       const px = x(notes.time[i]);
       const hit = r.noteState[i] === HIT;

@@ -95,6 +95,11 @@ before the next notes, which helps on a phone.
 - **Song speed**, as in Clone Hero: play whole songs at 50–150% (`-`/`+` in the song list, or the song
   options). The audio is time-stretched in a Web Worker while the song loads, and the hit window keeps its
   length in real time. Scores below 100% are shown but not kept as best scores.
+- **Rock meter** (Settings › Gameplay › Rock meter), as in Guitar Hero: off by default (Clone Hero has
+  none), shown, or shown and failing the song. Hits fill it, misses drain it (more on harder difficulties),
+  an overstrum costs a little less than a miss, and setting off Star Power lifts it. It pulses red near the
+  bottom; when it runs out the band winds down, **SONG FAILED**, and the results cover what was played
+  (failed runs set no scores). Never in practice or for the bot.
 - **Modifiers** (`M` or the song options), as in Clone Hero: *Mirror* (green ↔ orange), *All strums*, *All
   HOPOs*, *All taps* and *Precision* (half the hit window). They stay on until switched off and show in the
   song details and the in-game title. All HOPOs and All taps make a part easier, so those runs set no best score

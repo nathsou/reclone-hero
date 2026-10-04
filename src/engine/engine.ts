@@ -13,6 +13,9 @@ export interface EngineConfig {
   hopoStrumGrace: number;
   /** releasing a sustain this close to its end still counts as complete */
   sustainGrace: number;
+  /** rock meter (0..1): gained per note hit, lost per note missed (an overstrum costs 60% of a miss) */
+  rockGain: number;
+  rockLoss: number;
 }
 
 export const DEFAULT_ENGINE_CONFIG: EngineConfig = {
@@ -21,7 +24,14 @@ export const DEFAULT_ENGINE_CONFIG: EngineConfig = {
   strumLeniency: 0.05,
   hopoStrumGrace: 0.09,
   sustainGrace: 0.1,
+  rockGain: 0.02,
+  rockLoss: 0.07,
 };
+
+/** Rock meter loss per miss by difficulty, Guitar Hero style: easier parts forgive more. */
+export const ROCK_LOSS = { easy: 0.04, medium: 0.05, hard: 0.06, expert: 0.07 } as const;
+/** Setting off Star Power lifts the rock meter this much. */
+const ROCK_SP_BOOST = 0.15;
 
 export const PENDING = 0;
 export const HIT = 1;
@@ -131,6 +141,10 @@ export class Engine {
   spPhrasesHit = 0;
   /** index of the solo currently in progress, or -1 */
   activeSolo = -1;
+  /** Guitar Hero's rock meter: 0 (failing) .. 1, starting in the middle */
+  rock = 0.5;
+  /** song time the rock meter first ran out; NaN while it never has */
+  rockOutAt = NaN;
 
   private next: number;
   private readonly end: number;
@@ -274,6 +288,7 @@ export class Engine {
     t = this.advance(t);
     if (this.spActive || this.spBar < 0.5 - 1e-9) return false;
     this.spActive = true;
+    this.rock = Math.min(1, this.rock + ROCK_SP_BOOST);
     this.lastDrainBeat = this.tempo.timeToBeat(t);
     this.emit('spActivate', t);
     this.checkMultiplier(t);
@@ -395,6 +410,7 @@ export class Engine {
       this.miss(n, t, 'wrong');
     } else {
       this.overstrums++;
+      this.rockDown(this.cfg.rockLoss * 0.6, pt);
       this.emit('overstrum', pt).frets = this.frets;
       while (this.sustains.length) {
         const s = this.sustains[this.sustains.length - 1];
@@ -416,6 +432,7 @@ export class Engine {
     this.hitDelta[n] = t - time;
     this.next = n + 1;
     this.hits++;
+    this.rock = Math.min(1, this.rock + this.cfg.rockGain);
 
     for (let i = this.sustains.length - 1; i >= 0; i--) {
       const s = this.sustains[i];
@@ -465,6 +482,7 @@ export class Engine {
     if (n >= this.next) this.next = n + 1;
     this.misses++;
     this.lastNoteHit = false;
+    this.rockDown(this.cfg.rockLoss, t);
     const e = this.emit('miss', t);
     e.note = n;
     e.reason = reason;
@@ -477,6 +495,11 @@ export class Engine {
       p.complete = false;
     }
     this.breakStreak(t);
+  }
+
+  private rockDown(by: number, t: number): void {
+    this.rock = Math.max(0, this.rock - by);
+    if (this.rock === 0 && this.rockOutAt !== this.rockOutAt) this.rockOutAt = t;
   }
 
   private breakStreak(t: number): void {
