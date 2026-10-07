@@ -1,3 +1,4 @@
+import { perform } from '../performance.ts';
 import { abc } from '../abc.ts';
 import { bassOf, comp, powerOf, prog, voicing } from '../arrange.ts';
 import { drumBars, HALF_TIME, PUNK } from '../patterns.ts';
@@ -55,7 +56,7 @@ function drums(): Hit[] {
   ];
 }
 
-export const pocketChange: SongDef = {
+export const pocketChange: SongDef = perform({
   id: 'pocket-change',
   name: 'Pocket Change',
   artist: 'Tin Can Parade',
@@ -77,7 +78,7 @@ export const pocketChange: SongDef = {
     { beat: bar(56), name: 'Ending' },
   ],
   player: [
-    { inst: 'clean', gain: 1.6, pan: 0.1, verb: 0.15, notes: [...skank(INTRO_H, bar(0)), ...skank(VERSE_H, bar(4)), ...skank(VERSE_H, bar(20))] },
+    { inst: 'clean', chorus: 0.03, gain: 1.6, pan: 0.1, verb: 0.15, notes: [...skank(INTRO_H, bar(0)), ...skank(VERSE_H, bar(4)), ...skank(VERSE_H, bar(20))] },
     {
       inst: 'drive',
       tone: 0.55,
@@ -94,9 +95,9 @@ export const pocketChange: SongDef = {
     { inst: 'lead', tone: 0.6, gain: 1.3, verb: 0.2, echo: 0.1, notes: transpose(place(SOLO.notes, bar(36)), -12) },
   ],
   backing: [
-    { inst: 'brass', tone: 0.7, gain: 0.65, pan: -0.25, verb: 0.2, notes: [...place(HORN_RIFF.notes, bar(0)), ...place(HORN_RIFF.notes, bar(24)), ...place(HOOK.notes, bar(12)), ...place(HOOK.notes, bar(28)), ...place(HOOK.notes, bar(48)), ...comp(prog('D'), 4, bar(56), 'x.x.x...x.......', () => [62, 66, 69, 74], { v: 1 })] },
+    { inst: 'brass', tone: 0.45, gain: 0.48, pan: -0.25, verb: 0.12, notes: [...place(HORN_RIFF.notes, bar(0)), ...place(HORN_RIFF.notes, bar(24)), ...place(HOOK.notes, bar(12)), ...place(HOOK.notes, bar(28)), ...place(HOOK.notes, bar(48)), ...comp(prog('D'), 4, bar(56), 'x.x.x...x.......', () => [62, 66, 69, 74], { v: 1 })] },
     { inst: 'brass', tone: 0.6, gain: 0.45, pan: 0.3, verb: 0.2, notes: [...below(place(HOOK.notes, bar(12))), ...below(place(HOOK.notes, bar(48))), ...comp(VERSE_H, 4, bar(36), 'x-------x-------', (c) => voicing(c, 'F#4'), { v: 0.5 })] },
-    { inst: 'clean', gain: 0.6, pan: -0.35, verb: 0.15, notes: [...skank(CHORUS_H, bar(12), 0.5), ...skank(CHORUS_H, bar(28), 0.5), ...skank(VERSE_H, bar(36)), ...skank(CHORUS_H, bar(48), 0.5)] },
+    { inst: 'clean', chorus: 0.03, gain: 0.6, pan: -0.35, verb: 0.15, notes: [...skank(CHORUS_H, bar(12), 0.5), ...skank(CHORUS_H, bar(28), 0.5), ...skank(VERSE_H, bar(36)), ...skank(CHORUS_H, bar(48), 0.5)] },
     { inst: 'pickbass', gain: 0.8, verb: 0, notes: [...walk(INTRO_H, bar(0)), ...walk(VERSE_H, bar(4)), ...roots8(CHORUS_H, bar(12)), ...walk(VERSE_H, bar(20)), ...roots8(CHORUS_H, bar(28)), ...walk(VERSE_H, bar(36)), ...comp(prog('Bm Bm G A'), 4, bar(44), 'x.......x.x.....', (c) => [bassOf(c, 'E1')], { v: 0.9 }), ...roots8(CHORUS_H, bar(48)), ...comp(prog('D'), 4, bar(56), 'x.x.x...x.......', () => [38], { v: 1 })] },
   ],
   drums: [{ kit: 'rock', hits: drums(), gain: 0.65 }],
@@ -104,4 +105,4 @@ export const pocketChange: SongDef = {
   lengthBeats: bar(58),
   previewBeat: bar(12),
   art: { from: '#101010', to: '#e8e8e8', ink: '#ff3b3b', motif: 'grid' },
-};
+}, { bar: 4, phrase: 16, shape: [0.88, 1, 0.85], gate: 0.7, accent: 0.07 });

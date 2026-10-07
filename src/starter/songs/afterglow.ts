@@ -1,3 +1,4 @@
+import { perform } from '../performance.ts';
 import { abc } from '../abc.ts';
 import { bassOf, comp, nearVoicing, parseChord, prog, voicing } from '../arrange.ts';
 import { drumBars, FOUR_FLOOR, HOUSE_OPEN } from '../patterns.ts';
@@ -59,7 +60,7 @@ function drums(): Hit[] {
   return out;
 }
 
-export const afterglow: SongDef = {
+export const afterglow: SongDef = perform({
   id: 'afterglow-protocol',
   name: 'Afterglow Protocol',
   artist: 'Helios Array',
@@ -75,18 +76,18 @@ export const afterglow: SongDef = {
     { beat: BREAK, name: 'Breakdown' },
     { beat: BUILD, name: 'Build' },
     { beat: DROP, name: 'Drop' },
-    { beat: DROP + bar(8), name: 'Drop, Higher' },
+    { beat: DROP + bar(8), name: 'Drop, Harmony' },
     { beat: OUTRO, name: 'Outro' },
   ],
   player: [
     { inst: 'pluck', tone: 0.6, gain: 1, verb: 0.3, echo: 0.25, notes: [...comp(H.slice(4), 4, INTRO + bar(4), '..x...x...x...x.', (c) => nearVoicing(c, 'C4'), { v: 0.45 }), ...eightBars(INTRO + bar(8), 1).flatMap(stabs), ...eightBars(ARPS, 2).flatMap((b) => arp16(b)), ...melody(BUILD), ...eightBars(OUTRO, 1).flatMap((b) => arp16(b, 0.6))] },
-    { inst: 'epiano', gain: 1.5, verb: 0.5, echo: 0.2, notes: melody(BREAK).map((n) => ({ ...n, p: n.p.map((p) => p + 12) })) },
-    { inst: 'supersaw', tone: 0.65, gain: 1.4, verb: 0.35, echo: 0.2, notes: [...melody(DROP), ...harmony(melody(DROP + bar(8)).map((n) => ({ ...n, p: n.p.map((p) => p + 12) })))] },
+    { inst: 'epiano', gain: 1.5, verb: 0.3, echo: 0.12, notes: melody(BREAK) },
+    { inst: 'supersaw', tone: 0.5, gain: 1.1, verb: 0.35, echo: 0.2, notes: [...melody(DROP), ...harmony(melody(DROP + bar(8)))] },
   ],
   backing: [
     { inst: 'pad', tone: 0.45, gain: 0.7, verb: 0.5, pump: 0.6, notes: [...pads(INTRO, 0.4), ...pads(ARPS + bar(8), 0.45), ...pads(BREAK, 0.6), ...pads(BUILD, 0.6), ...pads(DROP, 0.55), ...pads(DROP + bar(8), 0.6), ...pads(OUTRO, 0.4)] },
     { inst: 'synthbass', tone: 0.5, gain: 0.9, verb: 0, pump: 0.3, notes: [...offbeatBass(INTRO + bar(8)), ...rollingBass(ARPS), ...rollingBass(ARPS + bar(8)), ...offbeatBass(BUILD), ...rollingBass(DROP), ...rollingBass(DROP + bar(8)), ...offbeatBass(OUTRO)] },
-    { inst: 'pluck', tone: 0.45, gain: 0.5, pan: 0.3, verb: 0.3, echo: 0.3, notes: [...arp16(BREAK, 0.4), ...arp16(DROP, 0.5), ...arp16(DROP + bar(8), 0.55)] },
+    { inst: 'pluck', tone: 0.45, gain: 0.3, pan: 0.3, verb: 0.3, echo: 0.3, notes: [...arp16(BREAK, 0.4), ...arp16(DROP, 0.5), ...arp16(DROP + bar(8), 0.55)] },
     { inst: 'subbass', tone: 0.3, gain: 0.7, verb: 0, notes: comp(H, 4, BREAK, 'x---------------', (c) => [bassOf(c, 'E1')], { v: 0.6 }) },
   ],
   drums: [{ kit: 'electro', hits: drums(), gain: 0.8 }],
@@ -94,4 +95,4 @@ export const afterglow: SongDef = {
   lengthBeats: END,
   previewBeat: DROP,
   art: { from: '#12002b', to: '#00d4ff', ink: '#fdf0ff', motif: 'rings' },
-};
+}, { bar: 4, phrase: 32, shape: [0.86, 1, 0.9], gate: 0.94, accent: 0.045 });

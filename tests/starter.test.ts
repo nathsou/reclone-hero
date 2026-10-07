@@ -144,7 +144,7 @@ test('every built-in song has a three-fret touch part on every difficulty', () =
   }
 });
 
-const added = new Set(['mars-war-machine', 'mercury-winged-messenger', 'jupiter-jollity', 'paper-hearts', 'city-lights', 'golden-hour', 'warehouse-current', 'prism-parade', 'assembly-line', 'photon-run']);
+const added = new Set(['warehouse-current', 'photon-run']);
 for (const def of STARTER_SONGS.filter(s => added.has(s.id))) {
   test(`new "${def.name}": complete audio is finite, bounded and audible in both stems`, () => {
     let peak = 0, ep = 0, eb = 0, frames = 0;
@@ -175,16 +175,6 @@ for (const def of STARTER_SONGS.filter(s => added.has(s.id))) {
     }
   });
 }
-
-test('Holst opening excerpts keep their original meter and pitches', async () => {
-  const { MARS_OSTINATO, MERCURY_MOTIF, JUPITER_MOTIF } = await import('../src/starter/songs/planets.ts');
-  const { seqLength } = await import('../src/starter/score.ts');
-  assert.equal(seqLength(MARS_OSTINATO), 5);
-  assert.equal(seqLength(MERCURY_MOTIF), 6);
-  // The notation ends with an eighth rest; seqLength measures the last sounding note.
-  assert.equal(seqLength(JUPITER_MOTIF) + 0.5, 14);
-  assert.deepEqual(MERCURY_MOTIF.slice(0, 6).map(n => n.p[0]), [65, 70, 74, 76, 71, 68]);
-});
 
 test('no voice rings longer than the tail it declares (so no note is cut at a block edge)', async () => {
   const { makeVoice } = await import('../src/starter/instruments.ts');

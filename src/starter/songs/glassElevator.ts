@@ -1,3 +1,4 @@
+import { perform } from '../performance.ts';
 import { drumBars } from '../patterns.ts';
 import { grid, loop, seq } from '../score.ts';
 import type { Hit, SongDef } from '../score.ts';
@@ -39,7 +40,7 @@ const V = [bar(4), bar(24)];
 const C = [bar(16), bar(32), bar(48)];
 
 const FUNK = { kick: 'x..x..x...x..x..', snare: '....X..g.g..X..g', hat: 'xxxxxxxxxxxxxxox' };
-const FUNK_OPEN = { kick: 'x..x..x...x..x..', snare: '....X..g.g..X...', ohat: 'x.x.x.x.x.x.x.x.' };
+const FUNK_OPEN = { kick: 'x..x..x...x..x..', snare: '....X..g.g..X...', hat: 'x.x.x.x.x.x.x.x.', ohat: '......x.......x.' };
 function drums(): Hit[] {
   return [
     ...drumBars({ hat: 'xxxxxxxxxxxxxxxx' }, bar(0), 4, { fill: 'snare1' }),
@@ -55,7 +56,7 @@ function drums(): Hit[] {
   ];
 }
 
-export const glassElevator: SongDef = {
+export const glassElevator: SongDef = perform({
   id: 'glass-elevator',
   name: 'Glass Elevator',
   artist: 'The Velvet Switch',
@@ -79,6 +80,8 @@ export const glassElevator: SongDef = {
   player: [
     {
       inst: 'clean',
+      chorus: 0.03,
+      tone: 0.4,
       gain: 1.1,
       verb: 0.12,
       notes: [
@@ -94,13 +97,13 @@ export const glassElevator: SongDef = {
   ],
   backing: [
     { inst: 'pickbass', tone: 0.6, gain: 1, verb: 0, notes: [...loop(seq(`${BASS_V} ${BASS_V2}`), 4, bar(2), V[0]), ...seq(BASS_PRE, bar(12)), ...C.flatMap((c) => loop(seq(BASS_RIFF), 4, bar(2), c)), ...loop(seq(`${BASS_V} ${BASS_V2}`), 4, bar(2), V[1]), ...loop(seq(`${BASS_V} ${BASS_V2}`), 4, bar(2), bar(40)), ...seq('E1:2 E2:1 . E1:4 .:8 E1:4', bar(56))] },
-    { inst: 'brass', tone: 0.65, gain: 1, pan: 0.3, verb: 0.2, notes: [...C.flatMap((c) => loop(seq(HORNS), 8, bar(1), c)), ...seq('E4+G#4+D5+F#5!:4', bar(57))] },
+    { inst: 'brass', tone: 0.45, gain: 0.65, pan: 0.3, verb: 0.2, notes: [...C.flatMap((c) => loop(seq(HORNS), 8, bar(1), c)), ...seq('E4+G#4+D5+F#5!:4', bar(57))] },
     { inst: 'harpsichord', gain: 0.5, pan: -0.35, verb: 0.1, notes: [...loop(seq(CLAV), 8, bar(1), V[0]), ...loop(seq(CLAV), 8, bar(1), V[1]), ...loop(seq(CLAV), 8, bar(1), bar(40))] },
-    { inst: 'organ', gain: 0.8, pan: 0.2, verb: 0.25, notes: [...C.flatMap((c) => loop(seq('E3+G#3+D4+F#4:16 A3+C#4+G4+B4:16'), 4, bar(2), c)), ...seq('E3+G#3+D4+F#4:32 C3+E3+A#3+D4:16 E3+G#3+D4+F#4:16', bar(40)), ...seq('E3+G#3+D4+F#4:32 A3+C#4+G4+B4:32', bar(44))] },
+    { inst: 'organ', tone: 0.35, gain: 0.5, pan: 0.2, verb: 0.25, notes: [...C.flatMap((c) => loop(seq('E3+G#3+D4+F#4:16 A3+C#4+G4+B4:16'), 4, bar(2), c)), ...seq('E3+G#3+D4+F#4:32 C3+E3+A#3+D4:16 E3+G#3+D4+F#4:16', bar(40)), ...seq('E3+G#3+D4+F#4:32 A3+C#4+G4+B4:32', bar(44))] },
   ],
   drums: [{ kit: 'rock', hits: drums(), gain: 0.8 }],
   solos: [[bar(40), bar(48)]],
   lengthBeats: bar(58),
   previewBeat: C[0],
   art: { from: '#1a0b2e', to: '#ff9f1c', ink: '#fff4e0', motif: 'bars' },
-};
+}, { bar: 4, phrase: 8, shape: [0.92, 1, 0.86], gate: 0.72, accent: 0.09 });

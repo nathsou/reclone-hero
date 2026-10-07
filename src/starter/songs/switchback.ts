@@ -1,3 +1,4 @@
+import { perform } from '../performance.ts';
 import { abc } from '../abc.ts';
 import { bassOf, comp, nearVoicing, prog, voicing } from '../arrange.ts';
 import { seq } from '../score.ts';
@@ -77,7 +78,7 @@ const AB_CHORDS = [...A, ...B];
 const BB = [...B, ...B];
 const AB_TUNE = (at: number, shift = 0) => [...tune(AB[0], AB[1], at, shift), ...tune(AB[2], AB[3], at + bar(8), shift)];
 
-export const switchback: SongDef = {
+export const switchback: SongDef = perform({
   id: 'switchback',
   name: 'Switchback Breakdown',
   artist: 'Holler Creek Ramblers',
@@ -96,6 +97,7 @@ export const switchback: SongDef = {
     { beat: TAG, name: 'Shave and a Haircut' },
   ],
   player: [
+    { inst: 'fiddle', tone: 0.4, gain: 0.9, verb: 0.16, notes: AB_TUNE(R2) },
     {
       inst: 'banjo',
       gain: 0.7,
@@ -103,21 +105,22 @@ export const switchback: SongDef = {
       verb: 0.15,
       notes: [...rolls([], prog('G D'), 0, 2), ...rolls(tune(0, TUNE.length, R1, -12), ALL, R1, 32), ...rolls(tune(AB[2], TUNE.length, R4, -12), BB, R4, 16)],
     },
-    { inst: 'clean', gain: 1, pan: -0.1, verb: 0.2, notes: [...boomChick(AB_CHORDS, R2, 0.75), ...AB_TUNE(R3, -12), ...seq('G3:4 D3:2 D3 E3:4 D3:4 | .:4 F#3:4 G2+D3+G3+B3!:8', TAG)] },
+    { inst: 'clean', chorus: 0, tone: 0.35, gain: 1, pan: -0.1, verb: 0.2, notes: [...AB_TUNE(R3, -12), ...seq('G3:4 D3:2 D3 E3:4 D3:4 | .:4 F#3:4 G2+D3+G3+B3!:8', TAG)] },
   ],
   backing: [
-    { inst: 'fiddle', tone: 0.55, gain: 0.8, pan: 0.3, verb: 0.3, notes: [...fiddleDrones(ALL, R1), ...AB_TUNE(R2), ...fiddleDrones(AB_CHORDS, R3), ...fiddleDrones(BB, R4), ...seq('G4:4 D4:2 D4 E4:4 D4:4 | .:4 F#4:4 G4+D5!:8', TAG)] },
-    { inst: 'clean', gain: 0.55, pan: -0.3, verb: 0.2, notes: [...boomChick(ALL, R1, 0.6), ...boomChick(AB_CHORDS, R3, 0.55), ...boomChick(BB, R4, 0.6)] },
-    { inst: 'pickbass', tone: 0.35, gain: 1.3, verb: 0.05, notes: [...bass(ALL, R1), ...bass(AB_CHORDS, R2), ...bass(AB_CHORDS, R3), ...bass(BB, R4), ...seq('G1:4 D1:2 D1 E1:4 D1:4 | .:4 F#1:4 G1!:8', TAG)] },
+    { inst: 'fiddle', tone: 0.55, gain: 0.58, pan: 0.3, verb: 0.15, notes: [...fiddleDrones(ALL, R1), ...fiddleDrones(AB_CHORDS, R3), ...fiddleDrones(BB, R4), ...seq('G4:4 D4:2 D4 E4:4 D4:4 | .:4 F#4:4 G4+D5!:8', TAG)] },
+    { inst: 'clean', chorus: 0, tone: 0.35, gain: 0.55, pan: -0.3, verb: 0.2, notes: [...boomChick(AB_CHORDS, R2, 0.6), ...boomChick(ALL, R1, 0.6), ...boomChick(AB_CHORDS, R3, 0.55), ...boomChick(BB, R4, 0.6)] },
+    { inst: 'pickbass', tone: 0.35, gain: 0.85, verb: 0, notes: [...bass(ALL, R1), ...bass(AB_CHORDS, R2), ...bass(AB_CHORDS, R3), ...bass(BB, R4), ...seq('G1:4 D1:2 D1 E1:4 D1:4 | .:4 F#1:4 G1!:8', TAG)] },
     { inst: 'harpsichord', gain: 0.45, pan: 0.35, verb: 0.15, notes: [...chop(ALL, R1), ...chop(AB_CHORDS, R2), ...chop(AB_CHORDS, R3), ...chop(BB, R4)] },
-    { inst: 'banjo', gain: 0.5, pan: 0.3, verb: 0.15, notes: rolls([], AB_CHORDS, R2, 16).map((n) => ({ ...n, v: n.v * 0.6 })) },
+    { inst: 'banjo', gain: 0.3, pan: 0.3, verb: 0.15, notes: rolls([], AB_CHORDS, R2, 16).map((n) => ({ ...n, v: n.v * 0.6 })) },
   ],
   drums: [],
   solos: [
     [R1, R2],
+    [R2, R3],
     [R3, R4],
   ],
   lengthBeats: END + 2,
   previewBeat: R1,
   art: { from: '#2b1a0e', to: '#c97b2e', ink: '#fff1d6', motif: 'sun' },
-};
+}, { bar: 4, phrase: 16, shape: [0.88, 1, 0.85], gate: 0.86, accent: 0.08 });

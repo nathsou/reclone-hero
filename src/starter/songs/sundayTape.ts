@@ -1,3 +1,4 @@
+import { perform } from '../performance.ts';
 import { bassOf, comp, nearVoicing, prog } from '../arrange.ts';
 import { drumBars } from '../patterns.ts';
 import { diatonic, seq } from '../score.ts';
@@ -41,7 +42,7 @@ const bass = (at: number) => swing(comp(H, 4, at, 'x.....x...x...x.', (c) => [ba
 // Bar map: intro 0, groove 4, melody 12, keys solo 20, melody up 28, last chord 36, end 38.
 const [INTRO, GROOVE, MEL, KEYS, MEL2, LAST, END] = [0, 4, 12, 20, 28, 36, 38].map(bar);
 
-const BOOM_BAP = { kick: 'x......x..x.....', snare: '....X..g....X...', hat: 'x.xxx.xxx.xxx.xx' };
+const BOOM_BAP = { kick: 'x......x..x.....', snare: '....X..g....X...', hat: 'x.xgx.xgx.xgx.xg' };
 function drums(): Hit[] {
   const out = [
     ...drumBars({ shaker: 'x.xxx.xxx.xxx.xx', rim: '....x.......x...' }, INTRO, 4),
@@ -55,7 +56,7 @@ function drums(): Hit[] {
   return swing(out).map((h) => ({ ...h, v: h.v * 0.85 }));
 }
 
-export const sundayTape: SongDef = {
+export const sundayTape: SongDef = perform({
   id: 'sunday-tape',
   name: 'Sunday Tape',
   artist: 'Mellow Static',
@@ -70,30 +71,31 @@ export const sundayTape: SongDef = {
     { beat: GROOVE, name: 'Groove' },
     { beat: MEL, name: 'Melody' },
     { beat: KEYS, name: 'Keys Solo' },
-    { beat: MEL2, name: 'Melody, Up High' },
+    { beat: MEL2, name: 'Melody, Double Stops' },
     { beat: LAST, name: 'Fade' },
   ],
   player: [
     {
       inst: 'clean',
-      gain: 1.8,
+      gain: 1.25,
+      chorus: 0.1,
+      tone: 0.3,
       verb: 0.22,
       echo: 0.06,
       notes: [
         ...swing(comp(prog('Gmaj7 F#m7 Em7 A7'), 4, INTRO, 'x---------------', (c) => nearVoicing(c, 'E4'), { v: 0.5 })),
         ...comping(GROOVE, true),
         ...swing(seq(MELODY, MEL)),
-        ...swing(doubleStops(seq(MELODY, MEL2, { transpose: 12 }))),
+        ...swing(doubleStops(seq(MELODY, MEL2, { v: 0.75 }))),
         ...seq('G3+B3+D4+F#4+A4!:8', LAST),
       ],
     },
-    { inst: 'epiano', gain: 1.15, verb: 0.22, notes: swing(seq(MELODY, KEYS, { transpose: 12, v: 0.7 })) },
+    { inst: 'epiano', gain: 1.15, verb: 0.22, notes: swing(seq(MELODY, KEYS, { v: 0.7 })) },
   ],
   backing: [
     { inst: 'clean', gain: 0.9, pan: 0.15, verb: 0.18, notes: comping(KEYS, false) },
     { inst: 'epiano', gain: 0.85, pan: -0.2, verb: 0.22, notes: [...rhodes(GROOVE, 0.4), ...rhodes(MEL, 0.45), ...rhodes(KEYS, 0.35), ...rhodes(MEL2, 0.45), ...seq('G2+D3+F#3+B3:8', LAST, { v: 0.5 })] },
-    { inst: 'bell', gain: 0.3, pan: 0.3, verb: 0.3, notes: seq(MELODY, KEYS, { transpose: 24, v: 0.35 }) },
-    { inst: 'pickbass', tone: 0.25, gain: 1.3, verb: 0.05, notes: [...bass(GROOVE), ...bass(MEL), ...bass(KEYS), ...bass(MEL2), { b: LAST, d: 6, p: [31], v: 0.75 }] },
+        { inst: 'pickbass', tone: 0.25, gain: 0.85, verb: 0, notes: [...bass(GROOVE), ...bass(MEL), ...bass(KEYS), ...bass(MEL2), { b: LAST, d: 6, p: [31], v: 0.75 }] },
     { inst: 'pad', tone: 0.2, gain: 0.7, verb: 0.3, notes: comp(H, 4, MEL2, 'x---------------', (c) => nearVoicing(c, 'D4'), { v: 0.4 }) },
   ],
   drums: [{ kit: 'rock', hits: drums(), gain: 0.7, verb: 0.12 }],
@@ -101,4 +103,4 @@ export const sundayTape: SongDef = {
   lengthBeats: END,
   previewBeat: MEL,
   art: { from: '#2b1d2f', to: '#f2a7a0', ink: '#fff8ef', motif: 'wave' },
-};
+}, { bar: 4, phrase: 16, shape: [0.83, 0.97, 0.8], gate: 0.82, accent: 0.055 });

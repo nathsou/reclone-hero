@@ -1,3 +1,4 @@
+import { perform } from '../performance.ts';
 import { comp, nearVoicing, prog } from '../arrange.ts';
 import { drumBars } from '../patterns.ts';
 import { grid, loop, roots, seq } from '../score.ts';
@@ -54,7 +55,7 @@ const riffA = (at: number, times: number) => loop(seq(RIFF_A), times, 2 * B7, at
 const riffB = (at: number) => loop(seq(RIFF_B), 4, 2 * B7, at);
 const cleanArps = comp(CLEAN_H, B7, CLEAN, 'x.x.x.x.x.x.x.', (c) => nearVoicing(c, 'E3'), { arp: [0, 1, 2, 3, 2, 1, 0], v: 0.65 });
 
-export const seventhGear: SongDef = {
+export const seventhGear: SongDef = perform({
   id: 'seventh-gear',
   name: 'Seventh Gear',
   artist: 'Axiom Drift',
@@ -90,15 +91,15 @@ export const seventhGear: SongDef = {
     { inst: 'lead', tone: 0.6, gain: 1.3, verb: 0.25, echo: 0.1, notes: seq(SOLO, SOLO_AT) },
   ],
   backing: [
-    { inst: 'drive', tone: 0.45, gain: 0.45, pan: -0.3, verb: 0.05, notes: [...riffA(A1, 4), ...riffB(B1), ...riffA(SOLO_AT, 4), ...seq(`${BREAKDOWN} ${BREAKDOWN}`, BREAK), ...riffB(B2), ...riffA(A2, 4)] },
+    { inst: 'drive', tone: 0.4, gain: 0.28, pan: -0.3, verb: 0.05, notes: [...riffA(A1, 4), ...riffB(B1), ...riffA(SOLO_AT, 4), ...seq(`${BREAKDOWN} ${BREAKDOWN}`, BREAK), ...riffB(B2), ...riffA(A2, 4)] },
     { inst: 'pickbass', tone: 0.6, gain: 1, verb: 0, notes: roots([...seq(HITS, INTRO), ...riffA(INTRO + 2 * B7, 1), ...riffA(A1, 4), ...riffB(B1), ...riffA(SOLO_AT, 4), ...seq(`${BREAKDOWN} ${BREAKDOWN}`, BREAK), ...riffB(B2), ...riffA(A2, 4), ...seq('E2:14', END)], -12) },
     { inst: 'pickbass', tone: 0.4, gain: 0.9, verb: 0.1, notes: comp(CLEAN_H, B7, CLEAN, 'x-----x-------', (c) => [nearVoicing(c, 'E2')[0] - 12], { v: 0.6 }) },
-    { inst: 'pad', tone: 0.4, gain: 0.9, verb: 0.5, notes: [...comp(CLEAN_H, B7, CLEAN, 'x-------------', (c) => nearVoicing(c, 'B3'), { v: 0.4 }), ...comp(prog('Em Em C D'), 4, BREAK, 'x---------------', (c) => nearVoicing(c, 'B3'), { v: 0.5 })] },
-    { inst: 'lead', tone: 0.5, gain: 0.9, pan: 0.3, verb: 0.3, echo: 0.15, notes: [...seq(LINE, B1), ...seq(LINE, B2, { transpose: 12 })] },
+    { inst: 'pad', tone: 0.4, gain: 0.5, verb: 0.3, notes: [...comp(CLEAN_H, B7, CLEAN, 'x-------------', (c) => nearVoicing(c, 'B3'), { v: 0.4 }), ...comp(prog('Em Em C D'), 4, BREAK, 'x---------------', (c) => nearVoicing(c, 'B3'), { v: 0.5 })] },
+    { inst: 'lead', tone: 0.5, gain: 0.55, pan: 0.3, verb: 0.3, echo: 0.15, notes: [...seq(LINE, B1), ...seq(LINE, B2, { v: 0.65 })] },
   ],
   drums: [{ kit: 'rock', hits: drums(), gain: 0.8 }],
   solos: [[SOLO_AT, BREAK]],
   lengthBeats: END + 3.5,
   previewBeat: A1,
   art: { from: '#0a0a0a', to: '#4a5d23', ink: '#d9ff66', motif: 'shards' },
-};
+}, { bar: 3.5, phrase: 14, shape: [0.88, 1, 0.86], gate: 0.8, accent: 0.08 });

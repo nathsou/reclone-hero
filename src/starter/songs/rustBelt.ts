@@ -1,3 +1,4 @@
+import { perform } from '../performance.ts';
 import { comp, nearVoicing, prog } from '../arrange.ts';
 import { drumBars } from '../patterns.ts';
 import { grid, seq, transpose } from '../score.ts';
@@ -78,7 +79,7 @@ function drums(): Hit[] {
   ];
 }
 
-export const rustBelt: SongDef = {
+export const rustBelt: SongDef = perform({
   id: 'rust-belt-shuffle',
   name: 'Rust Belt Shuffle',
   artist: 'Delta Nine',
@@ -96,18 +97,18 @@ export const rustBelt: SongDef = {
     { beat: LAST, name: 'Head Out' },
   ],
   player: [
-    { inst: 'lead', tone: 0.5, gain: 1, verb: 0.3, echo: 0.05, notes: [...seq(SOLO_1.slice(8).join(' '), 0), ...seq(SOLO_1.join(' '), S1), ...seq(SOLO_2.join(' '), S2)] },
+    { inst: 'lead', tone: 0.3, gain: 1, verb: 0.16, echo: 0.05, notes: [...seq(SOLO_1.slice(8).join(' '), 0), ...seq(SOLO_1.join(' '), S1), ...seq(SOLO_2.join(' '), S2)] },
     { inst: 'drive', tone: 0.35, gain: 0.9, verb: 0.15, notes: [...seq(HEAD, HEAD1), ...seq(ENDING, LAST)] },
   ],
   backing: [
-    { inst: 'organ', gain: 0.9, pan: -0.25, verb: 0.35, notes: [...comp(H.slice(8), BAR, 0, 'x-----------------------', (c) => nearVoicing(c, 'C4'), { v: 0.4 }), ...organ(HEAD1, 0.45), ...organ(S1, 0.5), ...organ(S2, 0.55), ...organ(LAST, 0.5).filter((n) => n.b < LAST + bar(11))] },
-    { inst: 'drive', tone: 0.3, gain: 0.5, pan: 0.3, verb: 0.1, notes: [...seq(HEAD, S1), ...seq(HEAD, S2)] },
+    { inst: 'organ', tone: 0.32, gain: 0.55, pan: -0.25, verb: 0.35, notes: [...comp(H.slice(8), BAR, 0, 'x-----------------------', (c) => nearVoicing(c, 'C4'), { v: 0.4 }), ...organ(HEAD1, 0.45), ...organ(S1, 0.5), ...organ(S2, 0.55), ...organ(LAST, 0.5).filter((n) => n.b < LAST + bar(11))] },
+    { inst: 'drive', tone: 0.3, gain: 0.32, pan: 0.3, verb: 0.1, notes: [...seq(HEAD, S1), ...seq(HEAD, S2)] },
     { inst: 'pickbass', gain: 1, verb: 0, notes: [...walk(0, H.slice(8)), ...walk(HEAD1), ...walk(S1), ...walk(S2), ...walk(LAST, H.slice(0, 11)), ...seq('A#1:6 A1:18', LAST + bar(11))] },
-    { inst: 'piano', gain: 1.4, pan: 0.2, verb: 0.3, notes: comp(H, BAR, S2, '....x.....x.....x.....x.', (c) => nearVoicing(c, 'E4'), { v: 0.45 }) },
+    { inst: 'piano', gain: 0.9, pan: 0.2, verb: 0.15, notes: comp(H, BAR, S2, '....x.....x.....x.....x.', (c) => nearVoicing(c, 'E4'), { v: 0.45 }) },
   ],
   drums: [{ kit: 'rock', hits: drums(), gain: 0.8 }],
   solos: [[S1, LAST]],
   lengthBeats: END + 2,
   previewBeat: S1,
   art: { from: '#0d1a2b', to: '#2f6fb3', ink: '#ffd98a', motif: 'bars' },
-};
+}, { bar: 6, phrase: 24, shape: [0.85, 1, 0.76], gate: 0.9, accent: 0.06 });

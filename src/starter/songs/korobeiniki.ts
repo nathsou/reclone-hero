@@ -1,3 +1,4 @@
+import { perform } from '../performance.ts';
 import { abc } from '../abc.ts';
 import { bassOf, comp, powerOf, prog, voicing } from '../arrange.ts';
 import { drumBars, GALLOP, PUNK, ROCK_DRIVE } from '../patterns.ts';
@@ -53,7 +54,7 @@ function drums(): Hit[] {
   ];
 }
 
-export const korobeiniki: SongDef = {
+export const korobeiniki: SongDef = perform({
   id: 'korobeiniki',
   name: 'Korobeiniki',
   artist: 'Traditional',
@@ -72,20 +73,20 @@ export const korobeiniki: SongDef = {
     { beat: bar(96), name: 'Game Over' },
   ],
   player: [
-    { inst: 'chip', tone: 0.5, gain: 1.2, verb: 0.15, echo: 0.1, notes: at(TUNE.notes, 0, 12) },
-    { inst: 'lead', tone: 0.65, gain: 1, verb: 0.2, echo: 0.1, notes: [...at(TUNE.notes, LOOP), ...at(TUNE.notes, 2 * LOOP, 12)] },
+    { inst: 'chip', tone: 0.5, gain: 1.2, verb: 0.15, echo: 0.1, notes: at(TUNE.notes, 0) },
+    { inst: 'lead', tone: 0.45, gain: 1, verb: 0.2, echo: 0.1, notes: [...at(TUNE.notes, LOOP), ...at(TUNE.notes, 2 * LOOP)] },
     { inst: 'drive', tone: 0.55, gain: 1, verb: 0.06, notes: seq('E2^5!:4 B1^5! E2^5!:8', bar(96)).map((n) => ({ ...n, p: n.p.map((p) => p + 12) })) },
   ],
   backing: [
-    { inst: 'chip', tone: 0.25, gain: 0.7, pan: 0.2, verb: 0.1, notes: chipArps(0) },
+    { inst: 'chip', tone: 0.25, gain: 0.45, pan: 0.2, verb: 0.1, notes: chipArps(0) },
     { inst: 'chip', tone: 0.5, gain: 0.8, verb: 0.05, notes: chipBass(0) },
     { inst: 'drive', tone: 0.4, gain: 0.55, verb: 0.05, notes: [...chugs(32), ...chugs(64)] },
     { inst: 'pickbass', gain: 1, verb: 0, notes: [...bass8(32), ...bass8(64), ...seq('E1:4 B0 E1:8', bar(96))] },
-    { inst: 'lead', tone: 0.45, gain: 0.5, pan: -0.35, verb: 0.2, notes: at(TUNE.notes, 2 * LOOP, 7) },
+    { inst: 'lead', tone: 0.45, gain: 0.5, pan: -0.35, verb: 0.2, notes: at(TUNE.notes, 2 * LOOP, -12).filter(n => n.d >= 0.5) },
   ],
   drums: [{ kit: 'rock', hits: drums(), gain: 0.8 }],
   solos: [],
   lengthBeats: bar(100),
   previewBeat: bar(32),
   art: { from: '#0b0b24', to: '#29a3b8', ink: '#f7ff9e', motif: 'bars' },
-};
+}, { bar: 4, phrase: 16, shape: [0.9, 1, 0.85], gate: 0.88, accent: 0.08 });

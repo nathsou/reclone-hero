@@ -1,3 +1,4 @@
+import { perform } from '../performance.ts';
 import { abc } from '../abc.ts';
 import { bassOf, comp, nearVoicing, prog, voicing } from '../arrange.ts';
 import { diatonic } from '../score.ts';
@@ -47,7 +48,7 @@ function tabor(): Hit[] {
   return out;
 }
 
-export const greensleeves: SongDef = {
+export const greensleeves: SongDef = perform({
   id: 'greensleeves',
   name: 'Greensleeves',
   artist: 'Traditional',
@@ -66,20 +67,20 @@ export const greensleeves: SongDef = {
     { beat: pass(2) + 48, name: 'Last Chorus' },
   ],
   player: [
-    { inst: 'clean', gain: 1.45, pan: -0.1, verb: 0.35, notes: melody(0) },
+    { inst: 'clean', chorus: 0, tone: 0.35, gain: 1.45, pan: -0.1, verb: 0.35, notes: melody(0) },
     // then the lute in thirds under the fiddle, and in octaves at the end
-    { inst: 'clean', gain: 1.25, pan: -0.1, verb: 0.35, notes: thirds(melody(1)) },
-    { inst: 'clean', gain: 1.25, pan: -0.1, verb: 0.35, notes: melody(2).map((n) => ({ ...n, p: [n.p[0] - 12, n.p[0]] })) },
+    { inst: 'clean', chorus: 0, tone: 0.35, gain: 1.25, pan: -0.1, verb: 0.35, notes: thirds(melody(1)) },
+    { inst: 'clean', chorus: 0, tone: 0.35, gain: 1.25, pan: -0.1, verb: 0.35, notes: melody(2).map((n) => ({ ...n, p: [n.p[0] - 12, n.p[0]] })) },
   ],
   backing: [
-    { inst: 'clean', gain: 0.55, pan: 0.2, verb: 0.35, notes: [...lute(0, 0.55), ...lute(1, 0.5), ...lute(2, 0.6), { b: pass(3), d: 4, p: [43, 50, 55, 58, 62], v: 0.6 }] },
-    { inst: 'fiddle', tone: 0.55, gain: 0.8, pan: 0.3, verb: 0.4, notes: [...melody(1), ...melody(2, 12)] },
+    { inst: 'clean', chorus: 0, tone: 0.35, gain: 0.55, pan: 0.2, verb: 0.35, notes: [...lute(0, 0.55), ...lute(1, 0.5), ...lute(2, 0.6), { b: pass(3), d: 4, p: [43, 50, 55, 58, 62], v: 0.6 }] },
+    { inst: 'fiddle', tone: 0.55, gain: 0.5, pan: 0.3, verb: 0.22, notes: [...melody(1), ...melody(2)] },
     { inst: 'strings', tone: 0.4, gain: 0.45, pan: -0.3, verb: 0.4, notes: [...viols(1, 0.45), ...viols(2, 0.55)] },
-    { inst: 'strings', tone: 0.3, gain: 0.6, verb: 0.3, notes: [...bass(1, 0.6), ...bass(2, 0.65), { b: pass(3), d: 4, p: [31], v: 0.6 }] },
+    { inst: 'strings', tone: 0.3, gain: 0.45, verb: 0.2, notes: [...bass(1, 0.6), ...bass(2, 0.65), { b: pass(3), d: 4, p: [31], v: 0.6 }] },
   ],
-  drums: [{ kit: 'orchestral', hits: tabor(), gain: 1, verb: 0.35 }],
+  drums: [{ kit: 'orchestral', hits: tabor(), gain: 0.55, verb: 0.15 }],
   solos: [],
   lengthBeats: pass(3) + 5,
   previewBeat: pass(1) - 1,
   art: { from: '#0f2a1a', to: '#4f8a3c', ink: '#f3ead0', motif: 'crest' },
-};
+}, { bar: 6, phrase: 24, shape: [0.8, 1, 0.72], gate: 0.96, accent: 0.035 });

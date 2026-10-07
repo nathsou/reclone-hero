@@ -1,3 +1,4 @@
+import { perform } from '../performance.ts';
 import { drumBars, SYNTHWAVE } from '../patterns.ts';
 import { arp, chord, grid, seq } from '../score.ts';
 import type { Hit, Note, SongDef } from '../score.ts';
@@ -68,7 +69,7 @@ function drums(): Hit[] {
   ];
 }
 
-export const midnightDrive: SongDef = {
+export const midnightDrive: SongDef = perform({
   id: 'midnight-drive',
   name: 'Midnight Drive',
   artist: 'Chrome Coast',
@@ -89,12 +90,12 @@ export const midnightDrive: SongDef = {
   ],
   player: [
     { inst: 'strings', tone: 0.6, gain: 1.2, verb: 0.35, notes: [...perBar(0, loop(8), (c) => `${CHORD[c]}:16`, 0.8), ...perBar(56, [...loop(8)], (c) => `${CHORD[c]}:16`, 0.8), ...seq(`${CHORD.Am}:16`, bar(64))] },
-    { inst: 'supersaw', tone: 0.5, gain: 1, verb: 0.3, echo: 0.25, notes: [...seq(VERSE + ' ' + VERSE, bar(8), { v: 0.75 }), ...seq(HOOK, bar(24)), ...seq(HOOK, bar(48), { v: 0.9 })] },
+    { inst: 'supersaw', tone: 0.5, gain: 1, verb: 0.3, echo: 0.12, notes: [...seq(VERSE + ' ' + VERSE, bar(8), { v: 0.75, transpose: -12 }), ...seq(HOOK, bar(24), { transpose: -12 }), ...seq(HOOK, bar(48), { v: 0.85, transpose: -12 })] },
     { inst: 'pluck', tone: 0.55, gain: 1, verb: 0.25, echo: 0.3, notes: bridgeArps(32) },
-    { inst: 'lead', tone: 0.6, gain: 0.95, verb: 0.35, echo: 0.25, notes: seq(SOLO, bar(40)) },
+    { inst: 'lead', tone: 0.6, gain: 0.95, verb: 0.35, echo: 0.12, notes: seq(SOLO, bar(40), { transpose: -12 }) },
   ],
   backing: [
-    { inst: 'pad', tone: 0.35, gain: 0.9, verb: 0.45, pump: 0.25, notes: [...perBar(8, loop(24), (c) => `${CHORD[c]}:16`, 0.6), ...perBar(32, BRIDGE_H, (c) => `${CHORD[c]}:16`, 0.6), ...perBar(40, loop(16), (c) => `${CHORD[c]}:16`, 0.6)] },
+    { inst: 'pad', tone: 0.35, gain: 0.6, verb: 0.28, pump: 0.25, notes: [...perBar(8, loop(24), (c) => `${CHORD[c]}:16`, 0.6), ...perBar(32, BRIDGE_H, (c) => `${CHORD[c]}:16`, 0.6), ...perBar(40, loop(16), (c) => `${CHORD[c]}:16`, 0.6)] },
     { inst: 'synthbass', tone: 0.4, gain: 1, verb: 0, notes: [...perBar(4, loop(28), octaveBass), ...perBar(32, BRIDGE_H, octaveBass), ...perBar(40, loop(24), octaveBass), ...seq('A1:16', bar(64))] },
     {
       inst: 'pluck',
@@ -106,9 +107,9 @@ export const midnightDrive: SongDef = {
       notes: [...perBar(24, loop(8), eighthArp, 0.55), ...perBar(48, loop(8), eighthArp, 0.55)],
     },
   ],
-  drums: [{ kit: 'electro', hits: drums(), verb: 1.6 }],
+  drums: [{ kit: 'electro', hits: drums(), verb: 0.8 }],
   solos: [[bar(40), bar(48)]],
   lengthBeats: bar(66),
   previewBeat: bar(24),
   art: { from: '#120a2a', to: '#ff7a3d', ink: '#ffe1a8', motif: 'orbit' },
-};
+}, { bar: 4, phrase: 16, shape: [0.88, 1, 0.88], gate: 0.9, accent: 0.04 });

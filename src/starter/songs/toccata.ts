@@ -1,6 +1,7 @@
+import { perform } from '../performance.ts';
 import { bassOf, comp, nearVoicing, prog, voicing } from '../arrange.ts';
 import { drumBars, GALLOP, ROCK_DRIVE } from '../patterns.ts';
-import { grid, seq, transpose } from '../score.ts';
+import { grid, seq } from '../score.ts';
 import type { Hit, SongDef } from '../score.ts';
 
 // Bach, Toccata and Fugue in D minor, BWV 565 (early 1700s; public domain), as organ metal: the
@@ -58,7 +59,7 @@ function drums(): Hit[] {
   ];
 }
 
-export const toccata: SongDef = {
+export const toccata: SongDef = perform({
   id: 'toccata',
   name: 'Toccata and Fugue in D minor',
   artist: 'Johann Sebastian Bach',
@@ -81,11 +82,12 @@ export const toccata: SongDef = {
     { beat: bar(36), name: 'Finale' },
   ],
   player: [
-    { inst: 'lead', tone: 0.6, gain: 1, verb: 0.3, echo: 0.1, notes: [...seq(OPENING, bar(0)), ...seq(FLURRY + ' ' + FLURRY, bar(8), { transpose: -12 }), ...seq(FLURRY + ' ' + FLURRY_HI + ' ' + FLURRY + ' ' + FLURRY_HI, bar(20)), ...sweeps(SOLO_H, 28), ...seq(FINALE, bar(36))] },
+    { inst: 'organ', tone: 0.65, gain: 1.05, verb: 0.3, notes: seq(OPENING, bar(0)) },
+    { inst: 'lead', tone: 0.6, gain: 1, verb: 0.3, echo: 0.06, notes: [...seq(FLURRY + ' ' + FLURRY, bar(8), { transpose: -12 }), ...seq(FLURRY + ' ' + FLURRY_HI + ' ' + FLURRY + ' ' + FLURRY_HI, bar(20)), ...sweeps(SOLO_H, 28), ...seq(FINALE, bar(36))] },
     { inst: 'drive', tone: 0.55, gain: 1, verb: 0.08, notes: [...seq(FUGUE + ' ' + FUGUE, bar(12)), ...seq(END, bar(38))] },
   ],
   backing: [
-    { inst: 'organ', gain: 1, pan: -0.1, verb: 0.5, notes: [...transpose(seq(OPENING, bar(0)), -12), ...organ([...FLURRY_H], 8), ...organ([...FUGUE_H, ...FUGUE_H], 12), ...organ([...FLURRY_H, ...FLURRY_H], 20), ...organ(SOLO_H, 28), ...organ(prog('Dm A7 Bb Dm'), 36)] },
+    { inst: 'organ', tone: 0.4, gain: 0.65, pan: -0.1, verb: 0.3, notes: [...organ([...FLURRY_H], 8), ...organ([...FUGUE_H, ...FUGUE_H], 12), ...organ([...FLURRY_H, ...FLURRY_H], 20), ...organ(SOLO_H, 28), ...organ(prog('Dm A7 Bb Dm'), 36)] },
     { inst: 'drive', tone: 0.35, gain: 0.5, verb: 0.05, notes: [...comp([...FLURRY_H, ...FLURRY_H], 4, bar(20), 'm.m.x.m.m.m.x.m.', (c) => [bassOf(c, 'D2'), bassOf(c, 'D2') + 7], { v: 0.7 }), ...comp(SOLO_H, 4, bar(28), 'm.m.x.m.m.m.x.m.', (c) => [bassOf(c, 'D2'), bassOf(c, 'D2') + 7], { v: 0.7 })] },
     { inst: 'pickbass', gain: 1, verb: 0, notes: [...comp(FLURRY_H, 4, bar(8), 'x-------x-------', (c) => [bassOf(c, 'D1')]), ...comp([...FUGUE_H, ...FUGUE_H, ...FLURRY_H, ...FLURRY_H, ...SOLO_H], 4, bar(12), 'x.x.x.x.x.x.x.x.', (c) => [bassOf(c, 'D1')]), ...seq('A1:16 Bb1:8 A1 D2:16', bar(36))] },
     { inst: 'choir', tone: 0.3, gain: 0.7, verb: 0.5, notes: comp(prog('Dm A7 Bb Dm'), 4, bar(36), 'x---------------', (c) => voicing(c, 'A3'), { v: 0.6 }) },
@@ -95,4 +97,4 @@ export const toccata: SongDef = {
   lengthBeats: bar(40),
   previewBeat: bar(12),
   art: { from: '#0b0a14', to: '#5b2a86', ink: '#f0e3ff', motif: 'crest' },
-};
+}, { bar: 4, phrase: 8, shape: [0.88, 1, 0.8], gate: 0.86, accent: 0.06 });

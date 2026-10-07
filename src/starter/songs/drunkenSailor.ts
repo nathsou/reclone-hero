@@ -1,3 +1,4 @@
+import { perform } from '../performance.ts';
 import { abc } from '../abc.ts';
 import { bassOf, comp, nearVoicing, powerOf, prog } from '../arrange.ts';
 import { drumBars, PUNK } from '../patterns.ts';
@@ -40,7 +41,7 @@ const oompah = (from: number, n = 1) => comp([...Array(n)].flatMap(() => H), 4, 
 const chugs = (from: number, n = 1) => comp([...Array(n)].flatMap(() => H), 4, bar(from), 'x.mmx.mmx.mmx.mm', (c) => powerOf(c, 'E2'), { v: 0.75 });
 const squeeze = (from: number, n = 1) => comp([...Array(n)].flatMap(() => H), 4, bar(from), '..x...x...x...x.', (c) => nearVoicing(c, 'B3'), { v: 0.55 });
 
-export const drunkenSailor: SongDef = {
+export const drunkenSailor: SongDef = perform({
   id: 'drunken-sailor',
   name: 'Drunken Sailor',
   artist: 'Traditional',
@@ -62,6 +63,7 @@ export const drunkenSailor: SongDef = {
     { beat: bar(56), name: 'Ending' },
   ],
   player: [
+    { inst: 'fiddle', tone: 0.4, gain: 0.95, verb: 0.16, notes: at(BREAK.notes, bar(24)) },
     { inst: 'accordion', gain: 1, verb: 0.2, notes: at(VERSE.notes, bar(0)) },
     { inst: 'drive', tone: 0.5, gain: 1, verb: 0.05, notes: [...chugs(8), ...seq('E2^5!:8 D2^5!:8 E2^5!:16', bar(56))] },
     {
@@ -72,7 +74,6 @@ export const drunkenSailor: SongDef = {
       echo: 0.08,
       notes: [
         ...at(CHORUS.notes, bar(16)),
-        ...at(BREAK.notes, bar(24)),
         // verse 2 in thirds, an octave up
         ...thirds(at(VERSE.notes, bar(32))),
         ...transpose(at(CHORUS.notes, bar(40)), 12),
@@ -81,9 +82,9 @@ export const drunkenSailor: SongDef = {
     },
   ],
   backing: [
-    { inst: 'accordion', gain: 0.7, pan: -0.3, verb: 0.2, notes: [...at(VERSE.notes, bar(8)), ...squeeze(16), ...squeeze(24), ...at(VERSE.notes, bar(32)), ...squeeze(40, 2)] },
-    { inst: 'fiddle', gain: 0.75, pan: 0.35, verb: 0.3, notes: [...transpose(at(CHORUS.notes, bar(16)), 12), ...diatonic(at(BREAK.notes, bar(24)), EDOR, -2), ...at(CHORUS.notes, bar(48))] },
-    { inst: 'drive', tone: 0.4, gain: 0.55, verb: 0.05, notes: chugs(16, 2).concat(chugs(32, 3)) },
+    { inst: 'accordion', gain: 0.48, pan: -0.3, verb: 0.2, notes: [...at(VERSE.notes, bar(8)), ...squeeze(16), ...squeeze(24), ...at(VERSE.notes, bar(32)), ...squeeze(40, 2)] },
+    { inst: 'fiddle', gain: 0.55, pan: 0.35, verb: 0.3, notes: [...at(CHORUS.notes, bar(16)), ...diatonic(at(BREAK.notes, bar(24)), EDOR, -2), ...at(CHORUS.notes, bar(48))] },
+    { inst: 'drive', tone: 0.4, gain: 0.4, verb: 0.05, notes: chugs(16, 2).concat(chugs(32, 3)) },
     { inst: 'pickbass', gain: 1, verb: 0, notes: [...oompah(8, 6), ...seq('E1:8 D1:8 E1:16', bar(56))] },
   ],
   drums: [{ kit: 'rock', hits: drums(), gain: 0.8 }],
@@ -91,4 +92,4 @@ export const drunkenSailor: SongDef = {
   lengthBeats: bar(58),
   previewBeat: bar(16),
   art: { from: '#0c2233', to: '#c9483a', ink: '#f6ecd2', motif: 'wave' },
-};
+}, { bar: 4, phrase: 16, shape: [0.88, 1, 0.88], gate: 0.85, accent: 0.1 });

@@ -1,3 +1,4 @@
+import { perform } from '../performance.ts';
 import { bassOf, comp, nearVoicing, parseChord, powerOf, prog, voicing } from '../arrange.ts';
 import { drumBars, GALLOP, ROCK_DRIVE } from '../patterns.ts';
 import { diatonic, grid, seq } from '../score.ts';
@@ -57,7 +58,7 @@ function drums(): Hit[] {
 
 const CODA = 'C#3^5!:8 G#2^5! | C#3^5!:8 G#2^5! | C#3^5!:16 | .:16';
 
-export const moonlight: SongDef = {
+export const moonlight: SongDef = perform({
   id: 'moonlight',
   name: 'Moonlight Sonata',
   artist: 'Ludwig van Beethoven',
@@ -76,19 +77,19 @@ export const moonlight: SongDef = {
     { beat: bar(4), name: 'Presto Agitato' },
     { beat: bar(20), name: 'Second Theme' },
     { beat: bar(28), name: 'The Storm Returns' },
-    { beat: bar(36), name: 'Second Theme, Doubled' },
+    { beat: bar(36), name: 'Second Theme, Answer' },
     { beat: bar(44), name: 'Coda' },
   ],
   player: [
-    { inst: 'piano', gain: 1.2, verb: 0.45, notes: comp(ADAGIO_H, 4, bar(0), 'xxxxxxxxxxxx', (c) => nearVoicing(c, 'G#3'), { arp: [0, 1, 2], step: 1 / 3, v: 0.6 }) },
-    { inst: 'lead', tone: 0.6, gain: 1, verb: 0.25, echo: 0.1, notes: [...storm(PRESTO_H, 4), ...storm(PRESTO_H, 12), ...seq(THEME, bar(20)), ...storm(PRESTO_H, 28), ...seq(THEME, bar(36), { transpose: 12, v: 0.9 })] },
+    { inst: 'piano', gain: 1.2, verb: 0.45, notes: comp(ADAGIO_H, 4, bar(0), 'xxxxxxxxxxxx', (c) => nearVoicing(c, 'G#3'), { arp: [0, 1, 2], step: 1 / 3, v: 0.6 }).map(n => ({ ...n, pedal: 0.18 })) },
+    { inst: 'lead', tone: 0.6, gain: 1, verb: 0.25, echo: 0.1, notes: [...storm(PRESTO_H, 4), ...storm(PRESTO_H, 12), ...seq(THEME, bar(20)), ...storm(PRESTO_H, 28), ...seq(THEME, bar(36), { v: 0.85 })] },
     { inst: 'drive', tone: 0.55, gain: 1, verb: 0.08, notes: [...hits(PRESTO_H, 4), ...hits(PRESTO_H, 12), ...hits(PRESTO_H, 28), ...seq(CODA, bar(44))] },
   ],
   backing: [
     { inst: 'piano', gain: 0.8, pan: -0.15, verb: 0.45, notes: comp(ADAGIO_H, 4, bar(0), 'x---------------', (c) => [bassOf(c, 'C#2'), bassOf(c, 'C#2') + 12], { v: 0.6 }) },
-    { inst: 'strings', gain: 0.8, pan: -0.25, verb: 0.45, notes: [...comp(PRESTO_H, 8, bar(4), 'x-------------------------------', (c) => voicing(c, 'G#3'), { v: 0.5 }), ...comp(PRESTO_H, 8, bar(12), 'x-------------------------------', (c) => voicing(c, 'G#3'), { v: 0.55 }), ...comp(THEME_H, 4, bar(20), 'x---------------', (c) => voicing(c, 'G#3'), { v: 0.55 }), ...comp(THEME_H, 4, bar(36), 'x---------------', (c) => voicing(c, 'G#3'), { v: 0.55 }), ...comp(PRESTO_H, 8, bar(28), 'x-------------------------------', (c) => voicing(c, 'G#3'), { v: 0.55 })] },
+    { inst: 'strings', gain: 0.45, pan: -0.25, verb: 0.25, notes: [...comp(PRESTO_H, 8, bar(4), 'x-------------------------------', (c) => voicing(c, 'G#3'), { v: 0.5 }), ...comp(PRESTO_H, 8, bar(12), 'x-------------------------------', (c) => voicing(c, 'G#3'), { v: 0.55 }), ...comp(THEME_H, 4, bar(20), 'x---------------', (c) => voicing(c, 'G#3'), { v: 0.55 }), ...comp(THEME_H, 4, bar(36), 'x---------------', (c) => voicing(c, 'G#3'), { v: 0.55 }), ...comp(PRESTO_H, 8, bar(28), 'x-------------------------------', (c) => voicing(c, 'G#3'), { v: 0.55 })] },
     { inst: 'drive', tone: 0.4, gain: 0.5, verb: 0.05, notes: [...comp(THEME_H, 4, bar(20), 'm.m.x.m.m.m.x.m.', (c) => powerOf(c, 'E2'), { v: 0.7 }), ...comp(THEME_H, 4, bar(36), 'm.m.x.m.m.m.x.m.', (c) => powerOf(c, 'E2'), { v: 0.7 })] },
-    { inst: 'lead', tone: 0.5, gain: 0.55, pan: 0.35, verb: 0.3, notes: diatonic(seq(THEME, bar(36), { transpose: 12, v: 0.65 }), G_SHARP_MINOR, -2) },
+    { inst: 'lead', tone: 0.5, gain: 0.55, pan: 0.35, verb: 0.3, notes: diatonic(seq(THEME, bar(36), { v: 0.6 }), G_SHARP_MINOR, -2) },
     { inst: 'pickbass', gain: 1, verb: 0, notes: [...comp(PRESTO_H, 8, bar(4), 'x.x.x.x.x.x.x.x.', (c) => [bassOf(c, 'C#1')]), ...comp(PRESTO_H, 8, bar(12), 'x.x.x.x.x.x.x.x.', (c) => [bassOf(c, 'C#1')]), ...comp(THEME_H, 4, bar(20), 'x.x.x.x.x.x.x.x.', (c) => [bassOf(c, 'C#1')]), ...comp(PRESTO_H, 8, bar(28), 'x.x.x.x.x.x.x.x.', (c) => [bassOf(c, 'C#1')]), ...comp(THEME_H, 4, bar(36), 'x.x.x.x.x.x.x.x.', (c) => [bassOf(c, 'C#1')]), ...seq('C#2:8 G#1 | C#2:8 G#1 | C#2:16', bar(44))] },
   ],
   drums: [{ kit: 'rock', hits: drums(), gain: 0.8 }],
@@ -96,4 +97,4 @@ export const moonlight: SongDef = {
   lengthBeats: bar(48),
   previewBeat: bar(4),
   art: { from: '#03040c', to: '#2c3e66', ink: '#f4f1d0', motif: 'orbit' },
-};
+}, { bar: 4, phrase: 16, shape: [0.8, 1, 0.85], gate: 0.94, accent: 0.045 });

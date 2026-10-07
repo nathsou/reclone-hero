@@ -1,3 +1,4 @@
+import { perform } from '../performance.ts';
 import { drumBars, FOUR_FLOOR, HOUSE_OPEN } from '../patterns.ts';
 import { arp, chord, grid, seq } from '../score.ts';
 import type { Hit, Note, SongDef } from '../score.ts';
@@ -74,7 +75,7 @@ function drums(): Hit[] {
   ];
 }
 
-export const neonSkyline: SongDef = {
+export const neonSkyline: SongDef = perform({
   id: 'neon-skyline',
   name: 'Neon Skyline',
   artist: 'Night Arcade',
@@ -109,18 +110,18 @@ export const neonSkyline: SongDef = {
     {
       inst: 'pad',
       tone: 0.45,
-      gain: 1,
-      verb: 0.35,
+      gain: 0.65,
+      verb: 0.25,
       pump: 0.6,
       notes: [...pads(0, 32), ...pads(32, 8), ...pads(40, 24), ...pads(64, 4), ...pads(68, 4, OUTRO)],
     },
-    { inst: 'pluck', tone: 0.3, gain: 0.45, pan: 0.3, verb: 0.2, echo: 0.3, pump: 0.3, notes: [...arps(16, 16, 0.25, 0.6), ...arps(48, 16, 0.25, 0.6)] },
+    { inst: 'pluck', tone: 0.3, gain: 0.45, pan: 0.3, verb: 0.2, echo: 0.3, pump: 0.3, notes: [...arps(16, 16, 0.25, 0.6), ...arps(48, 16, 0.25, 0.6)].filter((_, i) => i % 8 < 6) },
     { inst: 'synthbass', tone: 0.55, gain: 1, verb: 0, notes: [...quarterBass(8, 8), ...houseBass(16, 16), ...quarterBass(40, 8), ...houseBass(48, 16), ...houseBass(64, 4)] },
-    { inst: 'subbass', gain: 0.8, verb: 0, pump: 0.4, notes: [...subs(16, 16), ...subs(32, 8), ...subs(48, 16), ...subs(68, 4, OUTRO)] },
+    { inst: 'subbass', gain: 0.45, verb: 0, pump: 0.65, notes: [...subs(16, 16), ...subs(32, 8), ...subs(48, 16), ...subs(68, 4, OUTRO)] },
   ],
   drums: [{ kit: 'electro', hits: drums() }],
   solos: [],
   lengthBeats: bar(72),
   previewBeat: bar(16),
   art: { from: '#0b0630', to: '#ff2e88', ink: '#7ef9ff', motif: 'grid' },
-};
+}, { bar: 4, phrase: 16, shape: [0.9, 1, 0.92], gate: 0.9, accent: 0.06 });

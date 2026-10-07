@@ -24,6 +24,6 @@ for (const def of defs) {
     }
   }
   const ms = performance.now() - start;
-  const processed = frames + Math.min(from, 3) * sr;
+  const processed = frames;
   console.log(`${def.id.padEnd(26)} ${ms.toFixed(0).padStart(5)} ms  ${(frames / sr / (ms / 1000)).toFixed(1).padStart(5)}x realtime  RMS player ${Math.sqrt(ep / (2 * frames)).toFixed(3)} band ${Math.sqrt(eb / (2 * frames)).toFixed(3)}  peak ${peak.toFixed(3)}  limiter avg ${((stats.get('gr') ?? 0) / processed * 100).toFixed(1)}%`);
 }

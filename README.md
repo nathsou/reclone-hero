@@ -4,7 +4,7 @@
 
 A Clone Hero–compatible rhythm game that runs in the browser. It reads your existing song folders
 (`notes.chart` / `notes.mid` + `song.ini` + audio stems), plays them on a WebGL2 highway, and is built with
-nothing but TypeScript 7 and Vite: no runtime dependencies. No songs and no guitar? It comes with 53
+nothing but TypeScript 7 and Vite: no runtime dependencies. No songs and no guitar? It comes with 24
 built-in songs and plays on the keyboard.
 
 ## Running it
@@ -16,7 +16,7 @@ npm run dev
 
 Open the printed URL in a Chromium-based browser (Chrome, Edge, Arc, Brave).
 
-- **Built-in songs:** on a first visit the song list opens straight away with the 53 songs that ship with
+- **Built-in songs:** on a first visit the song list opens straight away with the 24 songs that ship with
   the game (see [Built-in songs](#built-in-songs)).
 - **Your library:** click the folder button (or **Open charts folder…**) and pick the folder that holds your songs. The browser
   remembers it, so next time you only confirm access. Songs are read straight from disk; nothing is uploaded.
@@ -188,48 +188,27 @@ before the next notes, which helps on a phone.
 
 ## Built-in songs
 
-Fifty-three songs ship inside the game, so there is always something to play. They are not recordings: each is a
+Twenty-four songs ship inside the game, so there is always something to play. They are not recordings: each is a
 score written in TypeScript (`src/starter/songs`), synthesized in the browser when you pick it (a Web Worker
-renders the stems in 2–6 s) and charted from the same score, so notes and audio cannot drift apart. Their
+renders the stems on demand) and charted from the same score, so notes and audio cannot drift apart. Their
 scores and synthesis are bundled with the game; they need no download and carry no licensing strings.
 
 | Song | Credit | Style | Expert |
 | --- | --- | --- | --- |
-| Ode to Joy | Beethoven, Symphony No. 9 (1824) | pop-punk, key change | gentle, quarter notes |
 | Midnight Drive | original | synthwave, 100 BPM | held chords, arpeggios |
 | Ignition | original | rock, 140 BPM | palm-muted riffs, a solo |
 | Neon Skyline | original | electro house, 126 BPM | long hammer-on arpeggios |
-| Für Elise | Beethoven, WoO 59 (1810) | electro in 3/8 | sixteenth-note melody |
 | Canon in D | Pachelbel (c. 1700) | rock | busier each variation, shred section |
 | In the Hall of the Mountain King | Grieg, Peer Gynt (1875) | metal, 100 → 185 BPM | speeds up all the way |
-| Redline | original | punk-metal, 176 BPM | gallops, fills, twin leads |
-| Minuet in G | Petzold (1725) | chiptune waltz | gentle, quarter and eighth notes |
-| Morning Mood | Grieg, Peer Gynt (1875) | chill 6/8 | gentle eighth notes |
-| Swan Lake | Tchaikovsky (1876) | dark synthwave | long held notes, harp arpeggios |
-| The Blue Danube | Strauss II (1866) | electro waltz in 3/4 | waltz melody, arpeggios |
-| Funeral March | Chopin, Sonata No. 2 (1839) | doom metal | heavy chords, a clean trio |
-| The Entertainer | Joplin (1902) | electro swing | syncopated rag |
-| Eine kleine Nachtmusik | Mozart (1787) | electro house | Alberti arpeggios, big hook |
-| Prelude in C | Bach, WTC I (1722) | synthwave | 35 bars of hammer-on arpeggios |
-| Symphony No. 40 | Mozart (1788) | drum & bass, 174 BPM | fast sighing theme |
 | Carol of the Bells | Leontovych (1916) | metal waltz | the ostinato, then everything on top |
-| Symphony No. 5 | Beethoven (1808) | metal | the motif everywhere, a development solo |
 | Toccata and Fugue in D minor | Bach (c. 1704) | organ metal | pedal-point flurries, a sweep solo |
-| William Tell Overture | Rossini (1829) | gallop punk | sixteenth-sixteenth-eighth, all the way |
-| Ride of the Valkyries | Wagner (1856) | symphonic metal in 9/8 | triplet chugs, the horn call |
 | Moonlight Sonata | Beethoven (1801) | Adagio, then Presto as metal | storms of rising arpeggios |
-| Spring | Vivaldi, The Four Seasons (1725) | played straight: solo violin and strings | birdsong trills, the storm |
-| Little Fugue in G minor | Bach, BWV 578 (c. 1707) | played straight on organ, two voices | a fugue subject in sixteenths |
-| Pomp and Circumstance | Elgar, March No. 1 (1901) | played straight: strings, then brass and timpani | stately, in harmony |
-| Can-Can | Offenbach (1858) | played straight: pit orchestra galop | fast, twice round, faster |
 | Gymnopédie No. 1 | Satie (1888) | played straight on piano | slow melody and left-hand chords |
 | Caprice No. 24 | Paganini (1817) | neoclassical metal | the theme, then triplet sweeps |
 | Korobeiniki | Russian folk song (1861) | chiptune into metal | three levels, each faster |
 | Drunken Sailor | sea shanty | shanty punk with accordion and fiddle | chugs, a fiddle break, double stops |
 | Greensleeves | English ballad (16th c.) | Renaissance consort: lute, fiddle, viols | melody, then in thirds |
 | The Irish Washerwoman | Irish jig | session into Celtic rock, 6/8 | fiddle, banjo, then electric |
-| Hava Nagila | Hebrew folk song (1918) | slow hora into surf rock | faster each time, in thirds |
-| When the Saints Go Marching In | spiritual | New Orleans brass band | a dirge, then a swinging banjo chorus |
 | Glass Elevator | original | funk, 104 BPM | scratchy sixteenth-note chords, a unison riff |
 | Pocket Change | original | ska punk, 184 BPM | off-beat upstrokes, power chords, horns |
 | Switchback Breakdown | original | bluegrass, no drums | banjo rolls, a flatpicked guitar break |
@@ -238,42 +217,27 @@ scores and synthesis are bundled with the game; they need no download and carry 
 | Seventh Gear | original | progressive metal in 7/8 | 2+2+3 riffs, a clean interlude, a solo |
 | Afterglow Protocol | original | trance, 138 BPM | plucked arpeggios, a supersaw drop |
 | Sunday Tape | original | lo-fi neo-soul, swung | chord stabs, fills, double stops |
-| Mars (War Machine) | Holst, The Planets (1916), excerpt and variations | orchestral march in 5/4, electric climax | triplet ostinato, brass octaves |
-| Mercury (Winged Messenger) | Holst, The Planets (1916), excerpt and variations | orchestral scherzo in 6/8 | quick chromatic turns, harp interlude |
-| Jupiter (Jollity) | Holst, The Planets (1916), excerpt and variations | orchestral celebration in 2/4 | brass tune, running strings |
-| Paper Hearts | original | power pop, 132 BPM | guitar verse, singable chorus, arpeggio bridge |
-| City Lights | original | synth pop, 116 BPM | plucked chords and a bright synth hook |
-| Golden Hour | original | dance pop, 122 BPM | piano groove, four-on-the-floor chorus |
 | Warehouse Current | original | French house, 125 BPM | syncopated bass, organ stabs, filter lifts |
-| Prism Parade | original | disco house, 118 BPM | melodic lead, electric-piano break |
-| Assembly Line | original | electro rock, 110 BPM | mechanical muted riffs and a chip breakdown |
 | Photon Run | original | cinematic electronica, 104 BPM | pulse arpeggios, strings and brass |
 
-The classical and traditional pieces are public-domain compositions. Some are played straight, as written
-(Spring, the Little Fugue, Pomp and Circumstance, the Can-Can, the Gymnopédie); the others are new
-arrangements (melodies as written, with new bass lines, drums and some new passages). The originals were
-written for the game. The Holst tracks are short arrangements of opening motifs, followed by original
-variations and transitions; they do not reproduce the complete movements. Their pitch and rhythm sources
-are the public-domain incipits on [IMSLP's The Planets page](https://imslp.org/wiki/The_Planets,_Op.32_(Holst,_Gustav)).
-The Circuit Atlas tracks draw on the production palettes of Daft Punk's *Homework*, *Discovery*,
-*Human After All* and *TRON: Legacy*, respectively, with newly written melodies and no samples from those records.
-Ode to Joy's lead/band balance and Pocket Change's headroom have also been improved.
+The curated pack contains 24 arrangements and originals. Gymnopédie retains its piano identity;
+the other classical and traditional selections are explicitly adapted for the game. The two Circuit Atlas
+originals explore French house and cinematic electronica without quoting recordings.
+The [curation and rework log](docs/starter-curation.md) records all 29 removals, the revision to every
+surviving track, and ten proposed additions. Subjective listening approval is still pending.
 
 Every starter song has a bespoke vector cover illustrating its musical theme, with prominent title and
 composer/artist lettering. Compact path commands and shared drawing routines generate the covers on demand;
 no cover image files, external downloads or extra fonts are bundled. Three poster layouts, seven background
-treatments and individually drawn silhouettes keep all 53 covers distinct at both Cover Flow and thumbnail sizes.
+treatments and individually drawn silhouettes keep all 24 covers distinct at both Cover Flow and thumbnail sizes.
 `tests/tools/cover-audit.mjs` renders a contact sheet for reviewing the complete collection.
 
-Many of the older melodies are quoted note for note from public ABC transcriptions,
-read by a small ABC reader (`src/starter/abc.ts`, checked bar by bar by a test): thesession.org (Korobeiniki,
-Drunken Sailor, The Irish Washerwoman), John Chambers' collection at trillian.mit.edu (Hava Nagila, the
-Can-Can, Pomp and Circumstance; Frank Nordberg's Spring, Jeff Bigler's two-voice Little Fugue, and the Paganini
-caprice from Lester Bailey's collection), Chris Spencer's abc-music (Greensleeves) and Colin Hume
-(Gymnopédie No. 1). Instruments are synthesized from scratch: Karplus–Strong strings through an amp and cabinet
-model for guitars, bass and banjo, band-limited supersaws, pulse, brass, reed and bowed-string oscillators
-(chiptune, horns, accordion, fiddle), separate acoustic and FM electric pianos, bells, additive organ, tuned timpani and a
-synthesized drum kit, mixed with a Freeverb reverb, tempo-synced echo and a limiter shared by both stems.
+Older melodies use public ABC transcriptions, parsed by `src/starter/abc.ts`: thesession.org
+(Korobeiniki, Drunken Sailor, The Irish Washerwoman), Chris Spencer's abc-music collection (Greensleeves),
+Colin Hume (Gymnopédie), and Lester Bailey's collection via John Chambers (Caprice No. 24).
+All instruments are synthesized locally. The engine includes articulated strings, a separate additive choir,
+acoustic and FM pianos, configurable clean-guitar chorus, expressive plucks, and varied synthesized drum hits.
+Written phrase dynamics preserve the score/chart relationship; a shared lookahead limiter preserves stem balance.
 
 Charts are generated for all four difficulties. Expert plays every note of the guitar part. Lower difficulties
 keep the metrically strongest notes within a note budget (about 40 / 60 / 80 % of Expert), a minimum spacing and
@@ -284,9 +248,10 @@ sections are placed too. Hide the built-in songs under Settings › Data › Bui
 
 `node tests/tools/starter-dev.ts <song-id> <out-dir>` renders a song to WAV, prints per-instrument levels and
 writes its `.chart`; add `--chart expert --bars 8-12` for a text view of the notes.
-`node tests/tools/loudness.ts [song-id…] [--write]` measures how loud each built-in song plays and writes the
-level trims (`src/starter/songs/levels.ts`) that keep them all within about a decibel of each other; run it again
-after changing a song's mix.
+`node tests/tools/starter-audio-audit.mjs --out /tmp/starter-review --write` renders complete songs,
+calibrates EBU R128 loudness trims, and checks true peaks with FFmpeg. It writes MP3 review files, a playlist,
+and measurements. Add `--before /path/to/baseline` for matched-volume before/after excerpts.
+Most tracks target −16 LUFS; acoustic and post-rock tracks retain quieter targets. See the curation log.
 
 ## Feedback when you make a mistake
 
