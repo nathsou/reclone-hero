@@ -1,3 +1,4 @@
+import { perform } from '../performance.ts';
 import { drumBars, HALF_TIME, ROCK, ROCK_DRIVE, ROCK_OPEN, ROCK_RIDE } from '../patterns.ts';
 import { grid, roots, seq } from '../score.ts';
 import type { Hit, SongDef } from '../score.ts';
@@ -93,7 +94,7 @@ function drums(): Hit[] {
   ];
 }
 
-export const ignition: SongDef = {
+export const ignition: SongDef = perform({
   id: 'ignition',
   name: 'Ignition',
   artist: 'Static Pilots',
@@ -140,15 +141,15 @@ export const ignition: SongDef = {
       tone: 0.6,
       gain: 1,
       verb: 0.25,
-      echo: 0.18,
-      notes: [...seq(HOOK, bar(28)), ...seq(HOOK, bar(52)), ...seq(SOLO, bar(60)), ...seq(HOOK, bar(76))],
+      echo: 0.1,
+      notes: [...seq(HOOK, bar(28)), ...seq(HOOK, bar(52)), ...seq(SOLO, bar(60), { transpose: -12 }), ...seq(HOOK, bar(76))],
     },
   ],
   backing: [
     {
       inst: 'drive',
       tone: 0.4,
-      gain: 0.55,
+      gain: 0.4,
       verb: 0.06,
       notes: [
         ...seq(CHORUS_CHORDS, bar(28), { v: 0.7 }),
@@ -202,4 +203,4 @@ export const ignition: SongDef = {
   lengthBeats: bar(90),
   previewBeat: bar(28),
   art: { from: '#1b0f0a', to: '#e0461f', ink: '#ffd9a8', motif: 'sun' },
-};
+}, { bar: 4, phrase: 16, shape: [0.9, 1, 0.86], gate: 0.88, accent: 0.07 });

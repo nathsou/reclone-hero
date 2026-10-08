@@ -1,3 +1,4 @@
+import { perform } from '../performance.ts';
 import { BLAST, drumBars, PUNK, ROCK, ROCK_DRIVE } from '../patterns.ts';
 import { grid, seq, transpose } from '../score.ts';
 import type { Hit, Note, SongDef, TempoPoint } from '../score.ts';
@@ -61,7 +62,7 @@ function drums(): Hit[] {
   ];
 }
 
-export const mountainKing: SongDef = {
+export const mountainKing: SongDef = perform({
   id: 'mountain-king',
   name: 'In the Hall of the Mountain King',
   artist: 'Edvard Grieg',
@@ -80,19 +81,19 @@ export const mountainKing: SongDef = {
     { beat: bar(64), name: 'Collapse' },
   ],
   player: [
-    { inst: 'clean', gain: 2, verb: 0.25, notes: statement(0, { staccato: true, v: 0.7 }) },
+    { inst: 'clean', chorus: 0.05, gain: 1.5, verb: 0.25, notes: statement(0, { staccato: true, v: 0.7 }) },
     { inst: 'drive', tone: 0.5, gain: 1, verb: 0.08, notes: [...statement(16, { transpose: -12 }), ...seq(CODA, bar(64))] },
-    { inst: 'lead', tone: 0.65, gain: 1, verb: 0.2, echo: 0.1, notes: [...statement(32, { transpose: 12 }), ...statement(48, { transpose: 12, v: 0.9 })] },
+    { inst: 'lead', tone: 0.65, gain: 1, verb: 0.2, echo: 0.1, notes: [...statement(32), ...statement(48, { transpose: 12, v: 0.9 })] },
   ],
   backing: [
     { inst: 'pickbass', gain: 1, verb: 0, notes: [...pedal(0, 'R*:4 . R* .'), ...pedal(16, '(R:2)x8'), ...pedal(32, '(R:2)x8'), ...pedal(48, '(R:2)x8'), ...seq(CODA_BASS, bar(64))] },
-    { inst: 'strings', gain: 0.9, pan: -0.15, verb: 0.4, notes: [...strings(16), ...strings(32)] },
+    { inst: 'strings', gain: 0.5, pan: -0.15, verb: 0.4, notes: [...strings(16), ...strings(32)] },
     // (an octave down, but never below the guitar's low E)
-    { inst: 'drive', tone: 0.35, gain: 0.55, verb: 0.05, notes: [...chugs(32), ...statement(48, { transpose: -12, v: 0.75 }).map((n) => (n.p[0] < 40 ? { ...n, p: n.p.map((p) => p + 12) } : n))] },
+    { inst: 'drive', tone: 0.35, gain: 0.4, verb: 0.05, notes: [...chugs(32), ...statement(48, { transpose: -12, v: 0.75 }).map((n) => (n.p[0] < 40 ? { ...n, p: n.p.map((p) => p + 12) } : n))] },
   ],
   drums: [{ kit: 'rock', hits: drums() }],
   solos: [],
   lengthBeats: bar(68),
   previewBeat: bar(32),
   art: { from: '#07120c', to: '#3f6b3a', ink: '#d8f5a2', motif: 'shards' },
-};
+}, { bar: 4, phrase: 16, shape: [0.85, 1, 0.9], gate: 0.82, accent: 0.08 });

@@ -61,7 +61,7 @@ export function voicing(name: string, low = 'G3'): number[] {
 export function nearVoicing(name: string, around = 'C4'): number[] {
   const c = parseChord(name);
   const target = midi(around);
-  const pcs = c.intervals.filter((i) => i < 12).map((i) => (c.root + i) % 12);
+  const pcs = [...new Set(c.intervals.map((i) => (c.root + i) % 12))];
   let best: number[] = [];
   let bestD = Infinity;
   for (const lowPc of pcs) {

@@ -1,3 +1,4 @@
+import { perform } from '../performance.ts';
 import { abc } from '../abc.ts';
 import { bassOf, comp, nearVoicing, powerOf, prog } from '../arrange.ts';
 import { drumBars, GALLOP, ROCK_DRIVE, ROCK_RIDE } from '../patterns.ts';
@@ -62,7 +63,7 @@ function drums(): Hit[] {
   ];
 }
 
-export const caprice24: SongDef = {
+export const caprice24: SongDef = perform({
   id: 'caprice-24',
   name: 'Caprice No. 24',
   artist: 'Niccolò Paganini',
@@ -82,20 +83,20 @@ export const caprice24: SongDef = {
     { beat: END, name: 'Fine' },
   ],
   player: [
-    { inst: 'fiddle', tone: 0.65, gain: 1.1, verb: 0.35, notes: at(THEME.notes, INTRO, 12) },
-    { inst: 'lead', tone: 0.6, gain: 1, verb: 0.2, echo: 0.08, notes: [...at(THEME.notes, BAND), ...at(SWEEPS.notes, VAR), ...thirds(at(THEME.notes, HARM, 12))] },
+    { inst: 'fiddle', tone: 0.4, gain: 1, verb: 0.18, notes: at(THEME.notes, INTRO) },
+    { inst: 'lead', tone: 0.6, gain: 1, verb: 0.2, echo: 0.08, notes: [...at(THEME.notes, BAND), ...at(SWEEPS.notes, VAR), ...thirds(at(THEME.notes, HARM))] },
     { inst: 'drive', tone: 0.55, gain: 0.9, verb: 0.1, notes: [{ b: END, d: 4, p: [45, 52, 57], v: 1 }] },
   ],
   backing: [
-    { inst: 'strings', tone: 0.4, gain: 0.9, pan: -0.2, verb: 0.45, notes: comp(H, 2, INTRO, 'x-------', (c) => nearVoicing(c, 'C4'), { v: 0.35 }) },
+    { inst: 'strings', tone: 0.4, gain: 0.35, pan: -0.2, verb: 0.45, notes: comp(H, 2, INTRO, 'x-------', (c) => nearVoicing(c, 'C4'), { v: 0.35 }) },
     { inst: 'drive', tone: 0.45, gain: 0.55, verb: 0.05, notes: [...chugs(BAND, 'x.mmx.mm'), ...chugs(VAR, 'x-------'), ...chugs(HARM, 'xmmmxmmm')] },
     { inst: 'pickbass', gain: 1, verb: 0, notes: [...bass(BAND, 'x.x.x.x.'), ...bass(VAR, 'x...x...'), ...bass(HARM, 'xxxxxxxx'), { b: END, d: 4, p: [33], v: 0.9 }] },
     { inst: 'strings', tone: 0.5, gain: 0.5, pan: 0.3, verb: 0.4, notes: [...at(THEME.notes, HARM).map((n) => ({ ...n, v: 0.6 })), { b: END, d: 4, p: [57, 60, 64, 69], v: 0.7 }] },
-    { inst: 'organ', gain: 1.2, pan: -0.3, verb: 0.4, notes: comp(H, 2, VAR, 'x-------', (c) => nearVoicing(c, 'A3'), { v: 0.5 }) },
+    { inst: 'organ', tone: 0.4, gain: 0.65, pan: -0.3, verb: 0.4, notes: comp(H, 2, VAR, 'x-------', (c) => nearVoicing(c, 'A3'), { v: 0.5 }) },
   ],
   drums: [{ kit: 'rock', hits: drums(), gain: 0.8 }],
   solos: [[VAR, HARM]],
   lengthBeats: END + 4,
   previewBeat: VAR,
   art: { from: '#1a0505', to: '#a31d1d', ink: '#ffe6c7', motif: 'shards' },
-};
+}, { bar: 2, phrase: 8, shape: [0.85, 1, 0.82], gate: 0.88, accent: 0.08 });

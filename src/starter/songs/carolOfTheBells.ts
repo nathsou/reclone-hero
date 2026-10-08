@@ -1,3 +1,4 @@
+import { perform } from '../performance.ts';
 import { bassOf, comp, powerOf, prog, voicing } from '../arrange.ts';
 import { drumBars } from '../patterns.ts';
 import { grid, seq } from '../score.ts';
@@ -42,7 +43,7 @@ function drums(): Hit[] {
 
 const END: Note[] = seq('G2^5!:4 G2^5! G2^5! | G2^5!:12', bar(80));
 
-export const carolOfTheBells: SongDef = {
+export const carolOfTheBells: SongDef = perform({
   id: 'carol-of-the-bells',
   name: 'Carol of the Bells',
   artist: 'Mykola Leontovych',
@@ -63,14 +64,14 @@ export const carolOfTheBells: SongDef = {
   ],
   player: [
     { inst: 'pluck', tone: 0.6, gain: 1.1, verb: 0.3, echo: 0.2, notes: seq(times(OSTINATO, 8), bar(0)) },
-    { inst: 'lead', tone: 0.6, gain: 1, verb: 0.2, echo: 0.1, notes: [...seq(times(OSTINATO, 16), bar(8)), ...seq(times(UPPER, 8) + ' ' + times(HIGH, 8), bar(24)), ...seq(times(BELLS, 4), bar(40)), ...seq(times(OSTINATO, 8), bar(72), { transpose: 12, v: 0.9 })] },
+    { inst: 'lead', tone: 0.6, gain: 1, verb: 0.2, echo: 0.1, notes: [...seq(times(OSTINATO, 16), bar(8)), ...seq(times(UPPER, 8) + ' ' + times(HIGH, 8), bar(24)), ...seq(times(BELLS, 4), bar(40)), ...seq(times(OSTINATO, 8), bar(72), { v: 0.65 })] },
     { inst: 'drive', tone: 0.6, gain: 1, verb: 0.06, notes: [...chugs(fall(16), 56), ...END] },
   ],
   backing: [
-    { inst: 'bell', gain: 0.45, pan: 0.25, verb: 0.5, echo: 0.3, notes: [...seq(times(OSTINATO, 8), bar(0), { transpose: 12, v: 0.5 }), ...seq(times(OSTINATO, 32), bar(24), { transpose: 12, v: 0.45 }), ...seq(times(OSTINATO, 16), bar(56), { transpose: 12, v: 0.5 })] },
+    { inst: 'bell', gain: 0.25, pan: 0.25, verb: 0.5, echo: 0.3, notes: [...seq(times(OSTINATO, 8), bar(0), { transpose: 12, v: 0.5 }), ...seq(times(OSTINATO, 32), bar(24), { transpose: 12, v: 0.45 }), ...seq(times(OSTINATO, 16), bar(56), { transpose: 12, v: 0.5 })] },
     { inst: 'drive', tone: 0.4, gain: 0.5, verb: 0.05, notes: [...chugs(fall(16), 8, 0.65), ...chugs(fall(16), 24, 0.65), ...chugs(fall(16), 40, 0.65), ...chugs(fall(8), 72, 0.7)] },
-    { inst: 'strings', gain: 0.8, pan: -0.25, verb: 0.45, notes: [...pads(fall(8), 0), ...pads(fall(64), 8), ...pads(fall(8), 72)] },
-    { inst: 'choir', tone: 0.35, gain: 0.7, verb: 0.5, notes: [...pads(fall(16), 40), ...pads(fall(16), 56)] },
+    { inst: 'strings', gain: 0.42, pan: -0.25, verb: 0.45, notes: [...pads(fall(8), 0), ...pads(fall(64), 8), ...pads(fall(8), 72)] },
+    { inst: 'choir', tone: 0.35, gain: 0.5, verb: 0.5, notes: [...pads(fall(16), 40), ...pads(fall(16), 56)] },
     { inst: 'pickbass', gain: 1, verb: 0, notes: [...bass(fall(72), 8), ...seq('G1:4 G1 G1 | G1:12', bar(80))] },
   ],
   drums: [{ kit: 'rock', hits: drums(), gain: 0.55 }],
@@ -78,4 +79,4 @@ export const carolOfTheBells: SongDef = {
   lengthBeats: bar(82),
   previewBeat: bar(8),
   art: { from: '#06121c', to: '#1f5c70', ink: '#e6fbff', motif: 'rings' },
-};
+}, { bar: 3, phrase: 12, shape: [0.82, 1, 0.88], gate: 0.9, accent: 0.06 });

@@ -1,6 +1,7 @@
 // Optional contact sheet and rendering audit for the complete built-in cover catalog.
 // Uses the same optional Playwright / Chrome environment variables as browser-audit.mjs.
 import assert from 'node:assert/strict';
+import { STARTER_SONGS } from '../../src/starter/songs/index.ts';
 import { mkdir } from 'node:fs/promises';
 const { chromium } = await import(process.env.PLAYWRIGHT_MODULE ?? 'playwright');
 const browser = await chromium.launch({executablePath:process.env.CHROME_PATH || undefined,headless:true});
@@ -30,12 +31,12 @@ try {
   </script>`}));
   await page.goto(`${origin}/__cover-audit`);await page.waitForFunction(()=>window.artDone,{},{timeout:60000});
   const records=await page.evaluate(()=>artAudit);
-  assert.equal(records.length,53);assert.equal(new Set(records.map(r=>r.hash)).size,53,'all 53 rendered designs differ');
+  assert.deepEqual(records.map(r=>r.id),STARTER_SONGS.map(s=>s.id));assert.equal(new Set(records.map(r=>r.hash)).size,STARTER_SONGS.length,'all retained designs differ');
   for(const r of records){assert.equal(r.width,512);assert.equal(r.height,512);assert.ok(r.size>1000&&r.size<200000,`${r.id}: efficient on-demand PNG`);}
   assert.deepEqual(errors,[]);
   await page.screenshot({path:`${output}/starter-cover-collection.png`,fullPage:true});
   await page.locator('#thumbs').screenshot({path:`${output}/starter-cover-thumbnails.png`});
-  for(const id of ['spring','moonlight','mars-war-machine','paper-hearts','photon-run']){
+  for(const id of ['gymnopedie','moonlight','sunday-tape','warehouse-current','photon-run']){
     const index=records.findIndex(r=>r.id===id);await page.locator('main img').nth(index).screenshot({path:`${output}/cover-${id}.png`});
   }
   console.log(`PASS: ${records.length} unique, complete 512px covers; no page errors. Mean generated PNG ${(records.reduce((a,r)=>a+r.size,0)/records.length/1024).toFixed(1)} KiB, generated on demand and absent from the bundle.`);

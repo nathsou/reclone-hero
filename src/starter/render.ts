@@ -1,3 +1,4 @@
+import { MasterLimiter } from './master.ts';
 import { Biquad, dbToGain, Reverb, rng } from './dsp.ts';
 import { makeKit, makeVoice } from './instruments.ts';
 import type { DrumSample, Voice } from './instruments.ts';
@@ -35,8 +36,8 @@ interface NoteTrack {
 }
 
 interface DrumTrack {
-  kit: Record<DrumVoice, DrumSample>;
-  hits: { at: number; k: DrumVoice; v: number }[];
+  kit: Record<DrumVoice, DrumSample>[];
+  hits: { at: number; k: DrumVoice; v: number; variant: number; choke: number }[];
   next: number;
   L: Float32Array;
   R: Float32Array;
@@ -90,7 +91,7 @@ export function songSeconds(def: SongDef): number {
  * Render [from, to) seconds of a song block by block. A generator, so callers can report progress
  * and yield to the event loop between blocks.
  */
-export function* renderSong(def: SongDef, sr: number, from = 0, to = songSeconds(def), stats?: Map<string, number>): Generator<Block> {
+function* renderMix(def: SongDef, sr: number, from = 0, to = songSeconds(def), stats?: Map<string, number>): Generator<Block> {
   const tempo = new Tempo(def.tempo);
   const startS = Math.round(from * sr);
   const endS = Math.round(to * sr);
@@ -102,7 +103,7 @@ export function* renderSong(def: SongDef, sr: number, from = 0, to = songSeconds
   const tracks: NoteTrack[] = [];
   const addPart = (part: Part, player: boolean) => {
     if (!part.notes.length) return;
-    const voice = makeVoice(part.inst, sr, part.tone ?? 0.5);
+    const voice = makeVoice(part.inst, sr, part.tone ?? 0.5, part.chorus ?? 0.2);
     const notes = [...part.notes].sort((a, b) => a.b - b.b);
     const starts = new Int32Array(notes.length);
     const lens = new Float32Array(notes.length);
@@ -123,15 +124,23 @@ export function* renderSong(def: SongDef, sr: number, from = 0, to = songSeconds
   for (const p of def.backing) addPart(p, false);
 
   const drums: DrumTrack[] = def.drums.map((d: DrumPart, di) => {
-    const kit = makeKit(d.kit, sr);
+    const kit = Array.from({ length: 3 }, (_, i) => makeKit(d.kit, sr, i));
     const rand = rng(99 + di);
     const human = d.kit === 'electro' ? 0 : 1;
-    const hits = [...d.hits]
+    const openBeats = new Set(d.hits.filter(h => h.k === 'ohat').map(h => h.b));
+    const hits = d.hits.filter(h => h.k !== 'hat' || !openBeats.has(h.b))
       .sort((a, b) => a.b - b.b)
-      .map((h) => ({ at: Math.max(0, toS(h.b) + Math.round(human * (rand() - 0.5) * 0.006 * sr)), k: h.k, v: h.v * (1 - human * rand() * 0.1) }))
+      .map((h, i) => ({ variant: i % 3, choke: Infinity, at: Math.max(0, toS(h.b) + Math.round(human * (rand() - 0.5) * 0.006 * sr)), k: h.k, v: h.v * (1 - human * rand() * 0.1) }))
       // humanising can swap two hits on the same beat: play them in the order they now fall, or
       // a block edge between them would cut the start off the later one
       .sort((a, b) => a.at - b.at);
+    // A closed or reopened hat damps the preceding open hat; fade its final 3 ms.
+    let nextHat = Infinity;
+    for (let i = hits.length - 1; i >= 0; i--) {
+      const h = hits[i];
+      if (h.k === 'ohat') h.choke = nextHat;
+      if (h.k === 'hat' || h.k === 'ohat') nextHat = h.at;
+    }
     let next = 0;
     while (next < hits.length && hits[next].at < renderStart) next++;
     const size = BLOCK + Math.ceil(2.4 * sr);
@@ -164,11 +173,8 @@ export function* renderSong(def: SongDef, sr: number, from = 0, to = songSeconds
   const hasVerbB = tracks.some(t => !t.player && (t.part.verb ?? 0.15) > 0) || drums.some(d => d.verb > 0);
   const hasEchoP = tracks.some(t => t.player && (t.part.echo ?? 0) > 0);
   const hasEchoB = tracks.some(t => !t.player && (t.part.echo ?? 0) > 0);
-  const lim = { env: 0 };
   const trim = dbToGain(def.levelDb ?? 0);
-  const att = Math.exp(-1 / (0.0015 * sr));
-  const rel = Math.exp(-1 / (0.15 * sr));
-  const THRESH = 0.72;
+  const lp = Array.from({ length: 4 }, () => Biquad.make('lp', Math.min(15000, sr * 0.4), sr, 0.7));
 
   for (let c = renderStart; c < endS; c += BLOCK) {
     const n = Math.min(BLOCK, endS - c);
@@ -230,13 +236,14 @@ export function* renderSong(def: SongDef, sr: number, from = 0, to = songSeconds
     for (const d of drums) {
       while (d.next < d.hits.length && d.hits[d.next].at < c + n) {
         const h = d.hits[d.next++];
-        const s = d.kit[h.k];
+        const s = d.kit[h.variant][h.k];
         const [gl, gr] = panGains(s.pan);
         const off = h.at - c;
-        const len = Math.min(s.data.length, d.L.length - off);
+        const len = Math.min(s.data.length, d.L.length - off, Math.max(0, h.choke - h.at));
         const v = h.v * d.gain;
         for (let i = 0; i < len; i++) {
-          const x = s.data[i] * v;
+          const choke = h.choke - h.at < s.data.length ? Math.min(1, (len - i) / (sr * 0.003)) : 1;
+          const x = s.data[i] * v * choke;
           d.L[off + i] += x * gl;
           d.R[off + i] += x * gr;
           d.S[off + i] += x * s.verb * d.verb;
@@ -262,32 +269,12 @@ export function* renderSong(def: SongDef, sr: number, from = 0, to = songSeconds
     if (hasEchoP) echoP.process(sendEP, pl, pr, n);
     if (hasEchoB) echoB.process(sendEB, bl, br, n);
 
-    // Master: the song's level trim, then one limiter linked across both stems, so the game's sum
-    // of the two never clips.
+    // Remove DC and excessive top-end before the shared lookahead stage.
     for (let i = 0; i < n; i++) {
-      bl[i] = hpB[0].tick(bl[i]) * trim;
-      br[i] = hpB[1].tick(br[i]) * trim;
-      pl[i] *= trim;
-      pr[i] *= trim;
-      const x = Math.max(Math.abs(pl[i] + bl[i]), Math.abs(pr[i] + br[i]));
-      lim.env = x > lim.env ? att * lim.env + (1 - att) * x : rel * lim.env + (1 - rel) * x;
-      const g = lim.env > THRESH ? (THRESH + (lim.env - THRESH) / 10) / lim.env : 1;
-      if (stats) stats.set('gr', (stats.get('gr') ?? 0) + (1 - g));
-      pl[i] *= g;
-      pr[i] *= g;
-      bl[i] *= g;
-      br[i] *= g;
-      const sl = pl[i] + bl[i];
-      const sr2 = pr[i] + br[i];
-      // Safety: scale both stems together if the sum still exceeds full scale.
-      const m = Math.max(Math.abs(sl), Math.abs(sr2));
-      if (m > 0.98) {
-        const k = 0.98 / m;
-        pl[i] *= k;
-        pr[i] *= k;
-        bl[i] *= k;
-        br[i] *= k;
-      }
+      pl[i] = lp[0].tick(pl[i]) * trim;
+      pr[i] = lp[1].tick(pr[i]) * trim;
+      bl[i] = lp[2].tick(hpB[0].tick(bl[i])) * trim;
+      br[i] = lp[3].tick(hpB[1].tick(br[i])) * trim;
     }
 
     if (c + n > startS) {
@@ -307,4 +294,31 @@ export function* renderSong(def: SongDef, sr: number, from = 0, to = songSeconds
 function shift(buf: Float32Array, n: number): void {
   buf.copyWithin(0, n);
   buf.fill(0, buf.length - n);
+}
+
+/** Peek one block ahead without retaining the mixer's reused buffers. */
+export function* renderSong(def: SongDef, sr: number, from = 0, to = songSeconds(def), stats?: Map<string, number>): Generator<Block> {
+  const raw = renderMix(def, sr, from, to, stats);
+  const limiter = new MasterLimiter(sr);
+  const copy = (b: Block): Block => ({ ...b, pl: b.pl.slice(), pr: b.pr.slice(), bl: b.bl.slice(), br: b.br.slice() });
+  let first = raw.next();
+  if (first.done) return;
+  let current = copy(first.value);
+  for (;;) {
+    const next = raw.next();
+    const future = next.done ? null : next.value;
+    const ahead = future ? Math.min(limiter.lookahead, future.n) : 0;
+    const peaks = new Float32Array(current.n + ahead);
+    for (let i = 0; i < current.n; i++) peaks[i] = Math.max(Math.abs(current.pl[i] + current.bl[i]), Math.abs(current.pr[i] + current.br[i]));
+    for (let i = 0; i < ahead; i++) peaks[current.n + i] = Math.max(Math.abs(future!.pl[i] + future!.bl[i]), Math.abs(future!.pr[i] + future!.br[i]));
+    const gains = limiter.gains(peaks, current.n);
+    for (let i = 0; i < current.n; i++) {
+      const g = gains[i];
+      current.pl[i] *= g; current.pr[i] *= g; current.bl[i] *= g; current.br[i] *= g;
+      if (stats) stats.set('gr', (stats.get('gr') ?? 0) + 1 - g);
+    }
+    yield current;
+    if (!future) break;
+    current = copy(future);
+  }
 }

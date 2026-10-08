@@ -1,3 +1,4 @@
+import { perform } from '../performance.ts';
 import { drumBars, HALF_TIME, ROCK, ROCK_DRIVE, ROCK_RIDE } from '../patterns.ts';
 import { arp, chord, grid, seq } from '../score.ts';
 import type { Hit, Note, SongDef } from '../score.ts';
@@ -30,10 +31,10 @@ const V4 = [
   'B4:2 D5:1 C#5 D5:2 C#5:1 B4 C#5 D5 E5 D5 C#5 D5 B4 C#5',
 ].join(' ');
 
-/** Sweep-style sixteenth arpeggios over the ground, the second pass an octave up. */
+/** Sweep-style sixteenth arpeggios over the ground, the second pass extending the pattern within the same register. */
 function shred(from: number): Note[] {
   const chords = NAMES.map((n) => chord(TRIAD[n]));
-  return [...arp(chords, [0, 1, 2, 3, 2, 1, 0, 1], 0.25, 8, bar(from), 0.8), ...arp(chords.map((c) => c.map((p) => p + 12)), [0, 1, 2, 3, 4, 3, 2, 1], 0.25, 8, bar(from + 4), 0.85)];
+  return [...arp(chords, [0, 1, 2, 3, 2, 1, 0, 1], 0.25, 8, bar(from), 0.8), ...arp(chords, [0, 1, 2, 3, 4, 3, 2, 1], 0.25, 8, bar(from + 4), 0.85)];
 }
 
 const RIFF = (n: string) => `${POWER[n]}:2 ${POWER[n]}*:1 ${POWER[n]}* ${POWER[n]}:2 ${POWER[n]}*:1 ${POWER[n]}*`;
@@ -54,7 +55,7 @@ function drums(): Hit[] {
   ];
 }
 
-export const canon: SongDef = {
+export const canon: SongDef = perform({
   id: 'canon',
   name: 'Canon in D',
   artist: 'Johann Pachelbel',
@@ -84,12 +85,12 @@ export const canon: SongDef = {
       gain: 1,
       verb: 0.25,
       echo: 0.15,
-      notes: [...seq(V1, bar(4)), ...seq(V2, bar(8)), ...seq(V3, bar(12), { transpose: 12 }), ...seq(V4, bar(16)), ...seq(V4, bar(24), { v: 0.9 }), ...shred(28)],
+      notes: [...seq(V1, bar(4)), ...seq(V2, bar(8)), ...seq(V3, bar(12)), ...seq(V4, bar(16)), ...seq(V4, bar(24), { v: 0.9 }), ...shred(28)],
     },
     { inst: 'drive', tone: 0.55, gain: 1, verb: 0.08, notes: [...ground(20, 1, RIFF), ...seq(V1, bar(36), { v: 0.9 }).map((x) => ({ ...x, p: [x.p[0] - 12, x.p[0]] })), ...seq('D3^5!:16 .:16', bar(40))] },
   ],
   backing: [
-    { inst: 'strings', gain: 0.85, pan: -0.2, verb: 0.45, notes: [...ground(4, 5, (n) => `${VOICING[n]}:8`, 0.6), ...ground(24, 4, (n) => `${VOICING[n]}:8`, 0.6), ...seq('D4+F#4+A4:16', bar(40), { v: 0.6 })] },
+    { inst: 'strings', gain: 0.48, pan: -0.2, verb: 0.28, notes: [...ground(4, 5, (n) => `${VOICING[n]}:8`, 0.6), ...ground(24, 4, (n) => `${VOICING[n]}:8`, 0.6), ...seq('D4+F#4+A4:16', bar(40), { v: 0.6 })] },
     { inst: 'drive', tone: 0.4, gain: 0.5, verb: 0.05, notes: [...ground(12, 2, (n) => `(${POWER[n]}:2)x4`, 0.7), ...ground(24, 4, (n) => `(${POWER[n]}:2)x4`, 0.7)] },
     {
       inst: 'pickbass',
@@ -104,4 +105,4 @@ export const canon: SongDef = {
   lengthBeats: bar(42),
   previewBeat: bar(16),
   art: { from: '#1a1026', to: '#b58a4c', ink: '#f7e7c4', motif: 'crest' },
-};
+}, { bar: 4, phrase: 16, shape: [0.8, 1, 0.84], gate: 0.92, accent: 0.05 });

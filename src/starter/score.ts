@@ -16,6 +16,10 @@ export interface Note {
   mute?: boolean;
   /** bend up into the note from this many semitones below */
   bend?: number;
+  /** Optional vibrato depth in semitones; zero disables automatic vibrato. */
+  vibrato?: number;
+  /** Piano damper hold after key release, in seconds (0..0.8). */
+  pedal?: number;
 }
 
 export interface Hit {
@@ -66,6 +70,8 @@ export interface Part {
   pump?: number;
   /** filter brightness 0..1 for synths */
   tone?: number;
+  /** Clean guitar chorus mix, 0 for dry acoustic-style picking. */
+  chorus?: number;
 }
 
 export interface DrumPart {
@@ -104,7 +110,7 @@ export interface SongDef {
   previewBeat: number;
   /**
    * Level trim in dB before the master limiter, so the songs play at about the same loudness
-   * (measured by tests/tools/loudness.ts). 0 when missing.
+   * (measured by tests/tools/starter-audio-audit.mjs). 0 when missing.
    */
   levelDb?: number;
   /** Cover palette and fallback motif; shipped songs have bespoke vectors in coverDesign.ts. */

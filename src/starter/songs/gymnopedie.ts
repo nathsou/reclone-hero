@@ -1,3 +1,4 @@
+import { perform } from '../performance.ts';
 import { abc } from '../abc.ts';
 import type { Note, SongDef } from '../score.ts';
 
@@ -33,7 +34,7 @@ const read = (voice: string, shift = 0): Note[] => abc(`M:3/4\nL:1/4\nK:D\n${voi
 const bar = (n: number) => n * 3;
 const END = bar(78);
 
-export const gymnopedie: SongDef = {
+export const gymnopedie: SongDef = perform({
   id: 'gymnopedie',
   name: 'Gymnopédie No. 1',
   artist: 'Erik Satie',
@@ -43,7 +44,12 @@ export const gymnopedie: SongDef = {
   composer: 'Erik Satie',
   loadingPhrase: 'Lent et douloureux: slow, and a little sad. Take your time.',
   tempo: [
-    { beat: 0, bpm: 72 },
+    { beat: 0, bpm: 66 },
+    { beat: bar(16), bpm: 64 },
+    { beat: bar(31), bpm: 61 },
+    { beat: bar(39), bpm: 66 },
+    { beat: bar(55), bpm: 64 },
+    { beat: bar(70), bpm: 61 },
     { beat: END - bar(2), bpm: 60 },
   ],
   timeSigs: [{ beat: 0, num: 3, den: 4 }],
@@ -57,10 +63,10 @@ export const gymnopedie: SongDef = {
     { beat: bar(70), name: 'The Other Close' },
   ],
   player: [
-    { inst: 'piano', gain: 1.2, pan: 0.1, verb: 0.45, notes: read(MELODY) },
-    { inst: 'piano', gain: 1, pan: -0.05, verb: 0.45, notes: read(CHORDS).map((n) => ({ ...n, v: 0.55 })) },
+    { inst: 'piano', gain: 1.2, pan: 0.1, verb: 0.25, notes: read(MELODY).map(n => ({ ...n, pedal: 0.18 })) },
+    { inst: 'piano', gain: 1, pan: -0.05, verb: 0.25, notes: read(CHORDS).map((n) => ({ ...n, v: 0.43, pedal: 0.22 })) },
     // the bass too: the whole waltz (bass, chord, melody) is yours to play
-    { inst: 'piano', gain: 1, pan: -0.15, verb: 0.45, notes: read(BASS, -24).map((n) => ({ ...n, v: 0.6 })) },
+    { inst: 'piano', gain: 1, pan: -0.15, verb: 0.25, notes: read(BASS, -24).map((n) => ({ ...n, v: 0.48, pedal: 0.15 })) },
   ],
   backing: [],
   drums: [],
@@ -68,4 +74,4 @@ export const gymnopedie: SongDef = {
   lengthBeats: END + 3,
   previewBeat: bar(4),
   art: { from: '#1c2433', to: '#9fb4c7', ink: '#fbf8f2', motif: 'orbit' },
-};
+}, { bar: 3, phrase: 12, shape: [0.76, 1.06, 0.72], gate: 0.98, accent: 0.025 });

@@ -124,7 +124,7 @@ class LeadGuitar implements Voice {
         amp,
         rand,
         release: 0.04,
-        vibrato: long && n.p.length === 1 ? 0.28 : 0,
+        vibrato: long && n.p.length === 1 ? (n.vibrato ?? 0.12) : 0,
         bendFrom: n.bend,
       });
     }
@@ -146,12 +146,14 @@ class CleanGuitar implements Voice {
   private readonly sr: number;
   private readonly lp: Biquad[];
   private readonly delay: Float32Array;
+  private readonly chorus: number;
   private di = 0;
   private lfo = 0;
 
-  constructor(sr: number) {
+  constructor(sr: number, tone = 0.5, privateChorus = 0.2) {
     this.sr = sr;
-    this.lp = [Biquad.make('lp', 6000, sr, 0.7), Biquad.make('hp', 90, sr, 0.7), Biquad.make('peak', 2800, sr, 1, 2)];
+    this.chorus = Math.max(0, Math.min(1, privateChorus));
+    this.lp = [Biquad.make('lp', 3200 + tone * 3200, sr, 0.7), Biquad.make('hp', 90, sr, 0.7), Biquad.make('peak', 2800, sr, 1, 2)];
     this.delay = new Float32Array(Math.round(0.03 * sr));
   }
 
@@ -159,7 +161,7 @@ class CleanGuitar implements Voice {
     const rand = rng(index * 13 + 3);
     const amp = (n.v * 0.8) / Math.sqrt(n.p.length);
     n.p.forEach((p, k) => {
-      pluck(L, at + Math.round(k * 0.012 * this.sr), this.sr, mtof(p), { len: Math.max(0.05, lenSec), decay: n.mute ? 0.2 : 3, bright: 0.62, amp, rand, release: 0.12 });
+      pluck(L, at + Math.round(k * 0.012 * this.sr), this.sr, mtof(p), { len: Math.max(0.05, lenSec), decay: n.mute ? 0.2 : 3, bright: 0.62, amp, rand, release: n.mute ? 0.035 : 0.09, bendFrom: n.bend, vibrato: n.vibrato ?? 0 });
     });
   }
 
@@ -180,7 +182,7 @@ class CleanGuitar implements Voice {
       const y = d[i0] * (1 - t) + d[(i0 + 1) % size] * t;
       if (++this.di >= size) this.di = 0;
       L[i] = x * 1.6;
-      R![i] = (x * 0.45 + y * 0.55) * 2;
+      R![i] = (x * (1 - this.chorus) + y * this.chorus) * 1.6;
     }
   }
 }
@@ -290,8 +292,9 @@ class SuperSaw implements Voice {
     const k = this.kind;
     const voices = k === 'pluck' ? 3 : k === 'lead' ? 7 : 5;
     const spread = k === 'lead' ? 0.35 : k === 'pad' ? 0.5 : k === 'strings' ? 0.22 : 0.12;
+    const shortString = k === 'strings' && (n.mute || lenSec < 0.24);
     const [a, d, s, r] =
-      k === 'pad' ? [0.35, 0.6, 0.8, 0.9] : k === 'strings' ? [0.14, 0.3, 0.85, 0.5] : k === 'pluck' ? [0.002, 0.18, 0.0, 0.12] : [0.006, 0.25, 0.75, 0.16];
+      k === 'pad' ? [0.35, 0.6, 0.8, 0.9] : k === 'strings' ? (shortString ? [0.008, 0.08, 0.45, 0.08] : [0.065, 0.3, 0.8, 0.3]) : k === 'pluck' ? [0.002, 0.18, 0.0, 0.12] : [0.006, 0.25, 0.75, 0.16];
     const rand = rng(index * 977 + 11);
     const audibleSec = k === 'pluck' ? Math.min(lenSec + r * 2, a + d) : lenSec + r * 2;
     const total = Math.min(L.length - at, Math.round(audibleSec * sr));
@@ -299,7 +302,7 @@ class SuperSaw implements Voice {
     for (const p of n.p) {
       const f0 = mtof(p);
       const phases = Array.from({ length: voices }, () => rand());
-      const detunes = Array.from({ length: voices }, (_, v) => 2 ** ((SAW_DETUNE[Math.round((v * 6) / Math.max(1, voices - 1))] * spread) / 12));
+      const detunes = Array.from({ length: voices }, (_, v) => 2 ** (((voices === 5 ? [-0.19, -0.07, 0, 0.07, 0.19][v] : SAW_DETUNE[Math.round((v * 6) / Math.max(1, voices - 1))]) * spread) / 12));
       const svfL = new Svf();
       const svfR = new Svf();
       const base = k === 'pad' ? 700 : k === 'strings' ? 1600 : k === 'pluck' ? 400 : 1400;
@@ -344,9 +347,11 @@ class Organ implements Voice {
   readonly stereo = true;
   private readonly sr: number;
   private lfo = 0;
+  private readonly filter: Biquad;
 
-  constructor(sr: number) {
+  constructor(sr: number, tone = 0.5) {
     this.sr = sr;
+    this.filter = Biquad.make('lp', 650 + tone * 6500, sr, 0.7);
   }
 
   note(n: Note, _index: number, lenSec: number, L: Float32Array, _R: Float32Array | null, at: number): void {
@@ -381,7 +386,7 @@ class Organ implements Voice {
     for (let i = 0; i < n; i++) {
       this.lfo += w;
       const s = Math.sin(this.lfo);
-      const x = Math.tanh(L[i] * 1.8) * 0.42;
+      const x = this.filter.tick(Math.tanh(L[i] * 1.3)) * 0.46;
       L[i] = x * (0.8 + 0.2 * s);
       R![i] = x * (0.8 - 0.2 * s);
     }
@@ -392,7 +397,7 @@ class Organ implements Voice {
  * Recursive oscillators keep the acoustic voice inexpensive even for dense two-hand chords.
  */
 class AcousticPiano implements Voice {
-  readonly tail = 0.6;
+  readonly tail = 1.4;
   readonly stereo = false;
   private readonly sr: number;
   constructor(sr: number) { this.sr = sr; }
@@ -401,7 +406,7 @@ class AcousticPiano implements Voice {
     const sr = this.sr;
     const held = Math.max(0.025, n.mute ? Math.min(lenSec, 0.12) : lenSec);
     const total = Math.min(L.length - at, Math.round((held + this.tail) * sr));
-    const releaseAt = Math.round(held * sr);
+    const releaseAt = Math.round((held + Math.max(0, Math.min(0.8, n.pedal ?? 0))) * sr);
     const release = Math.exp(-1 / (0.075 * sr));
     const attack = Math.max(1, Math.round(0.003 * sr));
     const amp = n.v * 0.52 / Math.sqrt(n.p.length);
@@ -592,7 +597,7 @@ class Osc implements Voice {
           }
           x = svf.tick(x);
         }
-        const a = k === 'fiddle' ? 0.05 : k === 'brass' ? 0.02 : k === 'accordion' ? 0.02 : 0.002;
+        const a = k === 'fiddle' ? Math.min(0.025, lenSec * 0.15) : k === 'brass' ? 0.02 : k === 'accordion' ? 0.02 : 0.002;
         let g = Math.min(1, t / a);
         if (k === 'chip') g *= n.mute ? Math.exp(-t / 0.06) : 1;
         if (t > lenSec) g *= Math.exp(-(t - lenSec) / rel);
@@ -681,14 +686,44 @@ class Banjo implements Voice {
   }
 }
 
-export function makeVoice(kind: InstrumentKind, sr: number, tone = 0.5): Voice {
+/** Vowel-like additive choir, independent of the saw pad. */
+class Choir implements Voice {
+  readonly tail = 1;
+  readonly stereo = true;
+  private readonly sr: number;
+  constructor(sr: number) { this.sr = sr; }
+
+  note(n: Note, _index: number, len: number, L: Float32Array, R: Float32Array | null, at: number): void {
+    const sr = this.sr;
+    const total = Math.min(L.length - at, Math.round((len + this.tail) * sr));
+    for (const p of n.p) for (let side = 0; side < 2; side++) {
+      const out = side ? R! : L;
+      const f = mtof(p) * (side ? 1.0015 : 0.9985);
+      for (let h = 1; h <= 18 && f * h < sr * 0.4; h++) {
+        const hz = f * h;
+        const vowel = 0.2 + 1.6 * Math.exp(-(((hz - 750) / 230) ** 2)) + Math.exp(-(((hz - 1200) / 300) ** 2));
+        const level = n.v * 0.2 * vowel / (h * Math.sqrt(n.p.length));
+        const w = TWO_PI * hz / sr, c = 2 * Math.cos(w);
+        let previous = -Math.sin(w) * level, current = 0;
+        for (let i = 0; i < total; i++) {
+          const next = c * current - previous;
+          previous = current; current = next;
+          out[at + i] += next * adsrGain(i, sr, len, Math.min(0.1, len / 3), 0.15, 0.8, 0.5);
+        }
+      }
+    }
+  }
+  process(): void {}
+}
+
+export function makeVoice(kind: InstrumentKind, sr: number, tone = 0.5, chorus = 0.2): Voice {
   switch (kind) {
     case 'drive':
-      return new DriveGuitar(sr, 30 + tone * 12, tone);
+      return new DriveGuitar(sr, 14 + tone * 10, tone);
     case 'lead':
-      return new LeadGuitar(sr, 16 + tone * 14, tone);
+      return new LeadGuitar(sr, 9 + tone * 9, tone);
     case 'clean':
-      return new CleanGuitar(sr);
+      return new CleanGuitar(sr, tone, chorus);
     case 'pickbass':
       return new PickBass(sr, tone);
     case 'synthbass':
@@ -700,12 +735,13 @@ export function makeVoice(kind: InstrumentKind, sr: number, tone = 0.5): Voice {
     case 'pluck':
       return new SuperSaw(sr, 'pluck', tone);
     case 'pad':
-    case 'choir':
       return new SuperSaw(sr, 'pad', tone);
+    case 'choir':
+      return new Choir(sr);
     case 'strings':
       return new SuperSaw(sr, 'strings', tone);
     case 'organ':
-      return new Organ(sr);
+      return new Organ(sr, tone);
     case 'piano':
       return new AcousticPiano(sr);
     case 'epiano':
@@ -747,16 +783,23 @@ function metal(len: number, sr: number, scale = 1): Float32Array {
   const b = new Float32Array(len);
   for (let i = 0; i < len; i++) {
     let x = 0;
-    for (const f of fs) x += ((i * f) / sr) % 1 < 0.5 ? 1 : -1;
+    for (const f of fs) {
+      const dt = f / sr;
+      const ph = (i * dt) % 1;
+      const shifted = (ph + 0.5) % 1;
+      x += (ph < 0.5 ? 1 : -1) + blep(ph, dt) - blep(shifted, dt);
+    }
     b[i] = x / 6;
   }
   return b;
 }
 
 /** Synthesize one kit's one-shot samples. */
-export function makeKit(kit: 'rock' | 'electro' | 'orchestral', sr: number): Record<DrumVoice, DrumSample> {
-  const rand = rng(kit === 'rock' ? 1 : 2);
+export function makeKit(kit: 'rock' | 'electro' | 'orchestral', sr: number, variation = 0): Record<DrumVoice, DrumSample> {
+  const rand = rng((kit === 'rock' ? 1 : kit === 'electro' ? 2 : 3) + variation * 101);
   const electro = kit === 'electro';
+  const orchestral = kit === 'orchestral';
+  const tuning = 1 + (variation - 1) * 0.008;
   const len = (s: number) => Math.round(s * sr);
 
   const kick = new Float32Array(len(electro ? 0.7 : 0.45));
@@ -765,11 +808,11 @@ export function makeKit(kit: 'rock' | 'electro' | 'orchestral', sr: number): Rec
     const click = Biquad.make('hp', 2500, sr);
     for (let i = 0; i < kick.length; i++) {
       const t = i / sr;
-      const f = electro ? 48 + 150 * Math.exp(-t / 0.028) : 56 + 120 * Math.exp(-t / 0.022);
+      const f = tuning * (electro ? 48 + 150 * Math.exp(-t / 0.028) : orchestral ? 70 + 40 * Math.exp(-t / 0.02) : 56 + 120 * Math.exp(-t / 0.022));
       ph += f / sr;
       const body = Math.sin(TWO_PI * ph) * Math.exp(-t / (electro ? 0.32 : 0.16));
-      const beater = click.tick(rand() * 2 - 1) * Math.exp(-t / 0.004) * (electro ? 0.3 : 0.6);
-      kick[i] = Math.tanh((body + beater) * (electro ? 1.6 : 1.9)) * 0.95;
+      const beater = click.tick(rand() * 2 - 1) * Math.exp(-t / 0.004) * (electro ? 0.3 : orchestral ? 0.12 : 0.4);
+      kick[i] = Math.tanh((body + beater) * (electro ? 1.6 : orchestral ? 1 : 1.35)) * 0.8;
     }
   }
 
@@ -779,9 +822,9 @@ export function makeKit(kit: 'rock' | 'electro' | 'orchestral', sr: number): Rec
     const bp = Biquad.make('peak', 5000, sr, 0.8, 4);
     for (let i = 0; i < snare.length; i++) {
       const t = i / sr;
-      const tone = (Math.sin(TWO_PI * 185 * t) * 0.8 + Math.sin(TWO_PI * 330 * t) * 0.4) * Math.exp(-t / 0.045);
+      const tone = (Math.sin(TWO_PI * 185 * tuning * t) * 0.8 + Math.sin(TWO_PI * 330 * tuning * t) * 0.4) * Math.exp(-t / 0.045);
       const noise = bp.tick(hp.tick(rand() * 2 - 1)) * Math.exp(-t / (electro ? 0.09 : 0.13));
-      snare[i] = Math.tanh((tone * 0.9 + noise * 0.9) * 1.4) * 0.8;
+      snare[i] = Math.tanh((tone * (orchestral ? 0.5 : 0.9) + noise * (orchestral ? 0.5 : 0.7)) * 1.2) * 0.7;
     }
   }
 
@@ -813,8 +856,8 @@ export function makeKit(kit: 'rock' | 'electro' | 'orchestral', sr: number): Rec
     for (let i = 0; i < ohat.length; i++) {
       const t = i / sr;
       const x = m[i] * 0.6 + (rand() * 2 - 1) * 0.5;
-      if (i < hatLen) hat[i] = hp1.tick(x) * Math.exp(-t / 0.022) * 0.55;
-      ohat[i] = hp2.tick(x) * Math.exp(-t / 0.2) * 0.42;
+      if (i < hatLen) hat[i] = hp1.tick(x) * Math.min(1, i / (0.0007 * sr)) * Math.exp(-t / 0.022) * 0.4;
+      ohat[i] = hp2.tick(x) * Math.min(1, i / (0.001 * sr)) * Math.exp(-t / 0.17) * 0.32;
     }
   }
 
@@ -868,4 +911,3 @@ export function makeKit(kit: 'rock' | 'electro' | 'orchestral', sr: number): Rec
     shaker: { data: shaker, pan: -0.25, verb: 0.05 },
   };
 }
-

@@ -1,3 +1,4 @@
+import { perform } from '../performance.ts';
 import { abc } from '../abc.ts';
 import { bassOf, comp, prog, voicing } from '../arrange.ts';
 import { drumBars } from '../patterns.ts';
@@ -43,7 +44,7 @@ function drums(): Hit[] {
   ];
 }
 
-export const washerwoman: SongDef = {
+export const washerwoman: SongDef = perform({
   id: 'irish-washerwoman',
   name: 'The Irish Washerwoman',
   artist: 'Traditional',
@@ -66,20 +67,20 @@ export const washerwoman: SongDef = {
     { beat: pass(2) + 48, name: 'Last Time Round' },
   ],
   player: [
-    { inst: 'fiddle', tone: 0.6, gain: 1.1, verb: 0.3, notes: tune(0) },
+    { inst: 'fiddle', tone: 0.4, gain: 1, verb: 0.18, notes: tune(0) },
     { inst: 'banjo', gain: 1.1, pan: 0.1, verb: 0.2, notes: tune(1) },
     { inst: 'lead', tone: 0.6, gain: 1, verb: 0.2, echo: 0.06, notes: [...tune(2), { b: END, d: 2, p: [55, 62, 67], v: 1 }] },
   ],
   backing: [
-    { inst: 'clean', gain: 0.55, pan: -0.3, verb: 0.3, notes: [...strum(0, 0.5), ...strum(1, 0.55)] },
-    { inst: 'fiddle', tone: 0.55, gain: 0.7, pan: 0.35, verb: 0.3, notes: [...tune(1, 12).map((n) => ({ ...n, v: 0.6 })), ...tune(2, 12).map((n) => ({ ...n, v: 0.65 }))] },
+    { inst: 'clean', chorus: 0, gain: 0.55, pan: -0.3, verb: 0.3, notes: [...strum(0, 0.5), ...strum(1, 0.55)] },
+    { inst: 'fiddle', tone: 0.55, gain: 0.42, pan: 0.35, verb: 0.3, notes: [...tune(1).map((n) => ({ ...n, v: 0.6 })), ...tune(2).map((n) => ({ ...n, v: 0.65 }))] },
     { inst: 'drive', tone: 0.45, gain: 0.5, verb: 0.05, notes: chugs(2) },
     { inst: 'pickbass', gain: 0.95, verb: 0, notes: [...bass(1, 0.7), ...bass(2, 0.8), { b: END, d: 2, p: [31], v: 0.9 }] },
-    { inst: 'accordion', gain: 0.85, pan: -0.35, verb: 0.3, notes: comp(H, 1.5, pass(2), 'x-.', (c) => voicing(c, 'B3'), { v: 0.5, step: 0.5 }) },
+    { inst: 'accordion', gain: 0.5, pan: -0.35, verb: 0.3, notes: comp(H, 1.5, pass(2), 'x-.', (c) => voicing(c, 'B3'), { v: 0.5, step: 0.5 }) },
   ],
   drums: [{ kit: 'rock', hits: drums(), gain: 0.75 }],
   solos: [],
   lengthBeats: END + 3,
   previewBeat: pass(1),
   art: { from: '#0b2e1f', to: '#e39a2d', ink: '#fdf6e3', motif: 'rings' },
-};
+}, { bar: 3, phrase: 12, shape: [0.9, 1, 0.86], gate: 0.88, accent: 0.06 });

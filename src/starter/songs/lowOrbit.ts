@@ -1,3 +1,4 @@
+import { perform } from '../performance.ts';
 import { abc } from '../abc.ts';
 import { bassOf, comp, nearVoicing, powerOf, prog, voicing } from '../arrange.ts';
 import { drumBars } from '../patterns.ts';
@@ -41,14 +42,14 @@ function drums(): Hit[] {
     if (i % 8 === 4) out.push({ b, k: 'ride', v: 0.3 + 0.4 * t });
   }
   out.push(...grid({ snare: 'xxxxxxxxxxxxXXXX' }, LOUD - 4));
-  const BIG = { kick: 'x.....x.x.......', snare: '....X.......X...', crash: 'x...x...x...x...' };
+  const BIG = { kick: 'x.....x.x.......', snare: '....X.......X...', ride: 'x.x.x.x.x.x.x.x.', crash: 'x...............' };
   out.push(...drumBars(BIG, LOUD, 8, { crash: true, fill: 'toms2' }));
   out.push(...drumBars({ ...BIG, kick: 'x.x.x.x.x.x.x.x.' }, LOUDER, 8, { crash: true, fill: 'build4' }));
   out.push({ b: OUTRO, k: 'crash', v: 1 }, { b: OUTRO, k: 'kick', v: 1 });
   return out;
 }
 
-export const lowOrbit: SongDef = {
+export const lowOrbit: SongDef = perform({
   id: 'low-orbit',
   name: 'Low Orbit',
   artist: 'Quiet Meridian',
@@ -67,20 +68,20 @@ export const lowOrbit: SongDef = {
     { beat: OUTRO, name: 'Drift' },
   ],
   player: [
-    { inst: 'clean', gain: 1, verb: 0.45, echo: 0.35, notes: [...arps(INTRO, H, 0.6), ...arps(GLOCK), ...arps(OUTRO, prog('Gadd9 D Asus4 D'), 0.55)] },
-    { inst: 'clean', gain: 1, verb: 0.45, echo: 0.3, notes: tremolo(transpose(at(MELODY.notes, TREM), -12)) },
+    { inst: 'clean', gain: 1, verb: 0.25, echo: 0.25, notes: [...arps(INTRO, H, 0.6), ...arps(GLOCK), ...arps(OUTRO, prog('Gadd9 D Asus4 D'), 0.55)] },
+    { inst: 'clean', gain: 1, verb: 0.25, echo: 0.18, notes: tremolo(transpose(at(MELODY.notes, TREM), -12)) },
     { inst: 'lead', tone: 0.55, gain: 1, verb: 0.35, echo: 0.2, notes: [...tremolo(at(MELODY.notes, LOUD)), ...tremolo(harmony(at(MELODY.notes, LOUDER)))] },
   ],
   backing: [
     { inst: 'bell', gain: 0.6, pan: 0.25, verb: 0.5, echo: 0.3, notes: [...at(MELODY.notes, GLOCK).map((n) => ({ ...n, p: n.p.map((p) => p + 12) })), ...at(MELODY.notes, LOUDER).map((n) => ({ ...n, p: n.p.map((p) => p + 12), v: 0.5 }))] },
-    { inst: 'pad', tone: 0.35, gain: 1.2, verb: 0.6, notes: [...comp(H, 4, INTRO, 'x---------------', (c) => nearVoicing(c, 'D4'), { v: 0.3 }), ...comp(H, 4, TREM, 'x---------------', (c) => nearVoicing(c, 'D4'), { v: 0.45 }), ...comp(prog('Gadd9 D Asus4 D'), 4, OUTRO, 'x---------------', (c) => nearVoicing(c, 'D4'), { v: 0.3 })] },
+    { inst: 'pad', tone: 0.3, gain: 0.65, verb: 0.35, notes: [...comp(H, 4, INTRO, 'x---------------', (c) => nearVoicing(c, 'D4'), { v: 0.3 }), ...comp(H, 4, TREM, 'x---------------', (c) => nearVoicing(c, 'D4'), { v: 0.45 }), ...comp(prog('Gadd9 D Asus4 D'), 4, OUTRO, 'x---------------', (c) => nearVoicing(c, 'D4'), { v: 0.3 })] },
     { inst: 'drive', tone: 0.45, gain: 0.6, verb: 0.2, notes: [...comp(H, 4, LOUD, 'x-------x-------', (c) => powerOf(c.replace(/add9|sus4/, ''), 'E2'), { v: 0.8 }), ...comp(H, 4, LOUDER, 'x.x.x.x.x.x.x.x.', (c) => powerOf(c.replace(/add9|sus4/, ''), 'E2'), { v: 0.8 })] },
     { inst: 'pickbass', gain: 0.95, verb: 0.05, notes: [...comp(H, 4, GLOCK, 'x-------x-------', (c) => [bassOf(c, 'E1')], { v: 0.6 }), ...comp(H, 4, TREM, 'x...x...x...x...', (c) => [bassOf(c, 'E1')], { v: 0.7 }), ...comp(H, 4, LOUD, 'x.x.x.x.x.x.x.x.', (c) => [bassOf(c, 'E1')], { v: 0.85 }), ...comp(H, 4, LOUDER, 'x.x.x.x.x.x.x.x.', (c) => [bassOf(c, 'E1')], { v: 0.9 }), { b: OUTRO, d: 8, p: [31], v: 0.8 }] },
-    { inst: 'strings', tone: 0.5, gain: 1.2, pan: -0.3, verb: 0.5, notes: comp(H, 4, LOUDER, 'x---------------', (c) => nearVoicing(c, 'F#4'), { v: 0.6 }) },
+    { inst: 'strings', tone: 0.35, gain: 0.6, pan: -0.3, verb: 0.5, notes: comp(H, 4, LOUDER, 'x---------------', (c) => nearVoicing(c, 'F#4'), { v: 0.6 }) },
   ],
   drums: [{ kit: 'rock', hits: drums(), gain: 0.8, verb: 0.3 }],
   solos: [],
   lengthBeats: END + 4,
   previewBeat: LOUD,
   art: { from: '#05070f', to: '#3b4a7a', ink: '#e8eeff', motif: 'orbit' },
-};
+}, { bar: 4, phrase: 32, shape: [0.72, 1, 0.9], gate: 0.98, accent: 0.03 });
