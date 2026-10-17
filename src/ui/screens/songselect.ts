@@ -10,6 +10,7 @@ import { TouchFrets } from '../touchFrets.ts';
 import type { NavAction } from '../../input/input.ts';
 import type { SongEntry } from '../../library/song.ts';
 import { settings, updateSettings } from '../../settings.ts';
+import { StudioSource } from '../../studio/source.ts';
 import type { Settings, SongView } from '../../settings.ts';
 import { formatTime } from '../../util/text.ts';
 import type { App, Screen } from '../app.ts';
@@ -212,6 +213,7 @@ export class SongSelect implements Screen {
             canFullscreen() ? h('button', { class: 'btn ghost icon', title: 'Fullscreen (Shift+F)', 'aria-label': 'Fullscreen', onclick: () => void toggleFullscreen() }, icon('maximize')) : null,
           ),
         ),
+        h('button', { class: 'btn', onclick: () => void import('./studio.ts').then(({ StudioScreen }) => app.show(new StudioScreen(app))) }, 'Chart Studio'),
         h('button', { class: 'btn toolbar-settings', onclick: () => this.openSettings() }, icon('settings'), 'Settings'),
       ),
       h('main', { class: 'select-main' }, h('div', { class: 'list-wrap' }, this.list, this.sticky), this.detail, this.covers),
@@ -707,6 +709,7 @@ export class SongSelect implements Screen {
         h('button', { class: 'btn primary big', disabled: !canPlay, onclick: () => this.play(false) }, icon('play'), 'Play', speedTag()),
         h('button', { class: 'btn', disabled: !canPlay, onclick: () => this.practice() }, 'Practice', h('kbd', null, 'P')),
         h('button', { class: 'btn ghost', disabled: !canPlay, onclick: () => this.play(true) }, 'Watch bot', h('kbd', null, 'B')),
+        StudioSource.isStudio(song.path) ? h('button', { class: 'btn', onclick: () => this.editStudio(song) }, 'Edit chart') : null,
         this.favToggle(song),
         h('button', { class: 'btn ghost', title: 'Add to a setlist', onclick: () => this.addToSetlist() }, '+ Setlist'),
         h('button', { class: 'btn ghost icon remove-btn', title: 'Hide or delete this song (Del)', 'aria-label': 'Hide or delete this song', onclick: () => this.removeSong() }, '✕'),
@@ -871,6 +874,7 @@ export class SongSelect implements Screen {
       );
     }
     controls.append(this.favToggle(song));
+    if (StudioSource.isStudio(song.path)) controls.append(h('button', { class: 'btn', onclick: () => this.editStudio(song) }, 'Edit chart'));
     replace(
       this.coverInfo,
       h('div', { class: 'title' }, song.name, isFavourite(song.id) ? h('span', { class: 'fav' }, '★') : null, problemBadge(song.id)),
@@ -1042,6 +1046,10 @@ export class SongSelect implements Screen {
 
   // ---------------------------------------------------------------- hiding and deleting
 
+  private editStudio(song: SongEntry): void {
+    void import('./studio.ts').then(({ StudioScreen }) => this.app.show(new StudioScreen(this.app, StudioSource.id(song.path), this.difficulty)));
+  }
+
   /** "Also in": the other copies of this song, when it is in the library more than once. */
   private copiesNote(song: SongEntry): HTMLElement | null {
     const copies = this.dupes.get(song.id);
@@ -1059,7 +1067,7 @@ export class SongSelect implements Screen {
     const copies = this.dupes.get(song.id)?.length ?? 0;
     const items: MenuItem[] = [
       { label: 'Hide from the song list', action: () => this.hide(song) },
-      ...(lib.canDelete(song) ? [{ label: 'Delete its folder from disk…', action: () => this.confirmDelete(song) }] : []),
+      ...(lib.canDelete(song) ? [{ label: StudioSource.isStudio(song.path) ? 'Delete saved studio project…' : 'Delete its folder from disk…', action: () => this.confirmDelete(song) }] : []),
       { label: 'Cancel', action: () => {} },
     ];
     const lines = [
@@ -1088,12 +1096,12 @@ export class SongSelect implements Screen {
             this.app.toast(`Could not delete ${song.name}: ${(err as Error).message}`);
             return;
           }
-          this.app.toast(`${song.name} deleted from disk`);
+          this.app.toast(`${song.name} deleted ${StudioSource.isStudio(song.path) ? 'from this browser' : 'from disk'}`);
           this.removed(song);
         },
       },
     ];
-    const lines = [`The folder “${song.path}” and everything in it will be deleted from your disk. This cannot be undone.`];
+    const lines = [StudioSource.isStudio(song.path) ? `“${song.name}” and its audio will be deleted from this browser. Export the studio project first to keep a copy. This cannot be undone.` : `The folder “${song.path}” and everything in it will be deleted from your disk. This cannot be undone.`];
     void import('./choice.ts').then(({ ChoiceModal }) => this.app.pushModal(new ChoiceModal(this.app, `Delete “${song.name}”?`, lines, items)));
   }
 

@@ -5,6 +5,7 @@ import './styles/select.css';
 import './styles/game.css';
 import './styles/settings.css';
 import './styles/results.css';
+import './styles/studio.css';
 import { App } from './ui/app.ts';
 import { initTheme } from './ui/theme.ts';
 

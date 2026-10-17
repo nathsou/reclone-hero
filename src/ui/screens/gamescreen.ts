@@ -24,6 +24,8 @@ import { canFullscreen, isFullscreen, toggleFullscreen } from '../fullscreen.ts'
 const DIFF_LABEL: Record<Difficulty, string> = { easy: 'Easy', medium: 'Medium', hard: 'Hard', expert: 'Expert' };
 
 export interface GameRequest {
+  /** Studio playtests return to their editor, without recording a scored run. */
+  studioReturn?: () => void;
   song: SongEntry;
   chart: Chart;
   instrument: Instrument;
@@ -174,6 +176,7 @@ export class GameScreen implements Screen {
     if (this.destroyed) return;
     this.game.onPause = () => this.showPause();
     this.game.onEnd = (r) => {
+      if (this.req.studioReturn) { this.req.studioReturn(); return; }
       void import('./results.ts').then(({ ResultsScreen }) => {
         if (!this.destroyed) this.app.show(new ResultsScreen(this.app, r, this.req));
       });
@@ -190,7 +193,7 @@ export class GameScreen implements Screen {
       if (this.destroyed) return;
     }
     this.loading.classList.add('gone');
-    if (!this.req.bot && !this.req.practice) recordPlay(song.id);
+    if (!this.req.bot && !this.req.practice && !this.req.studioReturn) recordPlay(song.id);
     // Handy for debugging from the console.
     (globalThis as Record<string, unknown>).__game = this.game;
     (globalThis as Record<string, unknown>).__audio = audio();
@@ -222,7 +225,7 @@ export class GameScreen implements Screen {
       ...(canFullscreen() ? [{ label: isFullscreen() ? 'Exit fullscreen' : 'Fullscreen', action: () => void toggleFullscreen().then(() => this.refreshPause()) }] : []),
       { label: 'Settings', action: () => void import('./settings.ts').then(({ SettingsModal }) => this.app.pushModal(new SettingsModal(this.app, true))) },
       ...(this.req.setlist && !this.req.practice ? [{ label: 'Skip to the next song', action: () => void this.skipSong() }] : []),
-      { label: this.req.setlist && !this.req.practice ? 'Quit the setlist' : 'Quit to song list', action: () => void this.back() },
+      { label: this.req.studioReturn ? 'Return to Chart Studio' : this.req.setlist && !this.req.practice ? 'Quit the setlist' : 'Quit to song list', action: () => void this.back() },
     ];
     const menu = view === 'difficulty' ? new Menu('Difficulty · the song starts over', difficulties) : new Menu(`Paused · ${formatTime(st.time)} of ${formatTime(st.total)}`, main);
     const art = h('div', { class: 'art none' });
@@ -327,6 +330,7 @@ export class GameScreen implements Screen {
   }
 
   private async back() {
+    if (this.req.studioReturn) { this.req.studioReturn(); return; }
     const { SongSelect } = await import('./songselect.ts');
     this.app.show(new SongSelect(this.app));
   }
