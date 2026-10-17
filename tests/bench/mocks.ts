@@ -83,6 +83,8 @@ export class FakeNode {
   remove() { if (this.parent) this.parent.children = this.parent.children.filter((c) => c !== this); }
   setAttribute() {}
   addEventListener() {}
+  removeEventListener() {}
+  querySelectorAll() { return []; }
   removeAttribute() {}
   getContext() { return null; }
 }
@@ -122,6 +124,7 @@ export function install(): void {
   const g = globalThis as Record<string, unknown>;
   const store = new Map<string, string>();
   g.localStorage = { getItem: (k: string) => store.get(k) ?? null, setItem: (k: string, v: string) => store.set(k, v), removeItem: (k: string) => store.delete(k) };
+  g.ResizeObserver = class { observe() {} disconnect() {} };
   g.Node = FakeNode;
   g.document = {
     documentElement: new FakeNode(),

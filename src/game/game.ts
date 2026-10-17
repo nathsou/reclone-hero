@@ -168,6 +168,7 @@ export class Game {
   private lastFrame = 0;
   private paused = false;
   private ended = false;
+  private failTimer = 0;
   private startTime = 0;
   private endTime = 0;
   private resumeAt = -Infinity;
@@ -204,7 +205,7 @@ export class Game {
         return;
       }
       this.hudCameraKey = '';
-      this.renderer.warmUp(this.setup.chart.beats, noteSkin(), renderTheme());
+      this.warmUp();
       this.pausedDrawn = false;
     };
     this.hud = hud;
@@ -288,10 +289,12 @@ export class Game {
     return 'guitar';
   }
 
-  /**
-   * Frames that cannot keep up with the display for ~3 s of play lower the graphics quality one step
-   * (for the rest of the session), so a phone running Crystal stays smooth.
-   */
+  /** Loading-screen refresh baseline, independent of expensive gameplay frames. */
+  setDisplayInterval(seconds: number): void {
+    if (seconds > 0.004 && Number.isFinite(seconds)) this.minDt = seconds;
+  }
+
+  /** Sustained missed refreshes lower graphics quality for the rest of this session. */
   private checkFrameRate() {
     if (!settings.autoQuality) return;
     this.playedFor += 0.5;
@@ -379,6 +382,13 @@ export class Game {
     this.setKeyboardActive(!this.setup.bot && !input().hasPads && !touch);
   }
 
+  warmUp(): void {
+    this.renderer.warmUp(this.setup.chart.beats, noteSkin(), renderTheme(), {
+      length: settings.highwayLength, drums: this.drums, noHighway: this.vocals,
+      laneMask: this.setup.instrument === 'touch' ? 0b10101 : this.drums ? DRUM_PADS_ALL : 0b11111,
+    });
+  }
+
   start(): void {
     this.prepareStart();
     input().gameMode = true;
@@ -388,6 +398,7 @@ export class Game {
     audio().play(this.startTime, this.rate);
     this.awake.on();
     this.lastFrame = performance.now();
+    this.fpsAcc = this.fpsFrames = this.worstAcc = 0;
     cancelAnimationFrame(this.raf);
     this.raf = requestAnimationFrame(this.frame);
   }
@@ -464,6 +475,7 @@ export class Game {
     input().clear();
     this.srcMask = { kb: 0, pad: input().padFretMask(), touch: 0 };
     this.lastFrame = performance.now();
+    this.fpsAcc = this.fpsFrames = this.worstAcc = 0;
   }
 
   /** Playback speed: the practice speed, or the song speed. */
@@ -516,6 +528,8 @@ export class Game {
   }
 
   stop(): void {
+    clearTimeout(this.failTimer);
+    this.onEnd = this.onPause = null;
     cancelAnimationFrame(this.raf);
     this.awake.off();
     if (this.video) {
@@ -533,7 +547,7 @@ export class Game {
 
   private readonly awake = new ScreenAwake();
   /** shortest frame interval seen: the display's own refresh */
-  private minDt = Infinity;
+  private minDt = 1 / 60;
   private slowWindows = 0;
   private playedFor = 0;
   private cpuMs = 0;
@@ -557,12 +571,13 @@ export class Game {
     if (this.paused && this.pausedDrawn) return;
     this.pausedDrawn = this.paused;
     const cpuStart = performance.now();
-    const dt = Math.min(0.05, (now - this.lastFrame) / 1000);
+    const elapsed = Math.max(0, (now - this.lastFrame) / 1000);
+    const dt = Math.min(0.05, elapsed);
     this.lastFrame = now;
-    this.fpsAcc += dt;
+    this.fpsAcc += elapsed;
     this.fpsFrames++;
-    if (dt > this.worstAcc) this.worstAcc = dt;
-    if (dt > 0.004) this.minDt = Math.min(this.minDt, dt);
+    if (elapsed > this.worstAcc) this.worstAcc = elapsed;
+    if (elapsed > 0.004) this.minDt = Math.min(this.minDt, elapsed);
     if (this.fpsAcc >= 0.5) {
       this.fps = this.fpsFrames / this.fpsAcc;
       this.worstFrame = this.worstAcc;
@@ -1013,7 +1028,7 @@ export class Game {
     a.playSfx('streakBreak', 0.9);
     this.hud.songFailed();
     this.missPulse = 1;
-    setTimeout(() => {
+    this.failTimer = window.setTimeout(() => {
       a.stop();
       this.finish(at);
     }, 2400);

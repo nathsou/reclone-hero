@@ -1,6 +1,6 @@
+import { measureDisplayInterval } from '../../game/frameTiming.ts';
 import { audio } from '../../audio/audio.ts';
-import type { StemFile } from '../../audio/audio.ts';
-import { stretchAsync } from '../../audio/stretch.ts';
+import { loadSongAudio } from '../../audio/loadSong.ts';
 import type { Chart } from '../../chart/build.ts';
 import type { Difficulty, Instrument } from '../../chart/types.ts';
 import { DIFFICULTIES, INSTRUMENT_LABEL, trackKey } from '../../chart/types.ts';
@@ -17,7 +17,6 @@ import type { App, Screen } from '../app.ts';
 import { fmtScore, h, setText } from '../dom.ts';
 import { formatTime } from '../../util/text.ts';
 import { Hud } from '../hud.ts';
-import { noteSkin, renderTheme } from '../theme.ts';
 import { Menu } from '../menu.ts';
 import type { MenuItem } from '../menu.ts';
 import { canFullscreen, isFullscreen, toggleFullscreen } from '../fullscreen.ts';
@@ -52,6 +51,8 @@ export class GameScreen implements Screen {
   private pauseMenu: Menu | null = null;
   private pauseEl: HTMLElement | null = null;
   private destroyed = false;
+  private readonly loadAbort = new AbortController();
+  private artwork: Promise<string> | null = null;
   private videoUrl: string | null = null;
   private mic: Mic | null = null;
 
@@ -62,7 +63,13 @@ export class GameScreen implements Screen {
     this.loadStatus = h('div', { class: 'load-status' }, 'Reading files…');
     this.loadBar = h('div', { class: 'load-bar-fill' });
     const art = h('div', { class: 'load-art' });
-    if (req.song.albumArt) void app.library.fileUrl(req.song, req.song.albumArt).then((u) => (art.style.backgroundImage = `url("${u}")`));
+    if (req.song.albumArt) {
+      this.artwork = app.library.fileUrl(req.song, req.song.albumArt);
+      void this.artwork.then(u => {
+        if (this.destroyed) return; // destroy also releases late arrivals
+        art.style.backgroundImage = `url("${u}")`;
+      }).catch(() => {});
+    }
     this.loading = h(
       'div',
       { class: 'loading' },
@@ -92,8 +99,8 @@ export class GameScreen implements Screen {
     document.addEventListener('visibilitychange', this.onVisibility);
     document.addEventListener('fullscreenchange', this.onFullscreenChange);
     void this.load().catch((err) => {
-      console.error(err);
       if (this.destroyed) return;
+      console.error(err);
       this.app.toast(`Could not start song: ${(err as Error).message}`);
       void this.back();
     });
@@ -107,47 +114,17 @@ export class GameScreen implements Screen {
     if (!charted) throw new Error('This part is not charted');
     const mods = this.req.mods ?? [];
     const track = applyModifiers(charted, mods);
-    await audio().resume();
-
-    const stems = Object.entries(song.stems).filter(([k]) => k !== 'preview');
-    // Built-in songs are synthesized on the spot rather than read from disk.
-    lib.builtin.onRenderProgress = (p) => this.progress(p * 0.4, `Synthesizing the band… ${Math.round(p * 100)}%`);
-    let read = 0;
-    const files: StemFile[] = await Promise.all(
-      stems.map(async ([stem, file]) => {
-        const bytes = await lib.readFile(song, file);
-        this.progress(++read / stems.length * 0.4, `Reading audio (${read}/${stems.length})`);
-        return { stem, bytes };
-      }),
-    );
-    lib.builtin.onRenderProgress = null;
-    if (this.destroyed) return;
-    const loaded = await audio().loadSong(files, instrument, (d, t) => this.progress(0.4 + (d / t) * 0.5, `Decoding audio (${d}/${t})`));
-    if (this.destroyed) return;
-    if ((practice && practice.speed !== 1) || speed !== 1) {
-      const rate = practice ? practice.speed : speed;
-      const text = practice ? 'Slowing down the practice section…' : rate < 1 ? 'Slowing the song down…' : 'Speeding the song up…';
-      this.progress(0.9, text);
-      const a = audio();
-      const b = a.buffers;
-      // practice: the range and a little either side; song speed: the whole song
-      const from = practice ? Math.max(0, practice.start - 4) : 0;
-      const to = practice ? practice.end + 3 : loaded.duration;
-      const parts = [b.player, b.backing].filter((x): x is AudioBuffer => !!x);
-      const done = new Array<number>(parts.length).fill(0);
-      const stretched = await Promise.all(
-        parts.map((x, i) =>
-          stretchAsync(a.ctx, x, from, to, rate, (p) => {
-            done[i] = p;
-            this.progress(0.9 + 0.07 * (done.reduce((s, v) => s + v, 0) / parts.length), text);
-          }),
-        ),
-      );
-      if (this.destroyed) return;
-      a.setBuffers({ player: b.player ? stretched[0] : null, backing: b.backing ? stretched[b.player ? 1 : 0] : null, origin: from });
-    }
+    const signal = this.loadAbort.signal;
+    const displayInterval = measureDisplayInterval(signal);
+    const rate = practice?.speed ?? speed;
+    const range = rate !== 1 ? { start: practice ? Math.max(0, practice.start - 4) : 0, end: practice ? practice.end + 3 : Infinity, rate } : undefined;
+    const loaded = await loadSongAudio(audio(), lib, song, instrument, signal, (p, text) => this.progress(p, text), range);
+    signal.throwIfAborted();
     this.progress(0.97, 'Warming up…');
+    const interval = await displayInterval;
+    signal.throwIfAborted();
     this.game = new Game({ song, chart, track, instrument, duration: loaded.duration, bot: this.req.bot, practice, speed, mods }, this.canvas, this.hud);
+    this.game.setDisplayInterval(interval);
     if (instrument === 'vocals' && !this.req.bot) {
       this.progress(0.98, 'Opening the microphone…');
       const { Mic } = await import('../../audio/mic.ts');
@@ -162,6 +139,7 @@ export class GameScreen implements Screen {
     if (song.video) {
       try {
         const url = await lib.fileUrl(song, song.video);
+        if (this.destroyed) { lib.release(url); return; }
         const video = h('video', { muted: true, playsInline: true, preload: 'auto', src: url });
         video.muted = true;
         this.videoUrl = url;
@@ -174,6 +152,7 @@ export class GameScreen implements Screen {
       try {
         const bytes = await lib.readFile(song, song.background ?? song.albumArt!);
         const bmp = await createImageBitmap(new Blob([bytes as Uint8Array<ArrayBuffer>]));
+        if (this.destroyed) { bmp.close(); return; }
         this.game.renderer.setBackground(bmp);
       } catch {
         // no background
@@ -183,9 +162,11 @@ export class GameScreen implements Screen {
     this.game.prepareStart();
     // Touch pads change the canvas height. Let layout and ResizeObserver settle before warming
     // the GPU targets; otherwise the first gameplay frame deletes the targets we just warmed.
-    await new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
+    await nextFrame(signal);
+    await nextFrame(signal);
     if (this.destroyed) return;
-    this.game.renderer.warmUp(chart.beats, noteSkin(), renderTheme());
+    this.game.warmUp();
+    await audio().prepareClock(signal);
     // Give the browser an idle moment to collect loading garbage before the music starts.
     await new Promise<void>((resolve) =>
       'requestIdleCallback' in window ? requestIdleCallback(() => resolve(), { timeout: 300 }) : setTimeout(resolve, 100),
@@ -193,11 +174,19 @@ export class GameScreen implements Screen {
     if (this.destroyed) return;
     this.game.onPause = () => this.showPause();
     this.game.onEnd = (r) => {
-      void import('./results.ts').then(({ ResultsScreen }) => this.app.show(new ResultsScreen(this.app, r, this.req)));
+      void import('./results.ts').then(({ ResultsScreen }) => {
+        if (!this.destroyed) this.app.show(new ResultsScreen(this.app, r, this.req));
+      });
     };
     // If the tab was hidden while loading, wait until it is visible again before starting.
     while (document.hidden) {
-      await new Promise<void>((r) => document.addEventListener('visibilitychange', () => r(), { once: true }));
+      await new Promise<void>((resolve, reject) => {
+        const cleanup = () => { document.removeEventListener('visibilitychange', visible); signal.removeEventListener('abort', abort); };
+        const visible = () => { cleanup(); resolve(); };
+        const abort = () => { cleanup(); reject(signal.reason); };
+        document.addEventListener('visibilitychange', visible, { once: true });
+        signal.addEventListener('abort', abort, { once: true });
+      });
       if (this.destroyed) return;
     }
     this.loading.classList.add('gone');
@@ -240,7 +229,7 @@ export class GameScreen implements Screen {
     const song = this.req.song;
     if (song.albumArt) {
       art.classList.remove('none');
-      void this.app.library.fileUrl(song, song.albumArt).then((u) => (art.style.backgroundImage = `url("${u}")`));
+      void this.artwork?.then(u => { if (!this.destroyed) art.style.backgroundImage = `url("${u}")`; }).catch(() => {});
     }
     const stat = (label: string, value: string) => h('div', null, h('div', { class: 'label' }, label), h('div', { class: 'v' }, value));
     const card = h(
@@ -362,10 +351,24 @@ export class GameScreen implements Screen {
     document.removeEventListener('visibilitychange', this.onVisibility);
     document.removeEventListener('fullscreenchange', this.onFullscreenChange);
     this.destroyed = true;
+    this.loadAbort.abort();
+    if (this.artwork) void this.artwork.then(u => this.app.library.release(u)).catch(() => {});
+    const debug = globalThis as Record<string, unknown>;
+    if (debug.__game === this.game) delete debug.__game;
     this.game?.stop();
     this.mic?.close();
     this.hud.vocals.destroy();
     audio().unload();
     if (this.videoUrl) this.app.library.release(this.videoUrl);
   }
+}
+
+/** Unlike a bare rAF promise, a destroyed screen also settles while its tab is hidden. */
+function nextFrame(signal: AbortSignal): Promise<void> {
+  signal.throwIfAborted();
+  return new Promise((resolve, reject) => {
+    const abort = () => { cancelAnimationFrame(id); reject(signal.reason); };
+    const id = requestAnimationFrame(() => { signal.removeEventListener('abort', abort); resolve(); });
+    signal.addEventListener('abort', abort, { once: true });
+  });
 }

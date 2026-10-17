@@ -1,3 +1,4 @@
+import { SongClock } from './songClock.ts';
 import type { Instrument } from '../chart/types.ts';
 import { settings } from '../settings.ts';
 import { synthesizeSfx } from './sfx.ts';
@@ -60,9 +61,8 @@ export class AudioEngine {
   private startSong = 0;
   private rate = 1;
   private pausedAt = 0;
-  private anchored = false;
-  private anchorPerf = 0;
-  private anchorSong = 0;
+  private readonly clock = new SongClock();
+  private loadGeneration = 0;
   private playerAudible = true;
 
   constructor() {
@@ -114,63 +114,88 @@ export class AudioEngine {
 
   // ---------------------------------------------------------------- loading
 
-  async loadSong(files: StemFile[], instrument: Instrument, onProgress?: (done: number, total: number) => void): Promise<LoadedSong> {
+  async loadSong(files: AsyncIterable<StemFile> | Iterable<StemFile>, instrument: Instrument, onProgress?: (done: number, total: number) => void, signal?: AbortSignal, total = Array.isArray(files) ? files.length : 0): Promise<LoadedSong> {
     this.unload();
+    const generation = this.loadGeneration;
+    const check = () => {
+      signal?.throwIfAborted();
+      if (generation !== this.loadGeneration) throw new DOMException('Song load superseded', 'AbortError');
+    };
     const playerStems = PLAYER_STEMS[instrument];
-    const sr = this.ctx.sampleRate;
-    // Other stems are summed straight into the playback buffer: no large temporary arrays are left
-    // behind for the garbage collector to find in the middle of a song.
     let backing: AudioBuffer | null = null;
-    const players: AudioBuffer[] = [];
+    let player: AudioBuffer | null = null;
     let done = 0;
-    for (const f of files) {
+    for await (const f of files) {
+      check();
       if (f.stem === 'preview') continue;
       let buf: AudioBuffer;
       try {
         const ab = f.bytes.byteOffset === 0 && f.bytes.byteLength === f.bytes.buffer.byteLength ? (f.bytes.buffer as ArrayBuffer) : (f.bytes.slice().buffer as ArrayBuffer);
         buf = await this.ctx.decodeAudioData(ab);
       } catch (err) {
+        check();
         console.warn(`Could not decode ${f.stem}`, err);
-        onProgress?.(++done, files.length);
+        onProgress?.(++done, total);
         continue;
       }
-      if (playerStems.includes(f.stem)) players.push(buf);
-      else {
-        // The crowd is folded in too, at its volume setting: one less ~90 MB buffer per song.
-        const gain = f.stem === 'crowd' ? settings.volCrowd : 1;
-        // Sum every other stem into one backing track so only 2-3 sources play.
-        if (!backing || buf.length > backing.length) {
-          const grown = this.ctx.createBuffer(2, buf.length, sr);
-          if (backing) for (let ch = 0; ch < 2; ch++) grown.getChannelData(ch).set(backing.getChannelData(ch));
-          backing = grown;
-        }
-        for (let ch = 0; ch < 2; ch++) {
-          const src = buf.getChannelData(Math.min(ch, buf.numberOfChannels - 1));
-          const dst = backing.getChannelData(ch);
-          if (gain === 1) for (let i = 0; i < src.length; i++) dst[i] += src[i];
-          else for (let i = 0; i < src.length; i++) dst[i] += src[i] * gain;
-        }
-      }
-      onProgress?.(++done, files.length);
+      check();
+      if (playerStems.includes(f.stem)) player = this.accumulate(player, buf);
+      else backing = this.accumulate(backing, buf, f.stem === 'crowd' ? settings.volCrowd : 1);
+      onProgress?.(++done, total);
     }
-    if (players.length === 1) this.player = players[0];
-    else if (players.length > 1) this.player = this.mix(players);
+    check();
+    this.player = player;
     this.backing = backing;
-    const duration = Math.max(this.player?.duration ?? 0, this.backing?.duration ?? 0);
-    return { duration, hasPlayerStem: this.player !== null };
+    return { duration: Math.max(player?.duration ?? 0, backing?.duration ?? 0), hasPlayerStem: player !== null };
   }
 
-  private mix(bufs: AudioBuffer[]): AudioBuffer {
-    const len = Math.max(...bufs.map((b) => b.length));
-    const out = this.ctx.createBuffer(2, len, this.ctx.sampleRate);
-    for (let ch = 0; ch < 2; ch++) {
+  /** Built-ins already have device-rate PCM: no WAV round trip or decoder resampling. */
+  loadPcm(files: { stem: string; channels: Float32Array[] }[], sampleRate: number, instrument: Instrument): LoadedSong {
+    this.unload();
+    let player: AudioBuffer | null = null;
+    let backing: AudioBuffer | null = null;
+    for (const file of files) {
+      const buf = this.ctx.createBuffer(file.channels.length, file.channels[0].length, sampleRate);
+      file.channels.forEach((ch, i) => buf.copyToChannel(ch as Float32Array<ArrayBuffer>, i));
+      if (PLAYER_STEMS[instrument].includes(file.stem)) player = this.accumulate(player, buf);
+      else backing = this.accumulate(backing, buf);
+    }
+    this.player = player;
+    this.backing = backing;
+    return { duration: Math.max(player?.duration ?? 0, backing?.duration ?? 0), hasPlayerStem: player !== null };
+  }
+
+  /** Fold each decoded stem immediately; never retain an array of full decoded drum parts. */
+  private accumulate(out: AudioBuffer | null, buf: AudioBuffer, gain = 1): AudioBuffer {
+    if (!out && gain === 1) return buf;
+    const channels = Math.max(out?.numberOfChannels ?? 0, buf.numberOfChannels);
+    const length = Math.max(out?.length ?? 0, buf.length);
+    if (!out || out.length < length || out.numberOfChannels < channels) {
+      const grown = this.ctx.createBuffer(channels, length, this.ctx.sampleRate);
+      if (out) for (let ch = 0; ch < channels; ch++) grown.copyToChannel(out.getChannelData(Math.min(ch, out.numberOfChannels - 1)), ch);
+      out = grown;
+    }
+    for (let ch = 0; ch < channels; ch++) {
+      const src = buf.getChannelData(Math.min(ch, buf.numberOfChannels - 1));
       const dst = out.getChannelData(ch);
-      for (const b of bufs) {
-        const src = b.getChannelData(Math.min(ch, b.numberOfChannels - 1));
-        for (let i = 0; i < src.length; i++) dst[i] += src[i];
-      }
+      for (let i = 0; i < src.length; i++) dst[i] += src[i] * gain;
     }
     return out;
+  }
+
+  /** Let the output clock become available before scheduling the first notes. Bounded for devices
+   * that never expose output timestamps; their normal latency estimate remains the fallback. */
+  async prepareClock(signal: AbortSignal): Promise<void> {
+    const until = performance.now() + 300;
+    let previous = 0;
+    do {
+      signal.throwIfAborted();
+      const ts = this.ctx.getOutputTimestamp();
+      if (previous > 0 && (ts.contextTime ?? 0) > previous && (ts.performanceTime ?? 0) > 0) return;
+      previous = ts.contextTime ?? 0;
+      await new Promise<void>(resolve => setTimeout(resolve, 16));
+    } while (performance.now() < until);
+    signal.throwIfAborted();
   }
 
   /** Replace playback buffers, e.g. with time-stretched practice audio. */
@@ -186,6 +211,7 @@ export class AudioEngine {
   }
 
   unload(): void {
+    this.loadGeneration++;
     this.stop();
     this.player = this.backing = null;
     this.pausedAt = 0;
@@ -220,7 +246,8 @@ export class AudioEngine {
       this.sources.push(src);
     }
     this.playing = true;
-    this.anchored = false;
+    this.clock.reset();
+    this.sync(performance.now());
     this.setPlayerAudible(true, true);
     // a failed song faded the band out
     this.musicBus.gain.cancelScheduledValues(0);
@@ -263,28 +290,13 @@ export class AudioEngine {
    */
   sync(perf: number): void {
     if (!this.playing) return;
-    const raw = this.rawSongTime(perf);
-    const dt = (perf - this.anchorPerf) / 1000;
-    const est = this.anchorSong + dt * this.rate;
-    if (!this.anchored || raw - est > 0.04) {
-      // first reading, or the clock is behind: catch up at once
-      this.anchorSong = raw;
-      this.anchored = true;
-    } else if (raw - est < -0.04) {
-      // Ahead of the audio (e.g. the output timestamp became available and adds the output latency).
-      // Never step back, notes would visibly jump: run at half speed until the audio catches up.
-      this.anchorSong = Math.max(raw, est - dt * this.rate * 0.5);
-    } else {
-      this.anchorSong = est + (raw - est) * 0.03;
-    }
-    this.anchorPerf = perf;
+    this.clock.sync(this.rawSongTime(perf), perf, this.rate);
   }
 
   /** Song time (seconds, calibrated) at a performance.now() timestamp. */
   songTime(perf: number): number {
     if (!this.playing) return this.pausedAt;
-    if (!this.anchored) this.sync(perf);
-    return this.anchorSong + ((perf - this.anchorPerf) / 1000) * this.rate - settings.audioOffsetMs / 1000;
+    return this.clock.time(perf, this.rate) - settings.audioOffsetMs / 1000;
   }
 
   /** AudioContext time at which a (calibrated) song time will be played. */

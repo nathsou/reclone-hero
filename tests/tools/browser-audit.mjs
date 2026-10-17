@@ -4,7 +4,7 @@
 import assert from 'node:assert/strict';
 import { mkdir } from 'node:fs/promises';
 const { chromium } = await import(process.env.PLAYWRIGHT_MODULE ?? 'playwright');
-const browser = await chromium.launch({ executablePath: process.env.CHROME_PATH || undefined, headless: true, args: ['--autoplay-policy=no-user-gesture-required'] });
+const browser = await chromium.launch({ executablePath: process.env.CHROME_PATH || undefined, headless: true, args: ['--autoplay-policy=no-user-gesture-required', '--enable-unsafe-swiftshader'] });
 const output = process.env.AUDIT_OUTPUT ?? '/tmp/reclone-audit';
 await mkdir(output, { recursive: true });
 const origin = process.env.AUDIT_URL ?? 'http://127.0.0.1:5230';
@@ -51,14 +51,14 @@ try {
   await page.waitForFunction(()=>auditApp.current.coverGesture.position===undefined);
   assert.equal(await page.locator('.game-screen').count(),0,'swipe never launches a song');
   await checkCovers();
-  await swipe();await page.locator('.search').fill('Holst');
+  await swipe();await page.locator('.search').fill('Beethoven');
   assert.equal(await page.evaluate(()=>auditApp.current.coverGesture.position),undefined,'filter stops fling');
   await checkCovers();await page.locator('.search').fill('');
   await page.emulateMedia({reducedMotion:'reduce'});await swipe();
   assert.equal(await page.evaluate(()=>auditApp.current.coverGesture.position),undefined,'reduced motion snaps without coasting');
   await page.emulateMedia({reducedMotion:'no-preference'});
   console.log('PASS: touch cover drag, momentum, snapping, no accidental play, interruption, reduced motion');
-  for (const query of ['Holst', 'Paper Hearts', 'Circuit Atlas', 'no matching song']) {
+  for (const query of ['Beethoven', 'Midnight Drive', 'Circuit Atlas', 'no matching song']) {
     await page.locator('.search').fill(query);
     if (query === 'no matching song') assert.equal(await page.locator('.cover').count(), 0);
     else await checkCovers();
@@ -95,7 +95,7 @@ try {
   await page.getByRole('button', {name:'List',exact:true}).click();
   for (const [width,height] of [[390,844],[320,568],[600,900],[844,390]]) {
     await page.setViewportSize({width,height});
-    await page.locator('.search').fill('Paper Hearts');
+    await page.locator('.search').fill('Midnight Drive');
     await page.locator('.song-detail .diff').first().waitFor();
     await page.waitForTimeout(250);
     const bounds = await page.evaluate(() => {
@@ -127,7 +127,7 @@ try {
   // Construct results from a real chart. Check record/compare semantics separately from playing a whole song.
   await page.evaluate(async () => {
     const { chartFor } = await import('/src/game/charts.ts'); const { ResultsScreen } = await import('/src/ui/screens/results.ts');
-    const song = auditApp.library.songs.find(s=>s.name==='Paper Hearts');const chart = await chartFor(auditApp.library,song);const track=chart.tracks.get('guitar:expert');
+    const song = auditApp.library.songs.find(s=>s.name==='Midnight Drive');const chart = await chartFor(auditApp.library,song);const track=chart.tracks.get('guitar:expert');
     const setup = {song,chart,track,instrument:'guitar',duration:100,bot:false};
     const r = {setup,score:12345,maxStreak:87,hits:50,total:100,misses:50,overstrums:0,stars:3,spPhrases:1,spPhrasesTotal:2,sustainDrops:0,solos:[],sections:[],deltas:[],start:0,end:100,noteState:new Uint8Array(track.notes.length),hitDelta:new Float32Array(track.notes.length),missByLane:[1,2,3,4,5],missByType:{strum:50,hopo:0,tap:0},missChords:0,missOpen:0,wrongFret:0,lateMiss:50,input:'keyboard'};
     window.auditResult={r,req:{song,chart,instrument:'guitar',difficulty:'expert',bot:false},ResultsScreen};
@@ -157,15 +157,16 @@ try {
     if (!legacy) { game.prepareStart(); await new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve))); }
     game.renderer.warmUp(r.setup.chart.beats,noteSkin(),renderTheme());
     const gl=game.renderer.gl;window.auditTargetBuilds=0;const orig=gl.renderbufferStorageMultisample.bind(gl);gl.renderbufferStorageMultisample=(...args)=>{auditTargetBuilds++;return orig(...args);};
+    window.auditFrames=0; const render=game.renderer.render.bind(game.renderer); game.renderer.render=(s)=>{render(s);auditFrames++;};
     game.start();
   }, legacy);
   await startTouchGame(true);
-  await page.waitForTimeout(300);
+  await page.waitForFunction(()=>auditFrames>=3);
   const legacyBuilds = await page.evaluate(()=>auditTargetBuilds);
   assert.ok(legacyBuilds > 0, 'reproduces pre-fix target rebuild at touch startup');
   await page.evaluate(()=>auditGame.stop());
   await startTouchGame();
-  await page.waitForTimeout(300);
+  await page.waitForFunction(()=>auditFrames>=3);
   assert.equal(await page.evaluate(()=>auditTargetBuilds),0,'first frames keep warmed GPU targets');
   await page.evaluate(() => {
     const pad=document.querySelector('.tf-pad'),zone=document.querySelector('.tf-zone'),r=pad.getBoundingClientRect();

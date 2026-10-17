@@ -1,3 +1,4 @@
+import { FRAME_CHART } from './fixture.ts';
 // Frame-loop benchmark: runs the real Game (engine, renderer, HUD, audio clock, input polling) against
 // mocks and reports JS time and heap garbage per frame.
 //   node --expose-gc --max-semi-space-size=512 tests/bench/frame.bench.ts [song folder]
@@ -12,11 +13,11 @@ const { Hud } = await import('../../src/ui/hud.ts');
 const { audio } = await import('../../src/audio/audio.ts');
 const { updateSettings } = await import('../../src/settings.ts');
 
-const DIR = process.argv.slice(2).find((a) => !a.startsWith('--')) ?? '/Volumes/S/charts/Anti Hero 2/[AH2] 38. The Experience - The Final Challenge/Schmutz06 - Madness March Kamikaze 2 (Schmutz06)';
-const files = readdirSync(DIR, { withFileTypes: true }).filter((e) => e.isFile()).map((e) => e.name);
+const DIR = process.argv.slice(2).find((a) => !a.startsWith('--'));
+const files = DIR ? readdirSync(DIR, { withFileTypes: true }).filter((e) => e.isFile()).map((e) => e.name) : ['notes.chart', 'guitar.ogg'];
 const ini = files.find((f) => f.toLowerCase() === 'song.ini');
 const song = makeSongEntry({ path: 'bench', files, ini: ini ? readFileSync(`${DIR}/${ini}`) : null, chartHead: null })!;
-const chart = loadChart(song.chartFile, readFileSync(`${DIR}/${song.chartFile}`), song.chartOptions);
+const chart = loadChart(song.chartFile, DIR ? readFileSync(`${DIR}/${song.chartFile}`) : new TextEncoder().encode(FRAME_CHART), song.chartOptions);
 const track = chart.tracks.get('guitar:expert')!;
 updateSettings({ showFps: false, noteStyle: (process.env.BENCH_SKIN ?? 'dome') as 'dome' });
 const { initTheme } = await import('../../src/ui/theme.ts');

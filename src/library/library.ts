@@ -21,6 +21,8 @@ export class Library {
   /** songs that ship with the game, listed alongside the player's own */
   readonly builtin = new BuiltinSource();
   songs: SongEntry[] = [];
+  /** Invalidates parsed charts when the source or its scan changes. */
+  revision = 0;
   /** songs left out of `songs` because the player hid them */
   hiddenCount = 0;
 
@@ -81,6 +83,7 @@ export class Library {
 
   /** Open the player's folder (or none: built-in songs only). */
   async open(source: LibrarySource | null, opts: { rescan?: boolean; onProgress?: (n: number) => void } = {}): Promise<void> {
+    this.revision++;
     this.source = source;
     let folders: RawSongFolder[] = [];
     if (source) {
@@ -97,6 +100,7 @@ export class Library {
 
   /** Rebuild the song list, e.g. after the built-in songs are shown or hidden. */
   async index(): Promise<void> {
+    this.revision++;
     const folders = settings.builtinSongs ? [...this.folders, ...(await this.builtin.scan())] : this.folders;
     const songs: SongEntry[] = [];
     let hidden = 0;

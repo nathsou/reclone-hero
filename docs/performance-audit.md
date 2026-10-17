@@ -1,3 +1,70 @@
+# Startup and resource follow-up — 17 October 2026
+
+The opening-note report was narrowed to note motion in Chrome on an M4 Pro. Code inspection found a
+specific mechanism: when the output timestamp put the estimated song clock more than 40 ms ahead of
+the audio, `AudioEngine.sync` deliberately ran that clock at half speed. This affected note motion and
+judgement time; it did not change audio playback speed. The physical M4 Pro was not available for this
+review, so this is a reproduced clock failure mode, not a claim that every reported hitch has been
+reproduced on that machine.
+
+The clock now prepares output timestamps before playback, anchors at the scheduled start, and limits
+backward phase correction to 2% of playback speed. Its smoothing depends on elapsed time, not frame
+count. Tests cover late output timestamps at 30/60/120 Hz, altered playback rates, stalls and restart.
+A real Chromium test injects a 150 ms timestamp transition and checks that opening-note motion stays
+at or above 0.975x; the observed minimum here was 0.980x. A new run or seek still resets its clock
+anchor. This bounded correction intentionally favors steady motion when a timestamp changes late;
+large late changes converge gradually, so accurate initial clock preparation remains important.
+
+Other changes:
+
+- Built-in gameplay receives transferable stereo PCM at the AudioContext sample rate, avoiding the
+  WAV encode/copy/decode round trip. The most recent PCM render is cached only below 32 MiB. Larger
+  songs render again on a fresh load; in-song restart continues to reuse the playback buffers.
+- Imported stems are read/decode/mixed incrementally, including multi-part drums. Stretching copies
+  one stem into a session-owned worker at a time. Worker errors reject promptly, cancellation
+  terminates the worker, and the worker-disabled fallback yields between blocks. Stretch output
+  uses views instead of another full-sized slice.
+- A screen owns its audio-load cancellation and artwork URL. Repeated pauses reuse the artwork;
+  destruction releases it, including late arrivals, and closes background bitmaps. Canceled decode
+  work cannot replace buffers installed by a newer load. Shared synthesis cancels only after its
+  last consumer leaves.
+- FPS/worst-frame diagnostics use uncapped elapsed time. Animation decay still caps its delta.
+  Automatic quality starts from a loading-screen refresh sample (60 Hz fallback), rather than
+  treating consistently slow gameplay as the display's native refresh. Warm-up uses the selected
+  highway length and instrument layout.
+- Chart caches are scoped to a library revision and refreshed on reads. Source switches and rescans
+  cannot reuse another folder's same-path chart.
+- Search reuses normalized metadata and the current sorted song order. A synthetic 10,000-entry
+  cached search/group pass took about 3.5 ms here (50,000: 23.8 ms). The earlier repeated sort alone
+  took 62/479 ms respectively. These are CPU observations in this environment, not browser/device
+  guarantees; initial sorting still does work.
+- `npm run bench` now has a deterministic 3,563-note fixture and repaired browser mocks. PR checks run
+  tests, the production build and a benchmark smoke test. No timing thresholds are enforced on shared
+  CI runners. The browser audit uses current starter songs and waits for rendered frames rather than
+  fixed delays for its startup-allocation assertions.
+
+Validation: unit tests, typecheck/build, frame benchmark, existing Chromium browser audit and the new
+startup audit. The latter covers actual worker transfers, bootstrap failure, cancellation, fallback,
+shared synthesis ownership, artwork reuse/release and abandonment during loading. The browser ran
+with software rendering; its FPS is not representative of an M4 Pro GPU. The existing startup check
+observed two target allocations with the old layout order and zero after warm-up with the current
+order.
+
+```sh
+npm test
+npm run build
+npm run bench
+PLAYWRIGHT_MODULE=/absolute/path/to/playwright/index.mjs \
+CHROME_PATH=/absolute/path/to/chrome node tests/tools/browser-audit.mjs
+PLAYWRIGHT_MODULE=/absolute/path/to/playwright/index.mjs \
+CHROME_PATH=/absolute/path/to/chrome node tests/tools/startup-audit.mjs
+```
+
+The earlier audit below is retained as historical context; its pack size, absolute timings and
+implementation details describe the earlier revision.
+
+---
+
 # Performance audit — 29 September 2026
 
 The measured frame-loop JavaScript cost is small. The most useful changes in this PR are a lighter

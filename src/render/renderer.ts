@@ -645,7 +645,7 @@ export class Renderer {
    * Draw a throwaway frame that exercises every program, blend mode and target, so drivers finish
    * compiling pipelines during loading instead of hitching on the first hit, open note or star power.
    */
-  warmUp(beats: BeatList, skin: NoteSkin = this.skin, theme: RenderTheme = DEFAULT_RENDER_THEME): void {
+  warmUp(beats: BeatList, skin: NoteSkin = this.skin, theme: RenderTheme = DEFAULT_RENDER_THEME, layout: Pick<RenderState, 'length' | 'drums' | 'noHighway' | 'laneMask'> = {}): void {
     if (this.lost) return;
     const notes = noteListOf([
       { time: 0.1, mask: 1, type: 0, endTime: 0.6 },
@@ -656,7 +656,7 @@ export class Renderer {
       { time: 1.1, mask: 17, type: 0 },
     ]);
     const state: RenderState = {
-      time: 0.2, dt: 0.016, speed: 11, notes,
+      time: 0.2, dt: 0.016, speed: 11, notes, ...layout,
       noteState: new Uint8Array([1, 0, 0, 2, 1, 0]), spBroken: new Uint8Array(1),
       sustainHeld: new Uint8Array([1, 0, 0, 0, 0, 0]), sustainDrop: new Float32Array([NaN, NaN, NaN, NaN, 0.1, NaN]), sustainMask: 1,
       beats, frets: 1, laneHit: new Float32Array(5).fill(1), laneWrong: new Float32Array(5).fill(1),
@@ -1154,6 +1154,9 @@ export class Renderer {
   }
 
   dispose(): void {
+    if (this.bgSource && 'close' in this.bgSource) this.bgSource.close();
+    this.bgSource = null;
+    this.video = null;
     this.resizeObserver?.disconnect();
     window.removeEventListener('resize', this.markDirty);
     this.canvas.removeEventListener('webglcontextlost', this.onLost);
