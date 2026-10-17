@@ -1,10 +1,10 @@
 // Renders built-in songs off the main thread.
 import { previewJob, runJob, stemsJob } from './synth.ts';
 
-export type WorkerRequest = { id: number; song: string; kind: 'stems' | 'preview' };
+export type WorkerRequest = { id: number; song: string; kind: 'stems' | 'preview'; sampleRate: number };
 export type WorkerResponse =
   | { id: number; type: 'progress'; value: number }
-  | { id: number; type: 'stems'; guitar: Uint8Array; song: Uint8Array }
+  | { id: number; type: 'stems'; guitar: Float32Array[]; song: Float32Array[]; sampleRate: number }
   | { id: number; type: 'preview'; wav: Uint8Array }
   | { id: number; type: 'error'; message: string };
 
@@ -14,7 +14,7 @@ const ctx = self as unknown as {
 };
 
 ctx.onmessage = (e: MessageEvent<WorkerRequest>) => {
-  const { id, song, kind } = e.data;
+  const { id, song, kind, sampleRate } = e.data;
   let last = 0;
   const progress = (p: number) => {
     if (p - last < 0.02 && p < 1) return;
@@ -23,8 +23,8 @@ ctx.onmessage = (e: MessageEvent<WorkerRequest>) => {
   };
   try {
     if (kind === 'stems') {
-      const s = runJob(stemsJob(song), progress);
-      ctx.postMessage({ id, type: 'stems', guitar: s.guitar, song: s.song } satisfies WorkerResponse, [s.guitar.buffer, s.song.buffer]);
+      const s = runJob(stemsJob(song, sampleRate), progress);
+      ctx.postMessage({ id, type: 'stems', guitar: s.guitar, song: s.song, sampleRate: s.sampleRate } satisfies WorkerResponse, [...s.guitar, ...s.song].map(c => c.buffer));
     } else {
       const wav = runJob(previewJob(song), progress);
       ctx.postMessage({ id, type: 'preview', wav } satisfies WorkerResponse, [wav.buffer]);

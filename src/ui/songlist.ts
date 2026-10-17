@@ -43,6 +43,8 @@ export interface Group {
 
 export interface SortOptions {
   instrument: Instrument;
+  /** Input is a filtered subsequence of this same sort order. */
+  presorted?: boolean;
   reverse?: boolean;
   plays?: (songId: string) => PlayStat | undefined;
   /** "now" for the recently played buckets (ms) */
@@ -55,6 +57,23 @@ export function nameKey(x: string): string {
     .replace(/^[^\p{L}\p{N}]+/u, '')
     .replace(/^the\s+/i, '')
     .toLowerCase();
+}
+
+const searchIndex = new WeakMap<SongEntry, { name: string; artist: string; text: string }>();
+function indexed(s: SongEntry) {
+  let item = searchIndex.get(s);
+  if (!item) {
+    item = { name: nameKey(s.name), artist: nameKey(s.artist), text: `${s.name} ${s.artist} ${s.album} ${s.charter} ${s.genre} ${s.pack} ${s.year}`.toLowerCase() };
+    searchIndex.set(s, item);
+  }
+  return item;
+}
+
+/** Metadata is replaced on a library scan; derived strings live only as long as their entry. */
+export function matchesSearch(song: SongEntry, terms: readonly string[]): boolean {
+  if (!terms.length) return true;
+  const text = indexed(song).text;
+  return terms.every(t => text.includes(t));
 }
 
 const collator = new Intl.Collator(undefined, { sensitivity: 'base', numeric: true });
@@ -124,9 +143,9 @@ export function sortAndGroup(input: SongEntry[], by: SortKey, opts: SortOptions)
   const { instrument } = opts;
   const plays = opts.plays ?? (() => undefined);
   const now = opts.now ?? Date.now();
-  const byArtistTitle = (a: SongEntry, b: SongEntry) => cmpText(nameKey(a.artist), nameKey(b.artist)) || cmpText(nameKey(a.name), nameKey(b.name));
+  const byArtistTitle = (a: SongEntry, b: SongEntry) => cmpText(indexed(a).artist, indexed(b).artist) || cmpText(indexed(a).name, indexed(b).name);
   const letter = (s: SongEntry) => {
-    const c = nameKey(s.name).charAt(0).toUpperCase();
+    const c = indexed(s).name.charAt(0).toUpperCase();
     return /\p{L}/u.test(c) ? c : '#';
   };
   const defs: Record<SortKey, SortDef> = {
@@ -134,10 +153,10 @@ export function sortAndGroup(input: SongEntry[], by: SortKey, opts: SortOptions)
       primary: byArtistTitle,
       unknown: () => false,
       unknownLabel: '',
-      group: (s) => ({ key: nameKey(s.artist), label: s.artist }),
+      group: (s) => ({ key: indexed(s).artist, label: s.artist }),
     },
     name: {
-      primary: (a, b) => cmpText(nameKey(a.name), nameKey(b.name)),
+      primary: (a, b) => cmpText(indexed(a).name, indexed(b).name),
       unknown: () => false,
       unknownLabel: '',
       group: (s) => ({ key: letter(s), label: letter(s) }),
@@ -207,7 +226,7 @@ export function sortAndGroup(input: SongEntry[], by: SortKey, opts: SortOptions)
   const dir = opts.reverse ? -1 : 1;
   const unknownOf = new Map<SongEntry, boolean>();
   for (const s of input) unknownOf.set(s, def.unknown(s));
-  const songs = input.slice().sort((a, b) => {
+  const songs = opts.presorted ? input : input.slice().sort((a, b) => {
     const ua = unknownOf.get(a)!;
     const ub = unknownOf.get(b)!;
     if (ua || ub) return ua === ub ? byArtistTitle(a, b) : ua ? 1 : -1;

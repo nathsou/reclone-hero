@@ -16,7 +16,7 @@ import type { App, Screen } from '../app.ts';
 import { append, h, replace, setText } from '../dom.ts';
 import { canFullscreen, toggleFullscreen } from '../fullscreen.ts';
 import { logo } from '../logo.ts';
-import { SORTS, SORT_DIRECTION, SORT_LABEL, nameKey, sortAndGroup } from '../songlist.ts';
+import { SORTS, SORT_DIRECTION, SORT_LABEL, matchesSearch, nameKey, sortAndGroup } from '../songlist.ts';
 import { GenrePanel, describeGenreFilter } from '../genrePanel.ts';
 import { icon } from '../icons.ts';
 import { passesGenreFilter } from '../../library/genres.ts';
@@ -223,6 +223,7 @@ export class SongSelect implements Screen {
 
   /** The library changed underneath (e.g. built-in songs shown or hidden, a song hidden or deleted). */
   refresh(): void {
+    this.songOrder = null;
     this.dupes = findDuplicates(this.app.library.songs);
     if (!this.dupes.size) kept.dupesOnly = false;
     this.updateDupButton();
@@ -300,21 +301,27 @@ export class SongSelect implements Screen {
 
   // ---------------------------------------------------------------- list
 
+  private songOrder: { source: SongEntry[]; key: string; songs: SongEntry[] } | null = null;
+
   private refilter() {
     this.coverGesture.stop();
     const q = this.search.value.trim().toLowerCase();
     const current = this.filtered[this.sel] ?? this.app.library.songs.find((x) => x.id === kept.songId);
     const terms = q.split(/\s+/).filter(Boolean);
     const gf = settings.genreFilter;
-    const matching = this.app.library.songs.filter((s) => {
+    const source = this.app.library.songs;
+    const key = `${settings.sort}:${settings.instrument}:${settings.sortReverse}`;
+    const opts = { instrument: settings.instrument, reverse: settings.sortReverse, plays: getPlays };
+    if (!this.songOrder || this.songOrder.source !== source || this.songOrder.key !== key) {
+      this.songOrder = { source, key, songs: sortAndGroup(source, settings.sort, opts).songs };
+    }
+    const matching = this.songOrder.songs.filter((s) => {
       if (!passesGenreFilter(s.genre, gf)) return false;
       if (settings.favouritesOnly && !isFavourite(s.id)) return false;
       if (kept.dupesOnly && !this.dupes.has(s.id)) return false;
-      if (!terms.length) return true;
-      const hay = `${s.name} ${s.artist} ${s.album} ${s.charter} ${s.genre} ${s.pack} ${s.year}`.toLowerCase();
-      return terms.every((t) => hay.includes(t));
+      return matchesSearch(s, terms);
     });
-    const { songs, groups } = sortAndGroup(matching, settings.sort, { instrument: settings.instrument, reverse: settings.sortReverse, plays: getPlays });
+    const { songs, groups } = sortAndGroup(matching, settings.sort, { ...opts, presorted: true });
     this.filtered = songs;
     this.groups = groups;
     // Lay out the virtual list: a header before each group, then its songs.
@@ -931,7 +938,7 @@ export class SongSelect implements Screen {
   /** The player picked another instrument: difficulty pips and difficulty grouping follow it. */
   private instrumentChanged() {
     if (settings.instrument !== this.instrument) updateSettings({ instrument: this.instrument });
-    if (settings.sort === 'difficulty') this.refilter();
+    if (settings.sort === 'difficulty') { this.songOrder = null; this.refilter(); }
     else this.renderRowsForce();
   }
 

@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { sortAndGroup } from '../src/ui/songlist.ts';
+import { SORTS, matchesSearch, sortAndGroup } from '../src/ui/songlist.ts';
 import type { SongEntry } from '../src/library/song.ts';
 
 function song(name: string, artist: string, extra: Partial<SongEntry> = {}): SongEntry {
@@ -100,4 +100,15 @@ test('finds the same song in several folders, ignoring case, accents and punctua
   assert.deepEqual([...dupes.keys()].sort(), ['pack1/ttfaf', 'pack2/ttfaf', 'pack3/ttfaf']);
   assert.equal(dupes.get('pack1/ttfaf'), dupes.get('pack3/ttfaf'));
   assert.equal(findDuplicates(songs).size, 0);
+});
+
+test('filtering a cached sort preserves order and group boundaries for every sort', () => {
+  for (const key of SORTS) for (const reverse of [false, true]) {
+    const opts = { instrument: 'guitar' as const, reverse };
+    const ordered = sortAndGroup(songs, key, opts).songs;
+    const keep = (s: SongEntry) => matchesSearch(s, ['n']);
+    const cached = sortAndGroup(ordered.filter(keep), key, { ...opts, presorted: true });
+    const fresh = sortAndGroup(songs.filter(keep), key, opts);
+    assert.deepEqual(cached, fresh);
+  }
 });

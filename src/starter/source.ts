@@ -1,3 +1,5 @@
+import { WavWriter } from './wav.ts';
+import type { Stems } from './synth.ts';
 import type { LibrarySource } from '../library/sources.ts';
 import type { RawSongFolder } from '../library/song.ts';
 import { coverArt } from './art.ts';
@@ -22,8 +24,6 @@ export class BuiltinSource implements LibrarySource {
   readonly label = BUILTIN_DIR;
   private readonly charts = new Map<string, GeneratedChart>();
   private readonly art = new Map<string, Promise<Blob>>();
-  /** stem progress while a song loads (0..1), for the loading screen */
-  onRenderProgress: ((p: number) => void) | null = null;
 
   static isBuiltin(path: string): boolean {
     return path.startsWith(BUILTIN_DIR + '/');
@@ -67,6 +67,11 @@ export class BuiltinSource implements LibrarySource {
     return { def, file: rest.slice(i + 1) };
   }
 
+  renderAudio(path: string, sampleRate: number, signal: AbortSignal, progress?: (p: number) => void): Promise<Stems> {
+    const { def } = this.split(`${path}/guitar.wav`);
+    return renderStems(def.id, progress, signal, sampleRate);
+  }
+
   async readFile(path: string): Promise<Uint8Array> {
     const { def, file } = this.split(path);
     switch (file) {
@@ -76,9 +81,12 @@ export class BuiltinSource implements LibrarySource {
         return new TextEncoder().encode(this.ini(def));
       case 'guitar.wav':
       case 'song.wav': {
-        const stems = await renderStems(def.id, (p) => this.onRenderProgress?.(p));
-        // A copy: decoding detaches the buffer it is given, and the render stays cached for replays.
-        return (file === 'guitar.wav' ? stems.guitar : stems.song).slice();
+        const stems = await renderStems(def.id);
+        // Compatibility for file consumers; gameplay uses PCM directly.
+        const channels = file === 'guitar.wav' ? stems.guitar : stems.song;
+        const wav = new WavWriter(channels[0].length, stems.sampleRate);
+        wav.write(channels[0], channels[1], channels[0].length);
+        return wav.bytes;
       }
       case 'preview.wav':
         return (await renderPreview(def.id)).slice();

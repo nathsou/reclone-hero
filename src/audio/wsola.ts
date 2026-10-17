@@ -2,6 +2,13 @@
 
 /** WSOLA over plain channel data; the result has length / rate samples. */
 export function stretchChannels(chans: Float32Array[], rate: number, onProgress?: (p: number) => void): Float32Array[] {
+  const job = stretchJob(chans, rate, onProgress);
+  for (;;) { const r = job.next(); if (r.done) return r.value; }
+}
+
+/** Small blocks allow the main-thread fallback to yield and honor cancellation. */
+export function* stretchJob(chans: Float32Array[], rate: number, onProgress?: (p: number) => void): Generator<void, Float32Array[]> {
+  if (!Number.isFinite(rate) || rate <= 0) throw new Error('Invalid playback rate');
   const inLen = chans[0]?.length ?? 0;
   if (rate === 1 || inLen < 4096) return chans.map((c) => c.slice());
   const N = 2048;
@@ -58,6 +65,7 @@ export function stretchChannels(chans: Float32Array[], rate: number, onProgress?
       for (let i = 0; i < N && best + i < inLen; i++) dst[outPos + i] += src[best + i] * win[i];
     }
     prev = best;
+    if ((k & 15) === 0) yield;
   }
-  return outs.map((o) => o.slice(0, outLen));
+  return outs.map((o) => o.subarray(0, outLen));
 }
