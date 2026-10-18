@@ -76,7 +76,7 @@ test('focus, modern features and authored locks survive regeneration, undo and p
   assert.equal(restored.project.focus, 'rhythm'); assert.equal(restored.project.analysis.version, 2);
   assert.deepEqual(restored.project.analysis.onsets, p.analysis.onsets);
   const portable = { ...p, analysis: { ...p.analysis, waveform: Array.from(p.analysis.waveform) } };
-  assert.doesNotThrow(() => validateProject(portable, 'valid'));
+  assert.equal(validateProject(portable, 'valid').focus, 'rhythm');
   assert.throws(() => validateProject({ ...portable, focus: 'unknown' }, 'invalid'));
   assert.throws(() => validateProject({ ...portable, analysis: { ...portable.analysis, onsets: [{ ...p.analysis.onsets[0], clarity: 5 }] } }, 'invalid'));
 });
