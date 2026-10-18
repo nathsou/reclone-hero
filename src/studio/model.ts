@@ -7,6 +7,7 @@ import type { Analysis, Onset } from './analysis.ts';
 export interface StudioNote { id: number; time: number; length: number; lane: number; kind: 'auto' | 'tap' }
 export interface LockedRange { start: number; end: number }
 export interface TimingPoint { time: number; bpm: number }
+export type GenerationFocus = 'balanced' | 'melody' | 'rhythm';
 export interface StudioProject {
   version: 1;
   id: string;
@@ -15,6 +16,7 @@ export interface StudioProject {
   album?: string;
   /** Original plain text or LRC; only explicitly timed lyrics enter gameplay. */
   lyrics?: string;
+  focus?: GenerationFocus;
   audioName: string;
   analysis: Analysis;
   /** Times stay in seconds so tempo corrections cannot move authored notes away from the recording. */
@@ -64,27 +66,42 @@ export function createProject(id: string, filename: string, analysis: Analysis):
   return p;
 }
 
-/** Strong attacks first, bounded density, and the easier charts are subsets of harder timings. */
+/** Reduce locally, preserving quiet passages and nested difficulties instead of a song-wide quota. */
 function choose(p: StudioProject, diff: Difficulty): Onset[] {
-  let candidates = p.analysis.onsets;
+  const focus = p.focus ?? 'balanced', modern = p.analysis.version === 2;
+  let candidates = p.analysis.onsets.filter(o => !modern || focus === 'rhythm' ||
+    ((o.clarity ?? 0) >= 0.18 && (o.salience ?? 0) >= 0.25) || (focus === 'balanced' && o.strength >= 0.85));
   const { map } = timingMap(p);
   for (const d of [...DIFFICULTIES].reverse()) {
     const cfg = PROFILES[d];
     const score = (o: Onset) => {
       const beat = map.timeToBeat(o.time), distance = Math.abs(beat - Math.round(beat));
-      return o.strength + (distance < 0.12 ? 0.6 : distance > 0.4 ? 0.15 : 0);
+      const eighth = Math.abs(beat * 2 - Math.round(beat * 2));
+      const metric = distance < 0.12 ? 0.8 : eighth < 0.15 ? 0.4 : 0;
+      return Math.round(o.strength * 4) / 4 * 0.6 + metric * p.analysis.confidence
+        + (focus === 'rhythm' ? 0 : Math.min(1.5, o.salience ?? 0) * (o.clarity ?? 0) * 0.7);
     };
-    const ranked = [...candidates].sort((a, b) => score(b) - score(a) || a.time - b.time);
-    const chosen: Onset[] = [], target = Math.max(1, Math.ceil(candidates.length * cfg.fraction));
-    for (const event of ranked) {
-      if (chosen.length >= target) break;
-      let lo = 0, hi = chosen.length;
-      while (lo < hi) { const mid = (lo + hi) >>> 1; if (chosen[mid].time < event.time) lo = mid + 1; else hi = mid; }
-      if ((chosen[lo] && chosen[lo].time - event.time < cfg.gap) || (lo > 0 && event.time - chosen[lo - 1].time < cfg.gap)) continue;
-      // Check every one-second window containing the new attack, including windows straddling seconds.
-      const near = chosen.slice(Math.max(0, lo - cfg.burst), lo + cfg.burst).filter((n) => Math.abs(n.time - event.time) < 1).map((n) => n.time).concat(event.time).sort((a, b) => a - b);
-      if (near.some((time, i) => near[i + cfg.burst] !== undefined && near[i + cfg.burst] - time < 1)) continue;
-      chosen.splice(lo, 0, event);
+    const passages = new Map<number, Onset[]>();
+    for (const event of candidates) {
+      const key = Math.floor(map.timeToBeat(event.time) / 8), passage = passages.get(key) ?? [];
+      passage.push(event); passages.set(key, passage);
+    }
+    const chosen: Onset[] = [];
+    for (const passage of passages.values()) {
+      const ranked = [...passage].sort((a, b) => score(b) - score(a) || a.time - b.time);
+      const target = Math.max(1, Math.ceil(passage.length * cfg.fraction));
+      let count = 0;
+      for (const event of ranked) {
+        if (count >= target) break;
+        let lo = 0, hi = chosen.length;
+        while (lo < hi) { const mid = (lo + hi) >>> 1; if (chosen[mid].time < event.time) lo = mid + 1; else hi = mid; }
+        if ((chosen[lo] && chosen[lo].time - event.time < cfg.gap) || (lo > 0 && event.time - chosen[lo - 1].time < cfg.gap)) continue;
+        // Check every one-second window containing the new attack, including windows straddling seconds.
+        const near = chosen.slice(Math.max(0, lo - cfg.burst), lo + cfg.burst).filter((n) => Math.abs(n.time - event.time) < 1).map((n) => n.time).concat(event.time).sort((a, b) => a - b);
+        if (near.some((time, i) => near[i + cfg.burst] !== undefined && near[i + cfg.burst] - time < 1)) continue;
+        chosen.splice(lo, 0, event);
+        count++;
+      }
     }
     candidates = chosen.sort((a, b) => a.time - b.time);
     if (d === diff) break;
@@ -94,23 +111,25 @@ function choose(p: StudioProject, diff: Difficulty): Onset[] {
 
 export function generateNotes(p: StudioProject, diff: Difficulty): StudioNote[] {
   const events = choose(p, diff), cfg = PROFILES[diff], notes: StudioNote[] = [];
-  const tones = events.map((e) => e.tone).sort((a, b) => a - b);
-  const low = tones[Math.floor(tones.length * 0.1)] ?? 0, high = tones[Math.floor(tones.length * 0.9)] ?? 1;
-  let lane = 0;
+  const modern = p.analysis.version === 2, focus = p.focus ?? 'balanced';
+  // One song-wide pitch mapping for each difficulty. Filtering notes must not remap the riff.
+  const pitches = p.analysis.onsets.filter(o => o.pitch !== undefined && (o.clarity ?? 0) >= 0.18).map(o => Math.round(o.pitch!)).sort((a, b) => a - b);
+  const values = modern ? pitches : p.analysis.onsets.map(o => o.tone).sort((a, b) => a - b);
+  const low = values[Math.floor(values.length * 0.05)] ?? 0, high = values[Math.floor(values.length * 0.95)] ?? 1;
+  const distinct = new Set(values.filter(value => value >= low && value <= high)).size;
+  const span = modern ? Math.min(cfg.lanes - 1, Math.max(0, distinct - 1)) : cfg.lanes - 1;
+  let lane = Math.floor((cfg.lanes - 1) / 2), lastPitch = -Infinity;
   events.forEach((event, i) => {
-    const target = Math.round((event.tone - low) / Math.max(0.25, high - low) * (cfg.lanes - 1));
     const previous = events[i - 1];
-    if (!previous || event.time - previous.time > 0.8) lane = Math.max(0, Math.min(cfg.lanes - 1, target));
-    else if (Math.abs(event.tone - previous.tone) > 0.12) {
-      const step = Math.sign(event.tone - previous.tone);
-      lane = Math.max(0, Math.min(cfg.lanes - 1, lane + step));
-    }
+    if (focus === 'rhythm' && event.band !== undefined) lane = Math.round(event.band / 2 * (cfg.lanes - 1));
+    else if (!modern || (event.pitch !== undefined && (event.clarity ?? 0) >= 0.18)) {
+      const value = modern ? Math.round(event.pitch!) : event.tone;
+      lane = high - low < 0.15 ? Math.floor((cfg.lanes - 1) / 2) : Math.max(0, Math.min(cfg.lanes - 1, Math.round((value - low) / (high - low) * span)));
+      lastPitch = event.time;
+    } else if (event.time - lastPitch > 0.75 && event.band !== undefined) lane = Math.round(event.band / 2 * (cfg.lanes - 1));
+    else if (!previous || event.time - previous.time > 1) lane = Math.floor((cfg.lanes - 1) / 2);
     notes.push({ id: p.nextId++, time: event.time, lane, length: 0, kind: 'auto' });
-    // Conservative two-fret accents; no pretend pitch transcription or guessed sustains in a full mix.
-    const gap = (events[i + 1]?.time ?? p.analysis.duration) - event.time;
-    if ((diff === 'hard' || diff === 'expert') && event.strength > (diff === 'expert' ? 1.3 : 1.7) && gap > 0.28 && (!previous || event.time - previous.time > 0.25)) {
-      notes.push({ id: p.nextId++, time: event.time, lane: lane < 3 ? lane + 2 : lane - 2, length: 0, kind: 'auto' });
-    }
+    // Chords require authoring: loudness alone does not establish musical polyphony.
   });
   return normalizeNotes(notes, p.analysis.duration);
 }
@@ -190,7 +209,7 @@ export class StudioHistory {
   private future: string[] = [];
   get canUndo(): boolean { return this.past.length > 0; }
   get canRedo(): boolean { return this.future.length > 0; }
-  private snapshot(p: StudioProject): string { return JSON.stringify({ notes: p.notes, locks: p.locks, timing: p.timing, beatOffset: p.beatOffset, nextId: p.nextId }); }
+  private snapshot(p: StudioProject): string { return JSON.stringify({ notes: p.notes, locks: p.locks, timing: p.timing, beatOffset: p.beatOffset, focus: p.focus ?? 'balanced', nextId: p.nextId }); }
   capture(p: StudioProject): void { this.past.push(this.snapshot(p)); if (this.past.length > 80) this.past.shift(); this.future = []; }
   undo(p: StudioProject): boolean { const s = this.past.pop(); if (!s) return false; this.future.push(this.snapshot(p)); Object.assign(p, JSON.parse(s)); return true; }
   redo(p: StudioProject): boolean { const s = this.future.pop(); if (!s) return false; this.past.push(this.snapshot(p)); Object.assign(p, JSON.parse(s)); return true; }
