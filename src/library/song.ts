@@ -93,7 +93,7 @@ export function makeSongEntry(folder: RawSongFolder): SongEntry | null {
     lengthMs: iniNumber(sec, 'song_length') ?? 0,
     chartFile,
     stems,
-    albumArt: pick('album.png', 'album.jpg', 'album.jpeg'),
+    albumArt: pick('album.png', 'album.jpg', 'album.jpeg', 'album.webp'),
     background: pick('background.png', 'background.jpg', 'background.jpeg'),
     video: pick('video.webm', 'video.mp4', 'bg.webm', 'bg.mp4'),
     videoStartMs: iniNumber(sec, 'video_start_time') ?? 0,

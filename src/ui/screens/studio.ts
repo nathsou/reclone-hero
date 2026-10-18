@@ -14,6 +14,8 @@ import { StudioTimeline } from '../../studio/timeline.ts';
 import type { TimelineState } from '../../studio/timeline.ts';
 import { separateAudio } from '../../studio/stems.ts';
 import type { StudioStems } from '../../studio/stems.ts';
+import { coverBlob, MAX_COVER_BYTES, readSongMetadata } from '../../studio/metadata.ts';
+import { lrcTimestamp, MAX_LYRICS_LENGTH, timedLyrics } from '../../studio/lyrics.ts';
 import { StudioClicks } from '../../studio/clicks.ts';
 import { icon } from '../icons.ts';
 import type { IconName } from '../icons.ts';
@@ -21,7 +23,7 @@ import { formatTime } from '../../util/text.ts';
 
 const LABEL: Record<Difficulty, string> = { easy: 'Easy', medium: 'Medium', hard: 'Hard', expert: 'Expert' };
 const LANES = ['Green', 'Red', 'Yellow', 'Blue', 'Orange'];
-type InspectorPanel = 'notes' | 'timing' | 'passage' | 'audio';
+type InspectorPanel = 'notes' | 'timing' | 'passage' | 'audio' | 'song';
 type StudioView = Pick<TimelineState, 'cursor' | 'start' | 'span' | 'snap' | 'tool'> & {
   selected: number[]; panel: InspectorPanel; history: StudioHistory;
   range: { start: number; end: number }; looping: boolean; follow: boolean;
@@ -33,6 +35,10 @@ export class StudioScreen implements Screen {
   private project: StudioProject | null = null;
   private audioFile: Blob | null = null;
   private stems?: StudioStems;
+  private cover?: Blob;
+  private coverUrl = '';
+  private lyricPreview = h('p', { class: 'studio-lyric-preview', 'aria-label': 'Current lyric' });
+  private lyricCache = { text: '', lines: [] as ReturnType<typeof timedLyrics> };
   private separation: AbortController | null = null;
   private stemPanel = h('div', { class: 'studio-stem-panel' });
   private stemStatus = h('p', { class: 'hint', role: 'status', 'aria-live': 'polite' });
@@ -141,7 +147,9 @@ export class StudioScreen implements Screen {
     this.el.ondrop = (e) => {
       e.preventDefault(); this.el.classList.remove('dragging-file');
       const dropped = e.dataTransfer?.files[0];
-      if (dropped) void this.run(() => /\.zip$/i.test(dropped.name) ? this.importZip(dropped) : this.importSong(dropped));
+      if (dropped) void this.run(() => /\.(png|jpe?g|webp)$/i.test(dropped.name) ? this.importCover(dropped)
+        : /\.(lrc|txt)$/i.test(dropped.name) ? this.importLyrics(dropped)
+        : /\.zip$/i.test(dropped.name) ? this.importZip(dropped) : this.importSong(dropped));
     };
     this.audio.ontimeupdate = () => this.updatePlayback();
     this.audio.onplay = () => { this.syncTransport(); this.animate(); };
@@ -168,7 +176,7 @@ export class StudioScreen implements Screen {
     this.controller?.abort(); this.controller = null; this.cancelButton.hidden = true;
     const imported = await importProjectZip(file, crypto.randomUUID());
     if (this.destroyed || revision !== this.loadRevision) return;
-    this.install(imported.project, imported.audio, imported.stems); this.changed();
+    this.install(imported.project, imported.audio, imported.stems, imported.cover); this.changed();
     this.status.textContent = 'Project restored, including all edits and locked passages.';
   }
   private setSaveStatus(text: string): void {
@@ -198,13 +206,27 @@ export class StudioScreen implements Screen {
     this.audio.pause();
     this.separation?.abort(); this.separation = null;
     this.status.textContent = 'Decoding audio…';
-    let analysis;
-    try { analysis = await analyzeFile(file, controller.signal, (p) => { if (!this.destroyed && this.controller === controller) this.status.textContent = `Analyzing music… ${Math.round(p * 100)}%`; }); }
+    let analysis, metadata;
+    try {
+      analysis = await analyzeFile(file, controller.signal, (p) => { if (!this.destroyed && this.controller === controller) this.status.textContent = `Analyzing music… ${Math.round(p * 100)}%`; });
+      controller.signal.throwIfAborted();
+      this.status.textContent = 'Reading embedded song details…';
+      metadata = await readSongMetadata(file, controller.signal);
+      if (metadata.cover) {
+        try { const bitmap = await createImageBitmap(metadata.cover); bitmap.close(); }
+        catch { metadata.cover = undefined; metadata.warning = 'The embedded cover could not be decoded. You can replace it in Song.'; }
+      }
+      controller.signal.throwIfAborted();
+    }
     catch (error) { if (this.controller === controller) { this.controller = null; this.cancelButton.disabled = true; this.cancelButton.hidden = true; throw error; } return; }
     if (this.destroyed || this.controller !== controller) return;
     this.controller = null; this.cancelButton.disabled = true; this.cancelButton.hidden = true;
-    this.install(createProject(crypto.randomUUID(), file.name, analysis), file);
+    const project = createProject(crypto.randomUUID(), file.name, analysis);
+    project.name = metadata.title ?? project.name; project.artist = metadata.artist ?? project.artist;
+    project.album = metadata.album; project.lyrics = metadata.lyrics;
+    this.install(project, file, undefined, metadata.cover);
     this.status.textContent = analysis.onsets.length ? `Found ${analysis.onsets.length} musical attacks. Listen and refine the draft below.` : 'No clear attacks found. You can add notes manually, or try another recording.';
+    if (metadata.warning) this.status.textContent += ` ${metadata.warning}`;
     this.changed();
   }
   private async open(id: string): Promise<void> {
@@ -214,10 +236,11 @@ export class StudioScreen implements Screen {
     this.controller?.abort(); this.controller = null; this.cancelButton.disabled = true; this.cancelButton.hidden = true;
     const saved = await readProject(id);
     if (this.destroyed || revision !== this.loadRevision) return;
-    this.install(saved.project, saved.audio, saved.stems);
+    this.install(saved.project, saved.audio, saved.stems, saved.cover);
     this.setSaveStatus('Saved in this browser'); this.status.textContent = '';
   }
-  private install(project: StudioProject, audio: Blob, stems?: StudioStems): void {
+  private install(project: StudioProject, audio: Blob, stems?: StudioStems, cover?: Blob): void {
+    this.cover = cover; this.lyricCache = { text: '', lines: [] };
     this.separation?.abort(); this.separation = null; this.stems = stems; this.listenMode = 'original'; this.stemStatus.textContent = '';
     clearTimeout(this.saveTimer);
     this.audio.pause();
@@ -241,9 +264,9 @@ export class StudioScreen implements Screen {
   private async save(): Promise<void> {
     if (!this.project || !this.audioFile) return;
     clearTimeout(this.saveTimer);
-    const project = structuredClone(this.project), audio = this.audioFile, stems = this.stems, revision = this.revision;
+    const project = structuredClone(this.project), audio = this.audioFile, stems = this.stems, cover = this.cover, revision = this.revision;
     this.setSaveStatus('Saving…');
-    const write = this.writes.catch(() => {}).then(() => saveProject(project, audio, stems)); this.writes = write;
+    const write = this.writes.catch(() => {}).then(() => saveProject(project, audio, stems, cover)); this.writes = write;
     try {
       await write;
       if (this.project?.id === project.id && this.revision === revision) { this.dirty = false; this.setSaveStatus('Saved in this browser'); }
@@ -287,6 +310,7 @@ export class StudioScreen implements Screen {
     const rangeStart = this.number('Passage start (seconds)', this.range.start, 0, p.analysis.duration, 0.01, (v) => { this.range.start = Math.min(v, this.range.end - 0.01); });
     const rangeEnd = this.number('Passage end (seconds)', this.range.end, 0.01, p.analysis.duration, 0.01, (v) => { this.range.end = Math.max(v, this.range.start + 0.01); });
     this.projectMeta.replaceChildren(h('h3', null, 'Song details'), this.field('Title', name), this.field('Artist', artist),
+      this.button('Artwork & lyrics', () => { this.projectMenu.open = false; this.setPanel('song'); }),
       h('div', { class: 'studio-row' }, this.button('Save', () => this.save()), this.button('Delete saved project', () => this.removeProject())));
     this.undoButton = this.iconButton('Undo', 'undo', () => this.undo());
     this.redoButton = this.iconButton('Redo', 'redo', () => this.redo());
@@ -312,11 +336,11 @@ export class StudioScreen implements Screen {
       h('p', { class: 'hint' }, 'Replaces the unlocked notes in this difficulty only. You can undo this.'));
     this.panels.clear(); this.tabs.clear();
     const tablist = h('div', { class: 'studio-inspector-tabs', role: 'tablist', 'aria-label': 'Inspector' });
-    for (const [id, label, body] of [['notes', 'Notes', this.inspector], ['timing', 'Grid', this.timingControls()], ['passage', 'Passage', passage], ['audio', 'Audio', this.audioControls()]] as const) {
+    for (const [id, label, body] of [['notes', 'Notes', this.inspector], ['timing', 'Grid', this.timingControls()], ['passage', 'Passage', passage], ['audio', 'Audio', this.audioControls()], ['song', 'Song', this.mediaControls()]] as const) {
       const tab = h('button', { role: 'tab', id: `studio-tab-${id}`, 'aria-controls': `studio-panel-${id}`, onclick: () => this.setPanel(id) }, label);
       tab.onkeydown = (e) => {
-        const ids: InspectorPanel[] = ['notes', 'timing', 'passage', 'audio'];
-        const next = e.key === 'Home' ? 0 : e.key === 'End' ? 3 : e.key === 'ArrowRight' ? (ids.indexOf(id) + 1) % 4 : e.key === 'ArrowLeft' ? (ids.indexOf(id) + 3) % 4 : -1;
+        const ids: InspectorPanel[] = ['notes', 'timing', 'passage', 'audio', 'song'];
+        const next = e.key === 'Home' ? 0 : e.key === 'End' ? ids.length - 1 : e.key === 'ArrowRight' ? (ids.indexOf(id) + 1) % ids.length : e.key === 'ArrowLeft' ? (ids.indexOf(id) + ids.length - 1) % ids.length : -1;
         if (next >= 0) { e.preventDefault(); this.setPanel(ids[next]); this.tabs.get(ids[next])?.focus(); }
       };
       const panel = h('section', { class: 'studio-inspector-panel', id: `studio-panel-${id}`, role: 'tabpanel', 'aria-labelledby': tab.id, tabindex: 0 }, body);
@@ -407,6 +431,75 @@ export class StudioScreen implements Screen {
     }
   }
 
+  private async importCover(file: File): Promise<void> {
+    const project = this.project;
+    if (!project) throw new Error('Import a song before adding its cover.');
+    if (!file.size || file.size > MAX_COVER_BYTES) throw new Error('Choose a PNG, JPEG, or WebP cover up to 5 MB.');
+    const cover = coverBlob(new Uint8Array(await file.arrayBuffer()));
+    const bitmap = await createImageBitmap(cover); bitmap.close();
+    if (this.destroyed || this.project !== project) return;
+    this.cover = cover; this.changed(); this.refreshMedia();
+    this.status.textContent = 'Album cover updated.';
+  }
+  private async importLyrics(file: File): Promise<void> {
+    const project = this.project;
+    if (!project) throw new Error('Import a song before adding lyrics.');
+    if (file.size > MAX_LYRICS_LENGTH) throw new Error('Choose a UTF-8 LRC or text file up to 128 KB.');
+    const text = (await file.text()).replace(/^\uFEFF/, '').replace(/\0/g, '');
+    if (this.destroyed || this.project !== project) return;
+    project.lyrics = text; this.changed(); this.refreshMedia(); this.status.textContent = 'Lyrics imported. Timed lines appear in previews.';
+  }
+  private refreshMedia(): void {
+    this.panels.get('song')?.replaceChildren(this.mediaControls()); this.setPanel('song');
+  }
+  private mediaControls(): HTMLElement {
+    const p = this.project!;
+    if (this.coverUrl) URL.revokeObjectURL(this.coverUrl);
+    this.coverUrl = this.cover ? URL.createObjectURL(this.cover) : '';
+    const cover = h('input', { type: 'file', hidden: true, accept: '.png,.jpg,.jpeg,.webp', 'aria-label': 'Album cover file', onchange: () => {
+      const file = cover.files?.[0]; cover.value = ''; if (file) void this.run(() => this.importCover(file));
+    } });
+    const lyricFile = h('input', { type: 'file', hidden: true, accept: '.lrc,.txt', 'aria-label': 'Lyrics file', onchange: () => {
+      const file = lyricFile.files?.[0]; lyricFile.value = ''; if (file) void this.run(() => this.importLyrics(file));
+    } });
+    const album = h('input', { value: p.album ?? '', maxlength: 200, 'aria-label': 'Album', onchange: () => { p.album = album.value.trim(); this.changed(); } });
+    const lyrics = h('textarea', { rows: 8, maxlength: MAX_LYRICS_LENGTH, 'aria-label': 'Lyrics', placeholder: '[00:10.000]First line\n[00:15.000]Next line' });
+    lyrics.value = p.lyrics ?? '';
+    const info = h('p', { class: 'hint', 'aria-label': 'Lyrics timing status' });
+    const update = () => {
+      p.lyrics = lyrics.value; this.changed(); this.updateLyrics();
+      const count = this.lyricCache.lines.filter(line => line.text).length;
+      info.textContent = count ? `${count} timed lines · Preview here, watch the bot, or playtest.` : 'Plain lyrics are saved and exported. Add LRC timestamps to show lines during playback.';
+    };
+    lyrics.oninput = update;
+    const count = timedLyrics(p.lyrics ?? '', p.analysis.duration).filter(line => line.text).length;
+    info.textContent = count ? `${count} timed lines · Preview here, watch the bot, or playtest.` : 'Plain lyrics are saved and exported. Add LRC timestamps to show lines during playback.';
+    this.updateLyrics();
+    const remove = this.button('Remove cover', () => { this.cover = undefined; this.changed(); this.refreshMedia(); }); remove.disabled = !this.cover;
+    return h('div', { class: 'studio-media-panel' }, h('h3', null, 'Album cover'),
+      this.coverUrl ? h('img', { class: 'studio-cover', src: this.coverUrl, alt: 'Album cover' }) : h('p', { class: 'hint' }, 'No embedded cover found. Add one below.'),
+      h('div', { class: 'studio-row' }, this.button('Choose cover…', () => cover.click()), remove),
+      h('p', { class: 'hint' }, 'PNG, JPEG, or WebP · Up to 5 MB'), this.field('Album', album),
+      h('hr'), h('h3', null, 'Lyrics'), this.lyricPreview, this.field('Plain text or LRC', lyrics), info,
+      h('div', { class: 'studio-row' }, this.button('Import lyrics…', () => lyricFile.click()), this.button('Time line at playhead', () => {
+        const start = lyrics.value.lastIndexOf('\n', lyrics.selectionStart - 1) + 1;
+        const next = lyrics.value.indexOf('\n', lyrics.selectionStart), end = next < 0 ? lyrics.value.length : next;
+        const text = lyrics.value.slice(start, end).replace(/^(\[\d{1,3}:[0-5]\d(?:[.:]\d{1,3})?\])+/, '').trim();
+        if (!text) throw new Error('Select a lyric line to time at the playhead.');
+        const line = `${lrcTimestamp(this.cursor)}${text}`;
+        if (lyrics.value.length - (end - start) + line.length > MAX_LYRICS_LENGTH) throw new Error('Lyrics are limited to 128 KB.');
+        lyrics.value = lyrics.value.slice(0, start) + line + lyrics.value.slice(end); update();
+        lyrics.focus(); lyrics.setSelectionRange(start, start + line.length);
+      })), h('p', { class: 'hint' }, 'Select a line, seek to its start, then time it at the playhead. Embedded artwork and lyrics import automatically when available.'), cover, lyricFile);
+  }
+  private updateLyrics(): void {
+    if (!this.project) return;
+    const text = this.project.lyrics ?? '';
+    if (text !== this.lyricCache.text) this.lyricCache = { text, lines: timedLyrics(text, this.project.analysis.duration) };
+    const current = this.lyricCache.lines.find(line => line.time <= this.cursor && line.end > this.cursor);
+    this.lyricPreview.hidden = !this.lyricCache.lines.length;
+    setText(this.lyricPreview, current?.text || 'Seek or play to preview timed lyrics.');
+  }
   private field(label: string, input: HTMLElement): HTMLElement { return h('label', { class: 'studio-field' }, h('span', null, label), input); }
   private setPanel(id: InspectorPanel): void {
     this.activePanel = id;
@@ -548,7 +641,7 @@ export class StudioScreen implements Screen {
     this.clicks.reset();
     this.cursor = Math.max(0, Math.min(this.project.analysis.duration, time)); this.audio.currentTime = this.cursor;
     if (this.cursor < this.start || this.cursor > this.start + this.span) this.start = Math.max(0, this.cursor - this.span / 4);
-    this.scrub.value = String(this.cursor); this.syncTransport(); this.timeline?.draw();
+    this.scrub.value = String(this.cursor); this.syncTransport(); this.timeline?.draw(); this.updateLyrics();
   }
   private updatePlayback(): void {
     if (!this.project) return;
@@ -556,12 +649,12 @@ export class StudioScreen implements Screen {
     this.cursor = this.audio.currentTime;
     this.clicks.update(this.project, this.difficulty, this.audio);
     if (this.follow && (this.cursor > this.start + this.span || this.cursor < this.start)) this.start = Math.max(0, this.cursor - this.span / 5);
-    this.scrub.value = String(this.cursor); this.syncTransport(); this.timeline?.draw();
+    this.scrub.value = String(this.cursor); this.syncTransport(); this.timeline?.draw(); this.updateLyrics();
   }
   private animate(): void { cancelAnimationFrame(this.raf); const frame = () => { if (this.destroyed || this.audio.paused) return; this.updatePlayback(); this.raf = requestAnimationFrame(frame); }; frame(); }
   private async download(): Promise<void> {
     if (!this.project || !this.audioFile) return;
-    const blob = await exportProject(this.project, this.audioFile, this.stems), url = URL.createObjectURL(blob);
+    const blob = await exportProject(this.project, this.audioFile, this.stems, this.cover), url = URL.createObjectURL(blob);
     const a = h('a', { href: url, download: `${this.project.name.replace(/[^\p{L}\p{N} _-]/gu, '').trim() || 'Studio song'}.zip` });
     a.click(); setTimeout(() => URL.revokeObjectURL(url), 30000);
     this.status.textContent = 'Exported song ZIP. Extract it into your charts folder to play in Clone Hero or reclone hero.';
@@ -571,7 +664,7 @@ export class StudioScreen implements Screen {
     if (!p.notes[this.difficulty].length) throw new Error('Add some notes before previewing this difficulty.');
     await this.save(); await this.app.library.index();
     if (this.destroyed) return;
-    const song = makeSongEntry(studioFolder(p, this.stems))!;
+    const song = makeSongEntry(studioFolder(p, this.stems, this.cover))!;
     const chart = loadChart('notes.chart', new TextEncoder().encode(chartText(p, this.stems ? 'song.ogg' : p.audioName)), song.chartOptions);
     const { GameScreen } = await import('./gamescreen.ts');
     const diff = this.difficulty;
@@ -625,6 +718,7 @@ export class StudioScreen implements Screen {
     this.timeline?.destroy(); this.audio.pause(); this.audio.removeAttribute('src'); this.audio.load();
     this.clicks.reset();
     if (this.audioUrl) URL.revokeObjectURL(this.audioUrl);
+    if (this.coverUrl) URL.revokeObjectURL(this.coverUrl);
     window.removeEventListener('beforeunload', this.beforeUnload);
   }
 }

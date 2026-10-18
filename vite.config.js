@@ -7,8 +7,8 @@ import path from 'node:path';
 const CHARTS_DIR = path.resolve(process.env.CHARTS_DIR ?? '/Volumes/S/charts');
 const CHART_RE = /\.(chart|mid)$/i;
 const MIME = {
-  ogg: 'audio/ogg', opus: 'audio/ogg', mp3: 'audio/mpeg', wav: 'audio/wav',
-  png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg',
+  ogg: 'audio/ogg', opus: 'audio/ogg', mp3: 'audio/mpeg', wav: 'audio/wav', m4a: 'audio/mp4',
+  png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', webp: 'image/webp', lrc: 'text/plain', txt: 'text/plain',
   mp4: 'video/mp4', webm: 'video/webm', ini: 'text/plain', chart: 'text/plain', mid: 'audio/midi',
 };
 
@@ -108,6 +108,9 @@ function singleFilePlugin() {
       const html = Object.values(bundle).find((f) => f.type === 'asset' && f.fileName.endsWith('.html'));
       if (!html) return;
       let source = String(html.source);
+      // Keep dependency notices in the distributable, including when this is the only file copied.
+      const notices = fs.readFileSync(new URL('./THIRD_PARTY_NOTICES.md', import.meta.url), 'utf8');
+      source = source.replace('</body>', `<script type="application/json" id="third-party-notices">${JSON.stringify(notices).replace(/</g, '\\u003c')}</script></body>`);
       for (const [name, file] of Object.entries(bundle)) {
         if (file.type === 'chunk' && name.endsWith('.js')) {
           const tag = new RegExp(`<script[^>]*src="[^"]*${escapeRe(name)}"[^>]*></script>`);
