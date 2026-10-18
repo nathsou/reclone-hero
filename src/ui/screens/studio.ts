@@ -1,5 +1,5 @@
 import type { App, Screen } from '../app.ts';
-import { h } from '../dom.ts';
+import { h, setText } from '../dom.ts';
 import { DIFFICULTIES } from '../../chart/types.ts';
 import type { Difficulty } from '../../chart/types.ts';
 import { loadChart } from '../../chart/load.ts';
@@ -13,16 +13,24 @@ import { studioFolder } from '../../studio/source.ts';
 import { StudioTimeline } from '../../studio/timeline.ts';
 import type { TimelineState } from '../../studio/timeline.ts';
 import { StudioClicks } from '../../studio/clicks.ts';
+import { icon } from '../icons.ts';
+import type { IconName } from '../icons.ts';
+import { formatTime } from '../../util/text.ts';
 
 const LABEL: Record<Difficulty, string> = { easy: 'Easy', medium: 'Medium', hard: 'Hard', expert: 'Expert' };
 const LANES = ['Green', 'Red', 'Yellow', 'Blue', 'Orange'];
+type InspectorPanel = 'notes' | 'timing' | 'passage';
+type StudioView = Pick<TimelineState, 'cursor' | 'start' | 'span' | 'snap' | 'tool'> & {
+  selected: number[]; panel: InspectorPanel; history: StudioHistory;
+  range: { start: number; end: number }; looping: boolean; follow: boolean;
+};
 
 export class StudioScreen implements Screen {
   readonly el: HTMLElement;
   private app: App;
   private project: StudioProject | null = null;
   private audioFile: Blob | null = null;
-  private audio = h('audio', { controls: true, preload: 'metadata', 'aria-label': 'Song preview' });
+  private audio = h('audio', { hidden: true, preload: 'metadata', 'aria-label': 'Song preview' });
   private audioUrl = '';
   private history = new StudioHistory();
   private difficulty: Difficulty = 'medium';
@@ -41,7 +49,8 @@ export class StudioScreen implements Screen {
   private saveStatus = h('span', { class: 'studio-save-status', role: 'status' });
   private saved = h('select', { 'aria-label': 'Saved projects' }, h('option', { value: '' }, 'Open a saved project…'));
   private inspector = h('div', { class: 'studio-inspector' });
-  private stats = h('p', { class: 'hint' });
+  private inspectorSignature = '';
+  private stats = h('p', { class: 'studio-stats' });
   private scrub = h('input', { type: 'range', min: 0, max: 1, step: 0.01, value: 0, 'aria-label': 'Song position' });
   private position = h('span', { class: 'studio-position' });
   private controller: AbortController | null = null;
@@ -54,43 +63,81 @@ export class StudioScreen implements Screen {
   private clicks = new StudioClicks();
   private loadRevision = 0;
   private cancelButton = h('button', { class: 'btn', disabled: true }, 'Cancel analysis');
+  private projectMenu = h('details', { class: 'studio-project-menu' });
+  private projectMeta = h('div', { class: 'studio-project-meta' });
+  private songHeading = h('div', { class: 'studio-song-heading' });
+  private projectActions = h('div', { class: 'studio-preview-actions', hidden: true });
+  private activePanel: InspectorPanel = 'notes';
+  private panels = new Map<InspectorPanel, HTMLElement>();
+  private tabs = new Map<InspectorPanel, HTMLButtonElement>();
+  private playButton: HTMLButtonElement | null = null;
+  private undoButton: HTMLButtonElement | null = null;
+  private redoButton: HTMLButtonElement | null = null;
+  private zoomLabel = h('span', { class: 'studio-zoom-label' });
+  private tempoButton: HTMLButtonElement | null = null;
+  private follow = true;
+  private followButton: HTMLButtonElement | null = null;
+  private restoreView?: StudioView;
 
-  constructor(app: App, projectId?: string, difficulty?: Difficulty) {
+  constructor(app: App, projectId?: string, difficulty?: Difficulty, view?: StudioView) {
     this.app = app;
-    this.cancelButton.onclick = () => { this.controller?.abort(); this.controller = null; this.cancelButton.disabled = true; this.status.textContent = 'Analysis cancelled.'; };
+    this.restoreView = view;
+    this.cancelButton.onclick = () => { this.controller?.abort(); this.controller = null; this.cancelButton.disabled = true; this.cancelButton.hidden = true; this.status.textContent = 'Analysis cancelled.'; };
     if (difficulty) this.difficulty = difficulty;
-    const file = h('input', { type: 'file', accept: '.mp3,.wav,.ogg,.opus', 'aria-label': 'Import song file', onchange: () => {
+    const file = h('input', { type: 'file', hidden: true, accept: '.mp3,.wav,.ogg,.opus', 'aria-label': 'Import song file', onchange: () => {
       const chosen = file.files?.[0]; file.value = '';
       if (chosen) void this.run(() => this.importSong(chosen));
     } });
-    const zip = h('input', { type: 'file', accept: '.zip', 'aria-label': 'Import Studio ZIP', onchange: () => {
+    const zip = h('input', { type: 'file', hidden: true, accept: '.zip', 'aria-label': 'Import Studio ZIP', onchange: () => {
       const chosen = zip.files?.[0]; zip.value = '';
-      if (chosen) void this.run(async () => {
-        const revision = ++this.loadRevision;
-        if (!await this.saveBeforeLeaving()) return;
-        if (this.destroyed || revision !== this.loadRevision) return;
-        this.controller?.abort(); this.controller = null; this.cancelButton.disabled = true;
-        const imported = await importProjectZip(chosen, crypto.randomUUID());
-        if (this.destroyed || revision !== this.loadRevision) return;
-        this.install(imported.project, imported.audio); this.changed(); this.status.textContent = 'Imported a copy of the studio project, including all edits and locks.';
-      });
+      if (chosen) void this.run(() => this.importZip(chosen));
     } });
     this.saved.onchange = () => { if (this.saved.value) void this.run(() => this.open(this.saved.value)); };
-    this.el = h('div', { class: 'screen studio-screen' },
-      h('header', { class: 'studio-header' },
-        this.button('← Library', () => this.back()),
-        h('div', { class: 'studio-title' }, h('h1', null, 'Chart Studio'), h('span', { class: 'hint' }, 'Turn a recording into your next chart.')),
-        this.saveStatus),
-      h('div', { class: 'studio-files' }, h('label', { class: 'studio-file-label' }, 'Import song', file), h('label', { class: 'studio-file-label' }, 'Open Studio ZIP', zip), this.saved,
-        this.cancelButton),
-      this.status, this.content);
-    this.content.append(h('div', { class: 'studio-welcome' }, h('h2', null, 'Start with a song you know'),
-      h('p', null, 'Import an MP3, WAV, OGG, or Opus recording. Studio detects musical attacks and creates Easy, Medium, Hard, and Expert guitar charts.'),
-      h('p', null, 'Listen, adjust the beat grid, then shape the notes. Everything stays in this browser. Save your projects here and export a ZIP to keep the audio and charts together.'),
-      h('p', { class: 'hint' }, 'Up to 100 MB and 20 minutes. Automatic charts are a starting point, not instrument transcription.')));
+    const importSong = () => { this.projectMenu.open = false; file.click(); };
+    const importZip = () => { this.projectMenu.open = false; zip.click(); };
+    this.projectMenu.append(h('summary', null, icon('folder'), 'Project'),
+      h('div', { class: 'studio-project-popover' },
+        h('h2', null, 'Projects'), this.saved,
+        h('div', { class: 'studio-row' }, this.button('Import song…', importSong), this.button('Open Studio ZIP…', importZip)),
+        this.projectMeta,
+        h('p', { class: 'hint' }, 'Audio and charts stay on this device. Export a ZIP to keep a portable copy.')));
+    const watch = this.button('Watch bot', () => this.playtest(true)); watch.prepend(icon('bot'));
+    const playtest = this.button('Playtest', () => this.playtest(), true); playtest.prepend(icon('play'));
+    this.projectActions.append(this.iconButton('Export song ZIP', 'download', () => this.download()), watch, playtest);
+    const shortcuts = h('details', { class: 'studio-help' }, h('summary', { title: 'Keyboard shortcuts', 'aria-label': 'Keyboard shortcuts' }, icon('help')),
+      h('div', { class: 'studio-help-popover' }, h('strong', null, 'Keyboard shortcuts'),
+        ...[['Space', 'Play / pause'], ['1–5', 'Add a fret at the playhead'], ['← →', 'Seek, or nudge selected notes'], ['Delete', 'Delete selected notes'], ['Ctrl / ⌘ Z', 'Undo · Shift to redo'], ['Ctrl / ⌘ C / V', 'Copy / paste notes'], ['+ / −', 'Zoom at the playhead'], ['Shift + wheel', 'Pan the timeline']].map(([key, label]) => h('p', null, h('kbd', null, key), label))));
+    this.el = h('div', { class: 'screen studio-screen', 'data-loaded': 'false' },
+      h('header', { class: 'studio-header' }, this.button('← Library', () => this.back()),
+        h('div', { class: 'studio-brand' }, h('h1', null, 'Chart Studio'), this.songHeading),
+        this.saveStatus, this.projectMenu, shortcuts, this.projectActions),
+      h('div', { class: 'studio-notice' }, this.status, this.cancelButton,
+        this.iconButton('Dismiss notice', 'close', () => { if (!this.controller) this.status.textContent = ''; })),
+      this.content, this.audio, file, zip);
+    this.cancelButton.hidden = true;
+    this.content.append(h('section', { class: 'studio-welcome' },
+      h('div', { class: 'studio-welcome-copy' }, h('span', { class: 'studio-eyebrow' }, 'FROM RECORDING TO HIGHWAY'),
+        h('h2', null, 'Make it yours.'), h('p', null, 'Start with a song. Find its rhythm, shape the notes, and watch your chart come to life.'),
+        h('div', { class: 'studio-dropzone' }, icon('download'), h('strong', null, 'Drop a song or Studio ZIP here'),
+          h('span', null, 'MP3, WAV, OGG, Opus · Up to 100 MB / 20 minutes'),
+          this.button('Choose song file', importSong, true), this.button('Open Studio ZIP', importZip)),
+        h('p', { class: 'hint' }, 'Already started? Open a saved chart from the Project menu.')),
+      h('div', { class: 'studio-welcome-steps' },
+        ...[['01', 'Find the rhythm', 'Get four difficulty drafts from your recording.'], ['02', 'Shape your chart', 'Drag notes, add sustains, and refine each passage.'], ['03', 'See it play', 'Watch the bot, playtest, then export your song.']].map(([n, title, text]) => h('div', null, h('span', null, n), h('h3', null, title), h('p', null, text))))));
+    this.el.addEventListener('pointerdown', (e) => {
+      if (!this.projectMenu.contains(e.target as Node)) this.projectMenu.open = false;
+      if (!shortcuts.contains(e.target as Node)) shortcuts.open = false;
+    });
+    this.el.ondragover = (e) => { if (e.dataTransfer?.types.includes('Files')) { e.preventDefault(); this.el.classList.add('dragging-file'); } };
+    this.el.ondragleave = (e) => { if (!this.el.contains(e.relatedTarget as Node | null)) this.el.classList.remove('dragging-file'); };
+    this.el.ondrop = (e) => {
+      e.preventDefault(); this.el.classList.remove('dragging-file');
+      const dropped = e.dataTransfer?.files[0];
+      if (dropped) void this.run(() => /\.zip$/i.test(dropped.name) ? this.importZip(dropped) : this.importSong(dropped));
+    };
     this.audio.ontimeupdate = () => this.updatePlayback();
-    this.audio.onplay = () => this.animate();
-    this.audio.onpause = () => this.clicks.reset();
+    this.audio.onplay = () => { this.syncTransport(); this.animate(); };
+    this.audio.onpause = () => { this.clicks.reset(); this.syncTransport(); };
     this.scrub.oninput = () => this.seek(Number(this.scrub.value));
     window.addEventListener('beforeunload', this.beforeUnload);
     void this.refreshSaved();
@@ -100,6 +147,25 @@ export class StudioScreen implements Screen {
   private beforeUnload = (e: BeforeUnloadEvent) => { if (this.dirty) { e.preventDefault(); e.returnValue = ''; } };
   private button(label: string, action: () => unknown, primary = false): HTMLButtonElement {
     return h('button', { class: primary ? 'btn primary' : 'btn', onclick: () => void this.run(async () => { await action(); }) }, label);
+  }
+  private iconButton(label: string, name: IconName, action: () => unknown): HTMLButtonElement {
+    const button = this.button('', action);
+    button.classList.add('studio-icon-button'); button.setAttribute('aria-label', label); button.title = label;
+    button.append(icon(name)); return button;
+  }
+  private async importZip(file: File): Promise<void> {
+    this.projectMenu.open = false;
+    const revision = ++this.loadRevision;
+    if (!await this.saveBeforeLeaving() || this.destroyed || revision !== this.loadRevision) return;
+    this.controller?.abort(); this.controller = null; this.cancelButton.hidden = true;
+    const imported = await importProjectZip(file, crypto.randomUUID());
+    if (this.destroyed || revision !== this.loadRevision) return;
+    this.install(imported.project, imported.audio); this.changed();
+    this.status.textContent = 'Project restored, including all edits and locked passages.';
+  }
+  private setSaveStatus(text: string): void {
+    this.saveStatus.textContent = text; this.saveStatus.title = text;
+    this.saveStatus.dataset.state = text.startsWith('Saved') ? 'saved' : text.startsWith('Saving') ? 'saving' : text.startsWith('Unsaved') ? 'dirty' : 'error';
   }
   private async run(action: () => Promise<unknown>): Promise<void> {
     try { await action(); }
@@ -111,22 +177,23 @@ export class StudioScreen implements Screen {
       if (this.destroyed) return;
       this.saved.replaceChildren(h('option', { value: '' }, 'Open a saved project…'), ...projects.map(({ project }) => h('option', { value: project.id }, project.name)));
       this.saved.value = this.project?.id ?? '';
-    } catch { this.saveStatus.textContent = 'Browser storage unavailable — export to keep your work.'; }
+    } catch { this.setSaveStatus('Browser storage unavailable — export to keep your work.'); }
   }
   private async importSong(file: File): Promise<void> {
+    this.projectMenu.open = false;
     const revision = ++this.loadRevision;
     if (!await this.saveBeforeLeaving()) return;
     if (this.destroyed || revision !== this.loadRevision) return;
     this.controller?.abort();
     const controller = this.controller = new AbortController();
-    this.cancelButton.disabled = false;
+    this.cancelButton.disabled = false; this.cancelButton.hidden = false;
     this.audio.pause();
     this.status.textContent = 'Decoding audio…';
     let analysis;
     try { analysis = await analyzeFile(file, controller.signal, (p) => { if (!this.destroyed && this.controller === controller) this.status.textContent = `Analyzing music… ${Math.round(p * 100)}%`; }); }
-    catch (error) { if (this.controller === controller) { this.controller = null; this.cancelButton.disabled = true; throw error; } return; }
+    catch (error) { if (this.controller === controller) { this.controller = null; this.cancelButton.disabled = true; this.cancelButton.hidden = true; throw error; } return; }
     if (this.destroyed || this.controller !== controller) return;
-    this.controller = null; this.cancelButton.disabled = true;
+    this.controller = null; this.cancelButton.disabled = true; this.cancelButton.hidden = true;
     this.install(createProject(crypto.randomUUID(), file.name, analysis), file);
     this.status.textContent = analysis.onsets.length ? `Found ${analysis.onsets.length} musical attacks. Listen and refine the draft below.` : 'No clear attacks found. You can add notes manually, or try another recording.';
     this.changed();
@@ -135,11 +202,11 @@ export class StudioScreen implements Screen {
     const revision = ++this.loadRevision;
     if (!await this.saveBeforeLeaving()) return;
     if (this.destroyed || revision !== this.loadRevision) return;
-    this.controller?.abort(); this.controller = null; this.cancelButton.disabled = true;
+    this.controller?.abort(); this.controller = null; this.cancelButton.disabled = true; this.cancelButton.hidden = true;
     const saved = await readProject(id);
     if (this.destroyed || revision !== this.loadRevision) return;
     this.install(saved.project, saved.audio);
-    this.saveStatus.textContent = 'Saved in this browser'; this.status.textContent = '';
+    this.setSaveStatus('Saved in this browser'); this.status.textContent = '';
   }
   private install(project: StudioProject, audio: Blob): void {
     clearTimeout(this.saveTimer);
@@ -147,20 +214,31 @@ export class StudioScreen implements Screen {
     if (this.audioUrl) URL.revokeObjectURL(this.audioUrl);
     this.project = project; this.audioFile = audio; this.audioUrl = URL.createObjectURL(audio); this.audio.src = this.audioUrl;
     this.history = new StudioHistory(); this.selected.clear(); this.clipboard = []; this.cursor = 0; this.start = 0;
+    this.span = Math.min(12, Math.max(2, project.analysis.duration)); this.follow = true;
+    this.projectMenu.open = false; this.projectActions.hidden = false; this.el.dataset.loaded = 'true';
     this.range = { start: 0, end: project.analysis.duration }; this.looping = false; this.dirty = false; this.revision++;
+    const view = this.restoreView; this.restoreView = undefined;
+    if (view) {
+      this.cursor = view.cursor; this.start = view.start; this.span = view.span; this.snap = view.snap; this.tool = view.tool;
+      this.selected = new Set(view.selected); this.activePanel = view.panel; this.history = view.history;
+      this.range = { ...view.range }; this.looping = view.looping; this.follow = view.follow;
+    }
+    this.audio.onloadedmetadata = view ? () => {
+      this.audio.currentTime = view.cursor; this.scrub.value = String(view.cursor); this.syncTransport(); this.timeline?.draw();
+    } : null;
     this.renderEditor();
   }
   private async save(): Promise<void> {
     if (!this.project || !this.audioFile) return;
     clearTimeout(this.saveTimer);
     const project = structuredClone(this.project), audio = this.audioFile, revision = this.revision;
-    this.saveStatus.textContent = 'Saving…';
+    this.setSaveStatus('Saving…');
     const write = this.writes.catch(() => {}).then(() => saveProject(project, audio)); this.writes = write;
     try {
       await write;
-      if (this.project?.id === project.id && this.revision === revision) { this.dirty = false; this.saveStatus.textContent = 'Saved in this browser'; }
+      if (this.project?.id === project.id && this.revision === revision) { this.dirty = false; this.setSaveStatus('Saved in this browser'); }
       await this.refreshSaved();
-    } catch { this.saveStatus.textContent = 'Not saved — export a ZIP to keep your work.'; throw new Error('Could not save the project. Browser storage may be full or unavailable. Export a ZIP before leaving.'); }
+    } catch { this.setSaveStatus('Not saved — export a ZIP to keep your work.'); throw new Error('Could not save the project. Browser storage may be full or unavailable. Export a ZIP before leaving.'); }
   }
   private async saveBeforeLeaving(): Promise<boolean> {
     if (!this.dirty) return true;
@@ -173,7 +251,7 @@ export class StudioScreen implements Screen {
   private changed(): void {
     if (!this.project) return;
     this.project.notes[this.difficulty] = normalizeNotes(this.project.notes[this.difficulty], this.project.analysis.duration);
-    this.revision++; this.dirty = true; this.saveStatus.textContent = 'Unsaved changes';
+    this.revision++; this.dirty = true; this.setSaveStatus('Unsaved changes');
     this.clicks.reset();
     clearTimeout(this.saveTimer); this.saveTimer = window.setTimeout(() => void this.run(() => this.save()), 1200);
     this.updateEditor();
@@ -182,14 +260,14 @@ export class StudioScreen implements Screen {
 
   private renderEditor(): void {
     const p = this.project!;
-    this.timeline?.destroy();
+    this.timeline?.destroy(); this.inspectorSignature = '';
     const name = h('input', { value: p.name, 'aria-label': 'Song title', maxlength: 200, onchange: () => { p.name = name.value.trim() || 'Untitled song'; this.changed(); } });
     const artist = h('input', { value: p.artist, 'aria-label': 'Artist', maxlength: 200, onchange: () => { p.artist = artist.value.trim() || 'Unknown Artist'; this.changed(); } });
-    const diff = h('select', { 'aria-label': 'Chart difficulty', onchange: () => { this.difficulty = diff.value as Difficulty; this.selected.clear(); this.updateEditor(); } }, ...DIFFICULTIES.map((d) => h('option', { value: d }, LABEL[d])));
+    const diff = h('select', { 'aria-label': 'Chart difficulty', onchange: () => { this.difficulty = diff.value as Difficulty; this.selected.clear(); this.clicks.reset(); this.updateEditor(); } }, ...DIFFICULTIES.map((d) => h('option', { value: d }, LABEL[d])));
     diff.value = this.difficulty;
-    const tool = h('select', { 'aria-label': 'Editing tool', onchange: () => { this.tool = tool.value as TimelineState['tool']; } }, h('option', { value: 'select' }, 'Select / drag'), h('option', { value: 'add' }, 'Add notes'), h('option', { value: 'erase' }, 'Erase notes'));
+    const tool = h('select', { 'aria-label': 'Editing tool', onchange: () => { this.tool = tool.value as TimelineState['tool']; } }, h('option', { value: 'select' }, 'Select'), h('option', { value: 'add' }, 'Add notes'), h('option', { value: 'erase' }, 'Erase'));
     tool.value = this.tool;
-    const snap = h('select', { 'aria-label': 'Grid snap', onchange: () => { this.snap = Number(snap.value); } }, ...[[0, 'Free timing'], [1, 'Quarter notes'], [2, 'Eighth notes'], [3, 'Triplets'], [4, 'Sixteenth notes']].map(([value, label]) => h('option', { value }, label)));
+    const snap = h('select', { 'aria-label': 'Grid snap', onchange: () => { this.snap = Number(snap.value); } }, ...[[0, 'Free timing'], [1, '¼ notes'], [2, '⅛ notes'], [3, 'Triplets'], [4, '1/16 notes']].map(([value, label]) => h('option', { value }, label)));
     snap.value = String(this.snap);
     const canvas = h('canvas', { class: 'studio-timeline', tabindex: 0, 'aria-label': 'Chart timeline. Click waveform to seek. Select and drag notes, or use Add notes. Keyboard 1 to 5 adds frets at the playhead.' });
     this.scrub.max = String(p.analysis.duration); this.scrub.value = String(this.cursor);
@@ -198,39 +276,110 @@ export class StudioScreen implements Screen {
     const loop = h('input', { type: 'checkbox', checked: this.looping, onchange: () => { this.looping = loop.checked; } });
     const rangeStart = this.number('Passage start (seconds)', this.range.start, 0, p.analysis.duration, 0.01, (v) => { this.range.start = Math.min(v, this.range.end - 0.01); });
     const rangeEnd = this.number('Passage end (seconds)', this.range.end, 0.01, p.analysis.duration, 0.01, (v) => { this.range.end = Math.max(v, this.range.start + 0.01); });
-    this.content.replaceChildren(
-      h('div', { class: 'studio-row studio-metadata' }, this.field('Title', name), this.field('Artist', artist),
-        this.button('Save', () => this.save()), this.button('Export song ZIP', () => this.download()),
-        this.button('Watch bot', () => this.playtest(true)), this.button('Playtest', () => this.playtest(), true)),
-      h('div', { class: 'studio-row' }, this.field('Difficulty', diff), this.field('Tool', tool), this.field('Snap', snap),
-        this.button('Undo', () => this.undo()), this.button('Redo', () => this.redo()),
-        this.button('Zoom in', () => { this.span = Math.max(2, this.span / 1.5); this.timeline?.draw(); }), this.button('Zoom out', () => { this.span = Math.min(120, this.span * 1.5); this.timeline?.draw(); })),
-      h('div', { class: 'studio-transport' }, this.audio, rate, click, this.position), this.scrub, canvas,
-      h('p', { class: 'hint' }, 'Click the waveform to seek. Drag gems to move them; Shift-click selects several. 1–5 adds notes at the playhead, Delete removes, Space plays/pauses. Ctrl/Cmd+Z undoes.'),
-      this.stats,
-      h('div', { class: 'studio-panels' },
-        h('section', null, h('h2', null, 'Selected notes'), this.inspector),
-        h('section', null, h('h2', null, 'Beat grid'), this.timingControls()),
-        h('section', null, h('h2', null, 'Passage'),
-          h('div', { class: 'studio-row' }, this.field('From (s)', rangeStart), this.field('To (s)', rangeEnd)),
-          this.button('From playhead', () => { this.range.start = Math.min(this.cursor, this.range.end - 0.01); rangeStart.value = this.range.start.toFixed(2); }),
-          this.button('To playhead', () => { this.range.end = Math.max(this.cursor, this.range.start + 0.01); rangeEnd.value = this.range.end.toFixed(2); }),
-          h('label', { class: 'studio-check' }, loop, 'Loop passage'),
-          this.button('Select passage', () => { this.selected = new Set(p.notes[this.difficulty].filter((n) => n.time >= this.range.start && n.time < this.range.end).map((n) => n.id)); this.updateEditor(); }),
-          this.button('Lock passage', () => this.edit(() => { p.locks[this.difficulty].push({ ...this.range }); })),
-          this.button('Unlock passage', () => this.edit(() => { p.locks[this.difficulty] = p.locks[this.difficulty].filter((r) => r.end <= this.range.start || r.start >= this.range.end); })),
-          this.button('Regenerate passage', () => this.edit(() => regenerate(p, this.difficulty, this.range))),
-          h('p', { class: 'hint' }, 'Regeneration replaces only this difficulty inside the passage. Locked areas are preserved. Undo restores the previous draft.'))),
-      h('div', { class: 'studio-row' }, this.button('Delete saved project', () => this.removeProject()), h('span', { class: 'hint' }, 'Browser storage is local to this site and device. Export a ZIP for a portable copy.')));
+    this.projectMeta.replaceChildren(h('h3', null, 'Song details'), this.field('Title', name), this.field('Artist', artist),
+      h('div', { class: 'studio-row' }, this.button('Save', () => this.save()), this.button('Delete saved project', () => this.removeProject())));
+    this.undoButton = this.iconButton('Undo', 'undo', () => this.undo());
+    this.redoButton = this.iconButton('Redo', 'redo', () => this.redo());
+    this.playButton = this.iconButton('Play preview', 'play', () => this.togglePlayback());
+    this.playButton.classList.add('studio-play-button'); this.playButton.title = 'Play / pause (Space)';
+    const volume = h('input', { type: 'range', min: 0, max: 1, step: 0.05, value: this.audio.volume, 'aria-label': 'Preview volume', oninput: () => { this.audio.volume = Number(volume.value); } });
+    this.tempoButton = this.button('', () => this.setPanel('timing')); this.tempoButton.classList.add('studio-tempo-button');
+    this.followButton = this.button('Follow playhead', () => { this.follow = !this.follow; if (this.follow) this.seek(this.cursor); this.updateView(); });
+    this.followButton.classList.add('studio-follow');
+    const passage = h('div', { class: 'studio-passage-controls' },
+      h('p', { class: 'hint' }, 'Choose a passage to loop, protect, or regenerate.'),
+      h('div', { class: 'studio-row' }, this.field('From (s)', rangeStart), this.field('To (s)', rangeEnd)),
+      h('div', { class: 'studio-row' },
+        this.button('From playhead', () => { this.range.start = Math.min(this.cursor, this.range.end - 0.01); rangeStart.value = this.range.start.toFixed(2); }),
+        this.button('To playhead', () => { this.range.end = Math.max(this.cursor, this.range.start + 0.01); rangeEnd.value = this.range.end.toFixed(2); })),
+      h('label', { class: 'studio-check' }, loop, 'Loop passage'),
+      this.button('Select passage', () => { this.selected = new Set(p.notes[this.difficulty].filter((n) => n.time >= this.range.start && n.time < this.range.end).map((n) => n.id)); this.setPanel('notes'); this.updateEditor(); }),
+      h('hr'), h('h3', null, 'Protect your edits'),
+      h('div', { class: 'studio-row' }, this.button('Lock passage', () => this.edit(() => { p.locks[this.difficulty].push({ ...this.range }); })),
+        this.button('Unlock passage', () => this.edit(() => { p.locks[this.difficulty] = p.locks[this.difficulty].filter((r) => r.end <= this.range.start || r.start >= this.range.end); }))),
+      h('p', { class: 'hint' }, 'Locked notes stay intact when you regenerate.'), h('hr'),
+      this.button('Regenerate passage', () => this.edit(() => regenerate(p, this.difficulty, this.range)), true),
+      h('p', { class: 'hint' }, 'Replaces the unlocked notes in this difficulty only. You can undo this.'));
+    this.panels.clear(); this.tabs.clear();
+    const tablist = h('div', { class: 'studio-inspector-tabs', role: 'tablist', 'aria-label': 'Inspector' });
+    for (const [id, label, body] of [['notes', 'Notes', this.inspector], ['timing', 'Grid', this.timingControls()], ['passage', 'Passage', passage]] as const) {
+      const tab = h('button', { role: 'tab', id: `studio-tab-${id}`, 'aria-controls': `studio-panel-${id}`, onclick: () => this.setPanel(id) }, label);
+      tab.onkeydown = (e) => {
+        const ids: InspectorPanel[] = ['notes', 'timing', 'passage'];
+        const next = e.key === 'Home' ? 0 : e.key === 'End' ? 2 : e.key === 'ArrowRight' ? (ids.indexOf(id) + 1) % 3 : e.key === 'ArrowLeft' ? (ids.indexOf(id) + 2) % 3 : -1;
+        if (next >= 0) { e.preventDefault(); this.setPanel(ids[next]); this.tabs.get(ids[next])?.focus(); }
+      };
+      const panel = h('section', { class: 'studio-inspector-panel', id: `studio-panel-${id}`, role: 'tabpanel', 'aria-labelledby': tab.id, tabindex: 0 }, body);
+      this.tabs.set(id, tab); this.panels.set(id, panel); tablist.append(tab);
+    }
+    const zoomOut = this.iconButton('Zoom out', 'minus', () => this.zoomView(1.5));
+    const zoomIn = this.iconButton('Zoom in', 'plus', () => this.zoomView(1 / 1.5));
+    const previousView = this.button('←', () => this.panView(-this.span * 0.8)), nextView = this.button('→', () => this.panView(this.span * 0.8));
+    previousView.setAttribute('aria-label', 'Previous view'); nextView.setAttribute('aria-label', 'Next view');
+    previousView.title = 'Previous view (Shift + wheel to pan)'; nextView.title = 'Next view (Shift + wheel to pan)';
+    this.content.replaceChildren(h('div', { class: 'studio-workspace' },
+      h('section', { class: 'studio-editor', 'aria-label': 'Chart editor' },
+        h('div', { class: 'studio-editor-toolbar' }, this.field('Difficulty', diff), this.field('Tool', tool), this.field('Snap', snap),
+          h('div', { class: 'studio-edit-history' }, this.undoButton, this.redoButton)),
+        h('div', { class: 'studio-transport' }, this.iconButton('Back to start', 'start', () => this.seek(0)), this.playButton, this.position,
+          this.tempoButton, this.field('Speed', rate), this.field('Listen', click), h('label', { class: 'studio-volume' }, 'Volume', volume)),
+        h('div', { class: 'studio-canvas-wrap' }, canvas),
+        h('div', { class: 'studio-navigation' },
+          previousView, nextView,
+          this.followButton, h('div', { class: 'studio-zoom' }, zoomOut, this.zoomLabel, zoomIn)),
+        h('div', { class: 'studio-song-overview' }, h('span', null, 'SONG'), this.scrub, h('span', null, formatTime(p.analysis.duration))),
+        h('footer', { class: 'studio-editor-footer' }, this.stats, h('span', { class: 'studio-short-hint' }, '1–5 add notes · Shift-click selects more'))),
+      h('aside', { class: 'studio-sidebar', 'aria-label': 'Chart inspector' },
+        h('div', { class: 'studio-inspector-heading' }, h('h2', null, 'Inspector'), h('span', null, 'Refine this chart')), tablist, ...this.panels.values())));
+    this.setPanel(this.activePanel);
     this.timeline = new StudioTimeline(canvas, () => ({ project: this.project!, difficulty: this.difficulty, selected: this.selected, start: this.start, span: this.span, cursor: this.cursor, snap: this.snap, tool: this.tool }), {
-      select: (ids) => { this.selected = ids; this.updateEditor(); }, seek: (time) => this.seek(time), add: (time, lane) => this.add(time, lane),
+      select: (ids) => { this.selected = ids; if (ids.size) this.setPanel('notes'); this.updateEditor(); }, seek: (time) => this.seek(time), add: (time, lane) => this.add(time, lane),
       remove: (id) => this.edit(() => { p.notes[this.difficulty] = p.notes[this.difficulty].filter((n) => n.id !== id); }),
       move: (ids, delta, lanes) => this.moveNotes(ids, delta, lanes),
+      pan: (delta) => this.panView(delta), zoom: (factor) => this.zoomView(factor),
     });
-    this.updateEditor();
+    this.updateEditor(); this.syncTransport(); this.updateView();
   }
 
   private field(label: string, input: HTMLElement): HTMLElement { return h('label', { class: 'studio-field' }, h('span', null, label), input); }
+  private setPanel(id: InspectorPanel): void {
+    this.activePanel = id;
+    for (const [key, tab] of this.tabs) { tab.setAttribute('aria-selected', String(key === id)); tab.tabIndex = key === id ? 0 : -1; }
+    for (const [key, panel] of this.panels) panel.hidden = key !== id;
+  }
+  private togglePlayback(): void {
+    if (!this.project) return;
+    if (this.audio.paused) {
+      if (this.looping && (this.cursor < this.range.start || this.cursor >= this.range.end)) this.seek(this.range.start);
+      void this.run(() => this.audio.play());
+    } else this.audio.pause();
+  }
+  private syncTransport(): void {
+    const label = this.audio.paused ? 'Play preview' : 'Pause preview';
+    if (this.playButton?.getAttribute('aria-label') !== label) {
+      this.playButton?.replaceChildren(icon(this.audio.paused ? 'play' : 'pause')); this.playButton?.setAttribute('aria-label', label);
+    }
+    const clock = (time: number) => `${formatTime(time)}.${Math.floor((time % 1) * 10)}`;
+    setText(this.position, `${clock(this.cursor)} / ${formatTime(this.project?.analysis.duration ?? 0)}`);
+  }
+  private updateView(): void {
+    this.zoomLabel.textContent = `${Number(this.span.toFixed(1))}s window`;
+    this.followButton?.setAttribute('aria-pressed', String(this.follow));
+    this.timeline?.draw();
+  }
+  private panView(delta: number): void {
+    if (!this.project) return;
+    this.start = Math.max(0, Math.min(Math.max(0, this.project.analysis.duration - this.span), this.start + delta));
+    this.follow = false; this.updateView();
+  }
+  private zoomView(factor: number): void {
+    if (!this.project) return;
+    const anchor = this.cursor >= this.start && this.cursor <= this.start + this.span ? this.cursor : this.start + this.span / 2;
+    const fraction = (anchor - this.start) / this.span;
+    this.span = Math.max(2, Math.min(120, this.span * factor));
+    this.start = Math.max(0, Math.min(Math.max(0, this.project.analysis.duration - this.span), anchor - fraction * this.span));
+    this.updateView();
+  }
   private number(label: string, value: number, min: number, max: number, step: number, change: (v: number) => void): HTMLInputElement {
     const input = h('input', { type: 'number', value: Number(value.toFixed(4)), min, max, step, 'aria-label': label });
     input.onchange = () => { const v = input.valueAsNumber; if (!Number.isFinite(v) || v < min || v > max) { input.value = String(value); this.status.textContent = `${label} must be between ${min} and ${max}.`; return; } value = v; change(v); };
@@ -263,20 +412,43 @@ export class StudioScreen implements Screen {
     const notes = p.notes[this.difficulty]; this.selected = new Set([...this.selected].filter((id) => notes.some((n) => n.id === id)));
     const selected = notes.filter((n) => this.selected.has(n.id));
     const attacks = new Set(notes.map((n) => n.time)).size;
-    this.stats.textContent = `${LABEL[this.difficulty]} · ${attacks} attacks · ${notes.length} gems · ${(attacks / p.analysis.duration).toFixed(1)} attacks/s average · ${p.locks[this.difficulty].length} locked passages`;
-    this.inspector.replaceChildren(h('p', { class: 'hint' }, selected.length ? `${selected.length} gem${selected.length === 1 ? '' : 's'} selected` : 'Select a gem, select a passage, or add a note with keys 1–5.'));
-    this.inspector.append(this.button('Previous note', () => this.adjacent(-1)), this.button('Next note', () => this.adjacent(1)));
-    if (selected.length) {
-      const first = selected[0];
-      const time = this.number('Note time (seconds)', first.time, 0, p.analysis.duration - 0.0001, 0.001, (v) => this.moveNotes(this.selected, v - first.time, 0));
-      const length = this.number('Sustain length (seconds)', first.length, 0, p.analysis.duration, 0.01, (v) => this.edit(() => selected.forEach((n) => { n.length = v; })));
-      const lane = h('select', { 'aria-label': 'Note lane', onchange: () => this.moveNotes(this.selected, 0, Number(lane.value) - first.lane) }, ...LANES.map((label, i) => h('option', { value: i }, label))); lane.value = String(first.lane);
-      const kind = h('select', { 'aria-label': 'Note type', onchange: () => this.edit(() => selected.forEach((n) => { n.kind = kind.value as StudioNote['kind']; })) }, h('option', { value: 'auto' }, 'Auto strum / HOPO'), h('option', { value: 'tap' }, 'Tap')); kind.value = first.kind;
-      this.inspector.append(h('div', { class: 'studio-row' }, this.field('Time (s)', time), this.field('Sustain (s)', length)), h('div', { class: 'studio-row' }, lane, kind),
-        this.button('Delete notes', () => this.removeSelected()), this.button('Snap notes to grid', () => this.edit(() => selected.forEach((n) => { n.time = snapTime(p, n.time, this.snap); }))));
+    this.stats.textContent = `${LABEL[this.difficulty]} · ${attacks} notes · ${(attacks / p.analysis.duration).toFixed(1)}/s · ${p.locks[this.difficulty].length} locked`;
+    this.stats.title = `${notes.length} gems across ${attacks} attacks. Density is the whole-song average.`;
+    this.songHeading.textContent = p.name; this.songHeading.title = `${p.name} — ${p.artist}`;
+    if (this.undoButton) this.undoButton.disabled = !this.history.canUndo;
+    if (this.redoButton) this.redoButton.disabled = !this.history.canRedo;
+    if (this.tempoButton) { this.tempoButton.textContent = `${Number(timingMap(p).map.bpmAt(this.cursor).toFixed(2))} BPM`; this.tempoButton.title = 'Adjust the beat grid'; }
+    const signature = `${p.id}:${this.difficulty}:${selected.map((n) => n.id).join(',')}:${notes.length}:${this.clipboard.length}`;
+    if (signature !== this.inspectorSignature) {
+      this.inspectorSignature = signature;
+      this.inspector.replaceChildren(selected.length
+        ? h('div', { class: 'studio-selection-heading' }, h('h3', null, selected.length === 1 ? 'Note properties' : `${selected.length} notes selected`), h('p', { class: 'hint' }, 'Changes apply to the selected gems.'))
+        : h('div', { class: 'studio-empty-selection' }, h('span', { class: 'studio-note-symbol' }, '♪'), h('h3', null, 'Select a note'), h('p', null, 'Click a gem in the timeline to edit its timing, fret, or sustain.'), h('p', { class: 'hint' }, 'Shift-click adds to your selection. Use keys 1–5 to add notes at the playhead.')));
+      const previous = this.button('Previous note', () => this.adjacent(-1)), next = this.button('Next note', () => this.adjacent(1));
+      previous.disabled = next.disabled = !notes.length;
+      this.inspector.append(h('div', { class: 'studio-row' }, previous, next));
+      if (selected.length) {
+        const first = selected[0];
+        const time = this.number('Note time (seconds)', first.time, 0, p.analysis.duration - 0.0001, 0.001, (v) => this.moveNotes(this.selected, v - (p.notes[this.difficulty].find((n) => this.selected.has(n.id))?.time ?? v), 0));
+        const length = this.number('Sustain length (seconds)', first.length, 0, p.analysis.duration, 0.01, (v) => this.edit(() => p.notes[this.difficulty].filter((n) => this.selected.has(n.id)).forEach((n) => { n.length = v; })));
+        const lane = h('select', { 'aria-label': 'Note lane', onchange: () => this.moveNotes(this.selected, 0, Number(lane.value) - (p.notes[this.difficulty].find((n) => this.selected.has(n.id))?.lane ?? 0)) }, ...LANES.map((label, i) => h('option', { value: i }, label))); lane.value = String(first.lane);
+        const kind = h('select', { 'aria-label': 'Note type', onchange: () => this.edit(() => p.notes[this.difficulty].filter((n) => this.selected.has(n.id)).forEach((n) => { n.kind = kind.value as StudioNote['kind']; })) }, h('option', { value: 'auto' }, 'Auto strum / HOPO'), h('option', { value: 'tap' }, 'Tap')); kind.value = first.kind;
+        this.inspector.append(h('div', { class: 'studio-row' }, this.field('Time (s)', time), this.field('Sustain (s)', length)), h('div', { class: 'studio-row' }, lane, kind),
+          this.button('Delete notes', () => this.removeSelected()), this.button('Snap notes to grid', () => this.edit(() => p.notes[this.difficulty].filter((n) => this.selected.has(n.id)).forEach((n) => { n.time = snapTime(p, n.time, this.snap); }))));
+      }
+      const copy = this.button('Copy notes', () => this.copy()), paste = this.button('Paste at playhead', () => this.paste());
+      copy.disabled = !selected.length; paste.disabled = !this.clipboard.length;
+      this.inspector.append(h('div', { class: 'studio-row' }, copy, paste));
     }
-    this.inspector.append(this.button('Copy notes', () => this.copy()), this.button('Paste at playhead', () => this.paste()));
-    this.position.textContent = `${this.cursor.toFixed(2)} / ${p.analysis.duration.toFixed(2)} s`;
+    // Keep form nodes alive while editing, so Tab and keyboard focus stay in the inspector.
+    const first = selected[0];
+    if (first) {
+      for (const [label, value] of [['Note time (seconds)', first.time], ['Sustain length (seconds)', first.length], ['Note lane', first.lane], ['Note type', first.kind]] as const) {
+        const input = this.inspector.querySelector<HTMLInputElement | HTMLSelectElement>(`[aria-label="${label}"]`);
+        if (input) input.value = typeof value === 'number' ? String(Number(value.toFixed(4))) : value;
+      }
+    }
+    this.syncTransport();
     this.timeline?.draw();
   }
   private adjacent(direction: number): void {
@@ -287,6 +459,7 @@ export class StudioScreen implements Screen {
   }
   private add(time: number, lane: number): void {
     const p = this.project!;
+    this.setPanel('notes');
     this.edit(() => { const note: StudioNote = { id: p.nextId++, time, length: 0, lane, kind: 'auto' }; p.notes[this.difficulty].push(note); this.selected = new Set([note.id]); });
   }
   private moveNotes(ids: Set<number>, delta: number, lanes: number): void {
@@ -296,7 +469,7 @@ export class StudioScreen implements Screen {
     this.edit(() => notes.forEach((n) => { n.time += delta; n.lane += lanes; }));
   }
   private removeSelected(): void { const p = this.project!; this.edit(() => { p.notes[this.difficulty] = p.notes[this.difficulty].filter((n) => !this.selected.has(n.id)); this.selected.clear(); }); }
-  private copy(): void { this.clipboard = this.project!.notes[this.difficulty].filter((n) => this.selected.has(n.id)).map((n) => ({ ...n })); }
+  private copy(): void { this.clipboard = this.project!.notes[this.difficulty].filter((n) => this.selected.has(n.id)).map((n) => ({ ...n })); this.updateEditor(); }
   private paste(): void {
     if (!this.clipboard.length) return;
     const p = this.project!, first = Math.min(...this.clipboard.map((n) => n.time)), at = snapTime(p, this.cursor, this.snap);
@@ -309,15 +482,15 @@ export class StudioScreen implements Screen {
     this.clicks.reset();
     this.cursor = Math.max(0, Math.min(this.project.analysis.duration, time)); this.audio.currentTime = this.cursor;
     if (this.cursor < this.start || this.cursor > this.start + this.span) this.start = Math.max(0, this.cursor - this.span / 4);
-    this.scrub.value = String(this.cursor); this.position.textContent = `${this.cursor.toFixed(2)} / ${this.project.analysis.duration.toFixed(2)} s`; this.timeline?.draw();
+    this.scrub.value = String(this.cursor); this.syncTransport(); this.timeline?.draw();
   }
   private updatePlayback(): void {
     if (!this.project) return;
     if (this.looping && !this.audio.paused && (this.audio.currentTime >= this.range.end || this.audio.currentTime < this.range.start)) this.audio.currentTime = this.range.start;
     this.cursor = this.audio.currentTime;
     this.clicks.update(this.project, this.difficulty, this.audio);
-    if (this.cursor > this.start + this.span || this.cursor < this.start) this.start = Math.max(0, this.cursor - this.span / 5);
-    this.scrub.value = String(this.cursor); this.position.textContent = `${this.cursor.toFixed(2)} / ${this.project.analysis.duration.toFixed(2)} s`; this.timeline?.draw();
+    if (this.follow && (this.cursor > this.start + this.span || this.cursor < this.start)) this.start = Math.max(0, this.cursor - this.span / 5);
+    this.scrub.value = String(this.cursor); this.syncTransport(); this.timeline?.draw();
   }
   private animate(): void { cancelAnimationFrame(this.raf); const frame = () => { if (this.destroyed || this.audio.paused) return; this.updatePlayback(); this.raf = requestAnimationFrame(frame); }; frame(); }
   private async download(): Promise<void> {
@@ -336,8 +509,11 @@ export class StudioScreen implements Screen {
     const chart = loadChart('notes.chart', new TextEncoder().encode(chartText(p)), song.chartOptions);
     const { GameScreen } = await import('./gamescreen.ts');
     const diff = this.difficulty;
-    this.app.show(new GameScreen(this.app, { song, chart, instrument: 'guitar', difficulty: diff, bot,
-      studioReturn: () => this.app.show(new StudioScreen(this.app, p.id, diff)) }));
+    const app = this.app, id = p.id;
+    const view: StudioView = { cursor: this.cursor, start: this.start, span: this.span, snap: this.snap, tool: this.tool,
+      selected: [...this.selected], panel: this.activePanel, history: this.history, range: { ...this.range }, looping: this.looping, follow: this.follow };
+    app.show(new GameScreen(app, { song, chart, instrument: 'guitar', difficulty: diff, bot,
+      studioReturn: () => app.show(new StudioScreen(app, id, diff, view)) }));
   }
   private async removeProject(): Promise<void> {
     if (!this.project || !confirm(`Delete “${this.project.name}” from this browser? Export it first if you want to keep it.`)) return;
@@ -346,6 +522,11 @@ export class StudioScreen implements Screen {
   }
   private async back(): Promise<void> { if (!await this.saveBeforeLeaving()) return; await this.app.library.index(); const { SongSelect } = await import('./songselect.ts'); if (!this.destroyed) this.app.show(new SongSelect(this.app)); }
   key(e: KeyboardEvent): boolean {
+    if (e.defaultPrevented) return false;
+    if (e.key === 'Escape' && this.projectMenu.open) { (document.activeElement as HTMLElement)?.blur(); this.projectMenu.open = false; return true; }
+    const help = this.el.querySelector<HTMLDetailsElement>('.studio-help');
+    if (e.key === 'Escape' && help?.open) { help.open = false; return true; }
+    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') { (document.activeElement as HTMLElement)?.blur(); void this.run(() => this.save()); return true; }
     if (e.target instanceof HTMLInputElement || e.target instanceof HTMLSelectElement || e.target instanceof HTMLTextAreaElement) return false;
     if (!this.project) return false;
     if (e.ctrlKey || e.metaKey) {
@@ -356,7 +537,19 @@ export class StudioScreen implements Screen {
       if (e.key.toLowerCase() === 'v') { this.paste(); return true; }
       return false;
     }
-    if (e.code === 'Space') { if (this.audio.paused) void this.run(() => this.audio.play()); else this.audio.pause(); return true; }
+    if (e.code === 'Space') { if (e.target instanceof Element && e.target.closest('button, summary, a')) return false; this.togglePlayback(); return true; }
+    if (e.key === '+' || e.key === '=') { this.zoomView(1 / 1.5); return true; }
+    if (e.key === '-') { this.zoomView(1.5); return true; }
+    if (e.target instanceof HTMLCanvasElement && (e.key === 'ArrowLeft' || e.key === 'ArrowRight')) {
+      const direction = e.key === 'ArrowLeft' ? -1 : 1;
+      const first = this.project.notes[this.difficulty].find((n) => this.selected.has(n.id));
+      if (first) {
+        const { map } = timingMap(this.project);
+        const delta = this.snap ? map.tickToTime(map.timeToTick(first.time) + direction * 480 / this.snap) - first.time : direction * 0.01;
+        this.moveNotes(this.selected, delta, 0);
+      } else this.seek(this.cursor + direction);
+      return true;
+    }
     if (e.key === 'Delete' || e.key === 'Backspace') { this.removeSelected(); return true; }
     if (/^[1-5]$/.test(e.key)) { this.add(snapTime(this.project, this.cursor, this.snap), Number(e.key) - 1); return true; }
     return false;

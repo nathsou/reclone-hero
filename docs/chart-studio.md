@@ -5,22 +5,26 @@ device. The implementation adds no runtime dependencies and remains part of the 
 
 ## Authoring workflow
 
-1. Choose **Chart Studio** from the library toolbar. Import MP3, WAV, OGG, or Opus audio supported by the
-   browser (100 MB / 20 minutes maximum). **Cancel analysis** terminates the worker; an unsuccessful
-   import leaves the previous project intact.
+1. Choose **Chart Studio** from the library toolbar. Drop a song or Studio ZIP into the workspace, or
+   use **Choose song file** / the **Project** menu. MP3, WAV, OGG, and Opus are supported (100 MB / 20
+   minutes maximum). **Cancel analysis** terminates the worker; an unsuccessful import leaves the previous
+   project intact. The Project menu also holds saved projects, song metadata, manual save and deletion.
 2. Audition the draft with **Hear chart notes**, then use **Hear beat grid** to check the estimated tempo
    and first beat. Half/double BPM controls handle common octave ambiguity. Add a tempo point at the
    playhead for a change in tempo. Grid corrections do not move existing notes.
-3. Pick Easy, Medium, Hard, or Expert. In **Select / drag**, click gems or Shift-click several; drag to
+3. Pick Easy, Medium, Hard, or Expert. In **Select**, click gems or Shift-click several; drag to
    move time and lane. **Add notes** and **Erase notes** work with mouse or touch. The inspector edits
    seconds, sustain lengths, lanes and taps. Quarter/eighth/sixteenth/triplet snapping and free timing
-   are available. **Previous/Next note** provides an alternative to canvas selection.
-4. Set a passage to loop it, select its notes, or regenerate it. Locks protect notes from regeneration
+   are available. The **Notes** inspector stays beside the timeline on desktop, with separate **Grid**
+   and **Passage** tabs; phones stack the inspector below the editor. **Previous/Next note** provides an
+   alternative to canvas selection. Use the compact play/pause, speed and click controls to listen.
+4. In **Passage**, set a range to loop, select its notes, or regenerate it. Locks protect notes from regeneration
    in that difficulty, including sustains extending beyond the protected boundary. Manual edits remain
    allowed inside a lock. Other difficulties are independent. Undo/redo covers notes, locks and timing.
 5. **Playtest** uses the existing guitar engine and original recording. **Watch bot** previews the
    selected difficulty with automatic note playing. Pause → **Return to Chart Studio** or finishing
-   either preview returns to the saved editor; neither enters score history. The library also offers
+   either preview returns to the same editing position, zoom, inspector tab, selection and undo history;
+   neither enters score history. The library also offers
    **Edit chart** on saved studio songs.
 6. **Export song ZIP** is both a playable song folder and a portable project. It contains `notes.chart`,
    `song.ini`, the unchanged recording, and `studio.json`. Extract it for Clone Hero/reclone hero, or
@@ -29,7 +33,10 @@ device. The implementation adds no runtime dependencies and remains part of the 
 
 Keyboard shortcuts outside text/select fields: Space previews, 1–5 adds a fret at the playhead, Delete
 removes selected notes, Ctrl/Cmd+C/V copies/pastes at the playhead, Ctrl/Cmd+Z undoes, Shift+Z or Y redoes,
-and Ctrl/Cmd+S saves. A selected passage can be shifted together through the inspector's time field.
+and Ctrl/Cmd+S saves. Left/right arrows nudge selected notes (or seek when nothing is selected), and
+plus/minus zoom around the playhead. Shift+wheel or the view arrows pan without seeking; **Follow
+playhead** restores automatic following. The whole-song slider seeks beyond the visible passage. A
+selected passage can be shifted together through the inspector's time field. **?** shows the shortcuts.
 
 Autosave uses a separate IndexedDB database, with serialized writes and visible failures. Exported
 projects are not included in the existing settings/score backup. If storage is full/unavailable, export
