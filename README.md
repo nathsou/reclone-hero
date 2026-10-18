@@ -26,10 +26,10 @@ Open the printed URL in a Chromium-based browser (Chrome, Edge, Arc, Brave).
 ### Chart Studio
 
 Open **Chart Studio** in the song-list toolbar and import an MP3, WAV, OGG, or Opus recording. It analyzes
-the music locally and drafts Easy, Medium, Hard, and Expert guitar charts. Nothing is uploaded, and no
-model download is needed. Files can be up to 100 MB and 20 minutes.
+the music locally and drafts Easy, Medium, Hard, and Expert guitar charts. Chart generation needs no
+model download. Songs stay on your device. Files can be up to 100 MB and 20 minutes.
 
-The editor keeps the timeline and transport in view, with **Notes**, **Grid**, and **Passage** inspector
+The editor keeps the timeline and transport in view, with **Notes**, **Grid**, **Passage**, and **Audio** inspector
 tabs alongside it. Use **Project** for imports, saved projects, song details and manual saves. Drag and
 drop songs or Studio ZIPs to open them; pan and zoom the timeline without changing note timing.
 
@@ -39,6 +39,11 @@ the grid or use free timing, copy/paste passages, and undo/redo. Lock passages t
 when regenerating part of a difficulty. **Playtest** launches the real highway; **Watch bot** previews the
 selected difficulty with the bot playing. Both return to the editor from the pause menu or at the end,
 without recording a score.
+
+**Audio → Separate guitar** can use an [optional local helper](tools/stem-helper/README.md) to estimate
+guitar and backing tracks with Demucs. Misses then mute the guitar while the band continues. Audition
+either track, cancel or retry separation, or restore the original mix. Both tracks are saved and exported
+with the project. The helper needs Python, ffmpeg, and a first-use model download; songs remain local.
 
 Projects autosave in this browser and appear alongside your other songs; **Edit chart** reopens them.
 **Export song ZIP** includes the original audio, `notes.chart`, `song.ini`, and a `studio.json` project.

@@ -153,3 +153,33 @@ test('portable project ZIP restores notes, tempo changes, locks, analysis and au
   assert.throws(() => validateProject({ ...p, analysis: { ...p.analysis, waveform: [], duration: Infinity } }, 'bad'));
   assert.throws(() => validateProject({ ...p, timing: [] }, 'bad'));
 });
+
+test('separated ZIP preserves original, routes only guitar/backing, and restores both estimates', async () => {
+  const { studioFolder } = await import('../src/studio/source.ts');
+  const p = createProject('fixture', 'song.ogg', fixture());
+  const audio = new Blob(['original recording']);
+  const stems = { guitar: new Blob(['guitar estimate']), backing: new Blob(['backing residual']), model: 'htdemucs_6s' as const, gain: 0.93 };
+  const folder = studioFolder(p, stems), entry = makeSongEntry(folder)!;
+  assert.deepEqual(folder.files, ['notes.chart', 'song.ini', 'guitar.ogg', 'song.ogg']);
+  assert.ok(entry.stems.guitar);
+  assert.equal(Object.keys(entry.stems).length, 2, 'no original mix to double the volume');
+  const blob = await exportProject(p, audio, stems), restored = await importProjectZip(blob, 'new-project');
+  assert.equal(await restored.audio.text(), await audio.text());
+  assert.equal(await restored.stems?.guitar.text(), 'guitar estimate');
+  assert.equal(await restored.stems?.backing.text(), 'backing residual');
+  assert.equal(restored.stems?.gain, 0.93);
+  assert.deepEqual(restored.project.notes, p.notes);
+  assert.equal(restored.project.id, 'new-project');
+  assert.deepEqual(studioFolder(restored.project).files, ['notes.chart', 'song.ini', 'song.ogg'], 'restoring original mix uses only original');
+});
+
+test('separated ZIP rejects missing outputs and invalid gain instead of silently playing the original twice', async () => {
+  const p = createProject('fixture', 'song.wav', fixture());
+  const metadata = { ...p, analysis: { ...p.analysis, waveform: Array.from(p.analysis.waveform) }, separatedAudio: { model: 'htdemucs_6s', gain: 1 } };
+  const files = [{ name: 'Song/studio.json', bytes: new TextEncoder().encode(JSON.stringify(metadata)) }, { name: 'Song/original.wav', bytes: new Uint8Array([1]) }];
+  await assert.rejects(importProjectZip(new Blob([zipFiles(files)]), 'new-id'), /incomplete/);
+  files.push({ name: 'Song/guitar.ogg', bytes: new Uint8Array([2]) }, { name: 'Song/song.ogg', bytes: new Uint8Array([3]) });
+  metadata.separatedAudio.gain = 0;
+  files[0].bytes = new TextEncoder().encode(JSON.stringify(metadata));
+  await assert.rejects(importProjectZip(new Blob([zipFiles(files)]), 'new-id'), /invalid separated/);
+});

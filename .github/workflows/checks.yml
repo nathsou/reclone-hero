@@ -13,6 +13,7 @@ jobs:
           node-version: 24
           cache: npm
       - run: npm ci
+      - run: python3 -m unittest discover -s tools/stem-helper -p 'test_*.py'
       - run: npm test
       - run: npm run build
       # Smoke-test the harness; timing thresholds on shared runners would be noisy.
