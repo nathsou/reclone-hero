@@ -1,12 +1,12 @@
 # Chart Studio
 
 Studio creates guitar charts from recorded music entirely in the browser. The audio never leaves the
-device. The implementation adds no runtime dependencies and remains part of the single HTML build.
+device. The metadata reader is bundled into the single HTML build; it requires no network service.
 
 ## Authoring workflow
 
 1. Choose **Chart Studio** from the library toolbar. Drop a song or Studio ZIP into the workspace, or
-   use **Choose song file** / the **Project** menu. MP3, WAV, OGG, and Opus are supported (100 MB / 20
+   use **Choose song file** / the **Project** menu. MP3, WAV, OGG, Opus, and M4A are supported (100 MB / 20
    minutes maximum). **Cancel analysis** terminates the worker; an unsuccessful import leaves the previous
    project intact. The Project menu also holds saved projects, song metadata, manual save and deletion.
 2. Audition the draft with **Hear chart notes**, then use **Hear beat grid** to check the estimated tempo
@@ -43,6 +43,38 @@ Autosave uses a separate IndexedDB database, with serialized writes and visible 
 projects are not included in the existing settings/score backup. If storage is full/unavailable, export
 before leaving; Studio never silently reports a failed write as saved. Playtesting requires a saved
 project. Storage is scoped to the site/browser/device; clearing site data removes its local projects.
+
+M4A imports use the browser's native decoder. AAC is widely supported; Apple Lossless (ALAC) support
+depends on the browser and operating system. Protected recordings cannot be imported. If decoding
+fails, Studio offers conversion guidance and retains the previous project. Original M4A bytes are
+preserved in saves and ZIPs. Other chart players may require conversion to MP3/WAV/OGG; separated
+projects already include portable OGG guitar/backing tracks.
+
+## Artwork and lyrics
+
+Song import reads embedded title, artist, album, front-cover artwork and lyrics locally with
+[`music-metadata`](https://github.com/Borewit/music-metadata) (MIT). MP4/M4A tags, MP3 ID3, OGG/Opus
+Vorbis comments, and WAV INFO/ID3 are supported when present. Tag failures are nonfatal: audio and chart
+generation remain usable, with a notice if metadata could not be read. Front-cover pictures are preferred
+over other embedded images. PNG, JPEG and WebP covers are limited to 5 MB and checked before display.
+Use **Song** (or Project → **Artwork & lyrics**) to replace/remove the cover and edit the album name.
+
+The Song inspector also imports UTF-8 `.lrc` / `.txt` files (up to 128 KB) and edits lyrics directly.
+Select a lyric line, seek to its start, then choose **Time line at playhead** to add an LRC timestamp.
+Lyrics edits autosave as you type. LRC supports repeated timestamps, milliseconds, empty lines that
+clear the display, and a global offset (positive values advance the lyrics). Synchronized ID3 lyrics
+with millisecond timestamps are imported as LRC. Word timestamps in enhanced LRC are displayed at
+line precision. Plain lyrics remain editable/exportable; timing is added by the author.
+
+Timed lines preview in Song while seeking/listening and become standard lyric/phrase events in
+`notes.chart` for bot previews, playtests and other chart players. The game's existing Lyrics setting
+controls its HUD. Lyric times remain in recording seconds when the beat grid changes. The library and
+game use the cover automatically. Changing notes or separated tracks preserves artwork and lyrics.
+
+Saves retain artwork separately from chart undo history. ZIPs include `album.png` / `album.jpg` /
+`album.webp`, `lyrics.lrc` or `lyrics.txt`, and editable metadata in `studio.json`; original audio bytes
+are unchanged. Previous Studio projects without these optional fields still open. Full dependency
+notices are in [THIRD_PARTY_NOTICES.md](../THIRD_PARTY_NOTICES.md) and embedded in the production HTML.
 
 ## Optional instrument audio
 
@@ -157,6 +189,24 @@ fallback. The production HTML served locally also imported recorded music transc
 Opus, and recovered from an injected storage quota failure without losing edits. This environment's
 browser policy blocks `file://` navigation, so direct-from-disk operation was not reverified here.
 
+M4A verification (2026-10-18) used an AAC conversion of **Vibe Ace** through the full browser audit,
+including edits, preview, ZIP restoration, browser persistence, playtest and bot preview. The production
+HTML audit also imports AAC M4A. Chromium 154.0.8037.57 in this environment rejects ALAC; the audit
+checks that ALAC and corrupt M4A inputs show conversion guidance without losing the current project.
+The helper's DSP test decodes both AAC and ALAC M4A bytes with the production FFmpeg allowlist and a
+deterministic model substitute, checking stereo alignment and reconstruction. A separate browser audit
+uses an AAC M4A excerpt of **Let's Go Fishin'** with deterministic helper tracks to verify unchanged
+upload bytes, audition, persistence/ZIPs, bot preview and original restoration. These codec/integration
+checks do not validate pretrained separation quality; the model-download limitation above still applies.
+
+Artwork/lyrics verification uses a 16-second **Let's Go Fishin'** excerpt in all five formats, with
+synthetic cover art and fixture lyrics in actual MP4, ID3 and Vorbis tags. The browser audit checks
+native decoding, imported fields and cover pixels, timed preview, saved-source artwork, ZIP round trips,
+manual replacement/rejection, plain text import, manual line timing, phone layouts, the bot lyric HUD,
+return and reload persistence. The same tagged M4A imports in the production single-file HTML, with
+its embedded dependency notices and timed bot HUD. Unit tests cover LRC edge cases, timing through
+tempo changes, safe image types, metadata limits, corrupt tags, cancellation and eight-file stem ZIPs.
+
 ### Reproduce
 
 ```bash
@@ -173,6 +223,20 @@ PLAYWRIGHT_MODULE=/path/to/playwright/index.mjs CHROME_PATH=/path/to/chromium \
 # In another terminal: npm run preview -- --port 5231
 PLAYWRIGHT_MODULE=/path/to/playwright/index.mjs CHROME_PATH=/path/to/chromium \
   MUSIC_DIR=/tmp/studio-music-data/audio node tests/tools/studio-built-audit.mjs
+
+# Native M4A workflow (Vite running on the browser audit's default port 5230):
+ffmpeg -v error -y -i /tmp/studio-music-data/audio/Kevin_MacLeod_-_Vibe_Ace.ogg \
+  -vn -c:a aac -b:a 192k /tmp/vibe-aac.m4a
+PLAYWRIGHT_MODULE=/path/to/playwright/index.mjs CHROME_PATH=/path/to/chromium \
+  MUSIC_DIR=/tmp/studio-music-data/audio AUDIT_AUDIO=/tmp/vibe-aac.m4a \
+  node tests/tools/studio-browser-audit.mjs
+# Optional: set AUDIT_REJECTED_AUDIO to an ALAC M4A on a browser without ALAC support.
+# The stems audit accepts AUDIT_AUDIO too; supply a 16-second recording for its fixtures.
+
+# Embedded metadata across M4A/MP3/OGG/Opus/WAV, plus the production build:
+PLAYWRIGHT_MODULE=/path/to/playwright/index.mjs CHROME_PATH=/path/to/chromium \
+  MUSIC_DIR=/tmp/studio-music-data/audio PRODUCTION_URL=http://127.0.0.1:5231 \
+  node tests/tools/studio-media-audit.mjs
 ```
 
 FFmpeg and Playwright/Chromium are optional external audit tools; normal tests/builds need neither.

@@ -1,6 +1,7 @@
 import { DIFFICULTIES } from '../chart/types.ts';
 import type { Difficulty, RawTempo } from '../chart/types.ts';
 import { TempoMap } from '../chart/tempo.ts';
+import { timedLyrics } from './lyrics.ts';
 import type { Analysis, Onset } from './analysis.ts';
 
 export interface StudioNote { id: number; time: number; length: number; lane: number; kind: 'auto' | 'tap' }
@@ -11,6 +12,9 @@ export interface StudioProject {
   id: string;
   name: string;
   artist: string;
+  album?: string;
+  /** Original plain text or LRC; only explicitly timed lyrics enter gameplay. */
+  lyrics?: string;
   audioName: string;
   analysis: Analysis;
   /** Times stay in seconds so tempo corrections cannot move authored notes away from the recording. */
@@ -146,7 +150,15 @@ export function chartText(p: StudioProject, audioName = p.audioName): string {
   lines.push('}', '[Events]', '{');
   const end = map.timeToTick(p.analysis.duration);
   const firstTick = Math.ceil(map.timeToTick(0)), lastTick = Math.ceil(end) - 1;
-  for (let tick = 0, section = 1; tick < end; tick += 480 * 32, section++) lines.push(`  ${tick} = E "section Passage ${section}"`);
+  const textEvents: { tick: number; text: string; order: number }[] = [];
+  for (let tick = 0, section = 1; tick < end; tick += 480 * 32, section++) textEvents.push({ tick, text: `section Passage ${section}`, order: 0 });
+  const toTick = (time: number) => Math.max(firstTick, Math.min(lastTick, Math.round(map.timeToTick(time))));
+  for (const lyric of timedLyrics(p.lyrics ?? '', p.analysis.duration)) {
+    const start = toTick(lyric.time), stop = toTick(lyric.end);
+    if (!lyric.text || stop <= start) continue;
+    textEvents.push({ tick: start, text: 'phrase_start', order: 1 }, { tick: start, text: `lyric ${clean(lyric.text)}`, order: 2 }, { tick: stop, text: 'phrase_end', order: -1 });
+  }
+  for (const event of textEvents.sort((a, b) => a.tick - b.tick || a.order - b.order)) lines.push(`  ${event.tick} = E "${event.text}"`);
   lines.push('}');
   for (const diff of DIFFICULTIES) {
     lines.push(`[${diff[0].toUpperCase() + diff.slice(1)}Single]`, '{');
@@ -169,7 +181,7 @@ export function chartText(p: StudioProject, audioName = p.audioName): string {
 
 export function songIni(p: StudioProject): string {
   const clean = (s: string) => s.replace(/[\r\n]/g, ' ');
-  return `[song]\nname = ${clean(p.name)}\nartist = ${clean(p.artist)}\ncharter = Chart Studio\nsong_length = ${Math.round(p.analysis.duration * 1000)}\ndelay = ${Math.round(timingMap(p).offset * 1000)}\n`;
+  return `[song]\nname = ${clean(p.name)}\nartist = ${clean(p.artist)}\nalbum = ${clean(p.album ?? '')}\ncharter = Chart Studio\nsong_length = ${Math.round(p.analysis.duration * 1000)}\ndelay = ${Math.round(timingMap(p).offset * 1000)}\n`;
 }
 
 /** Undo stores chart state only: never duplicates audio, analysis, or waveform data. */

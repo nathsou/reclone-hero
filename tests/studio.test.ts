@@ -175,6 +175,36 @@ test('separated ZIP preserves original, routes only guitar/backing, and restores
   assert.deepEqual(studioFolder(restored.project).files, ['notes.chart', 'song.ini', 'song.wav'], 'restoring original mix uses only original');
 });
 
+test('M4A projects retain original bytes through ZIPs and remain discoverable with or without stems', async () => {
+  const { studioFolder } = await import('../src/studio/source.ts');
+  const p = createProject('m4a', 'A recording.M4A', fixture());
+  const audio = new Blob([new Uint8Array([0, 1, 255, 42])], { type: 'audio/mp4' });
+  assert.equal(p.audioName, 'song.m4a');
+  const estimates = { guitar: new Blob(['guitar']), backing: new Blob(['backing']), model: 'htdemucs_6s' as const, gain: 1 };
+  for (const stems of [undefined, estimates]) {
+    const zip = await exportProject(p, audio, stems), restored = await importProjectZip(zip, 'restored');
+    assert.deepEqual(new Uint8Array(await restored.audio.arrayBuffer()), new Uint8Array(await audio.arrayBuffer()));
+    assert.equal(restored.project.audioName, 'song.m4a');
+    assert.deepEqual(restored.project.notes, p.notes);
+    assert.deepEqual(makeSongEntry(studioFolder(restored.project, restored.stems))?.stems,
+      stems ? { guitar: 'guitar.ogg', song: 'song.ogg' } : { song: 'song.m4a' });
+    assert.ok((await zip.text()).includes(`MusicStream = "${stems ? 'song.ogg' : 'song.m4a'}"`));
+    assert.ok((await zip.text()).includes(stems ? 'original.m4a' : 'song.m4a'));
+    assert.deepEqual(makeSongEntry(studioFolder(restored.project))?.stems, { song: 'song.m4a' }, 'restoring the original remains playable');
+  }
+});
+
+test('library discovers M4A stems case-insensitively and prefers existing supported formats', () => {
+  const files = ['notes.chart', 'Song.M4A', 'GUITAR.M4A', 'original.m4a', 'preview.m4a'];
+  const folder = { path: 'M4A', files, ini: null, chartHead: null };
+  assert.deepEqual(makeSongEntry(folder)?.stems, { song: 'Song.M4A', guitar: 'GUITAR.M4A', preview: 'preview.m4a' });
+  for (const ext of ['opus', 'ogg', 'mp3', 'wav']) {
+    for (const ordered of [[...files, `song.${ext}`], [`song.${ext}`, ...files]]) {
+      assert.equal(makeSongEntry({ ...folder, files: ordered })?.stems.song, `song.${ext}`);
+    }
+  }
+});
+
 test('separated ZIP rejects missing outputs and invalid gain instead of silently playing the original twice', async () => {
   const p = createProject('fixture', 'song.wav', fixture());
   const metadata = { ...p, analysis: { ...p.analysis, waveform: Array.from(p.analysis.waveform) }, separatedAudio: { model: 'htdemucs_6s', gain: 1 } };

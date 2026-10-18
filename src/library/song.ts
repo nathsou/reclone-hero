@@ -37,8 +37,8 @@ export interface SongEntry {
   chartOptions: ChartOptions;
 }
 
-const STEM_RE = /^(song|guitar|bass|rhythm|keys|vocals(?:_\d)?|drums(?:_\d)?|crowd|preview)\.(ogg|opus|mp3|wav)$/i;
-const FORMAT_RANK: Record<string, number> = { opus: 0, ogg: 1, mp3: 2, wav: 3 };
+const STEM_RE = /^(song|guitar|bass|rhythm|keys|vocals(?:_\d)?|drums(?:_\d)?|crowd|preview)\.(ogg|opus|mp3|wav|m4a)$/i;
+const FORMAT_RANK: Record<string, number> = { opus: 0, ogg: 1, mp3: 2, wav: 3, m4a: 4 };
 const DIFF_KEYS: Record<Instrument, string> = {
   guitar: 'diff_guitar',
   bass: 'diff_bass',
@@ -93,7 +93,7 @@ export function makeSongEntry(folder: RawSongFolder): SongEntry | null {
     lengthMs: iniNumber(sec, 'song_length') ?? 0,
     chartFile,
     stems,
-    albumArt: pick('album.png', 'album.jpg', 'album.jpeg'),
+    albumArt: pick('album.png', 'album.jpg', 'album.jpeg', 'album.webp'),
     background: pick('background.png', 'background.jpg', 'background.jpeg'),
     video: pick('video.webm', 'video.mp4', 'bg.webm', 'bg.mp4'),
     videoStartMs: iniNumber(sec, 'video_start_time') ?? 0,

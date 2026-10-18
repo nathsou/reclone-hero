@@ -4,7 +4,7 @@
 
 A Clone Hero–compatible rhythm game that runs in the browser. It reads your existing song folders
 (`notes.chart` / `notes.mid` + `song.ini` + audio stems), plays them on a WebGL2 highway, and is built with
-nothing but TypeScript 7 and Vite: no runtime dependencies. No songs and no guitar? It comes with 24
+TypeScript 7 and Vite, with a bundled metadata reader. No songs and no guitar? It comes with 24
 built-in songs and plays on the keyboard.
 
 ## Running it
@@ -25,13 +25,18 @@ Open the printed URL in a Chromium-based browser (Chrome, Edge, Arc, Brave).
 
 ### Chart Studio
 
-Open **Chart Studio** in the song-list toolbar and import an MP3, WAV, OGG, or Opus recording. It analyzes
+Open **Chart Studio** in the song-list toolbar and import an MP3, WAV, OGG, Opus, or M4A recording (codec support depends on your browser). It analyzes
 the music locally and drafts Easy, Medium, Hard, and Expert guitar charts. Chart generation needs no
 model download. Songs stay on your device. Files can be up to 100 MB and 20 minutes.
 
-The editor keeps the timeline and transport in view, with **Notes**, **Grid**, **Passage**, and **Audio** inspector
+The editor keeps the timeline and transport in view, with **Notes**, **Grid**, **Passage**, **Audio**, and **Song** inspector
 tabs alongside it. Use **Project** for imports, saved projects, song details and manual saves. Drag and
 drop songs or Studio ZIPs to open them; pan and zoom the timeline without changing note timing.
+
+Embedded title, artist, album, cover art and lyrics import when available across the supported formats.
+Use **Song** to replace a cover, edit lyrics, import LRC/text files, or time individual lines at the
+playhead. Timed lyrics appear in Studio, bot previews and playtests. Artwork and lyrics survive saves
+and ZIPs; untimed lyrics are retained as text for later timing.
 
 Listen with **Hear chart notes** or **Hear beat grid**, correct the BPM/first beat (or add tempo changes),
 and edit the five-lane timeline. Select and drag notes, add/delete gems, edit sustains and taps, snap to
@@ -57,7 +62,7 @@ recording when you correct the grid. See [the studio guide and recorded-music va
 
 ### Without any server
 
-`npm run build` produces a single self-contained file, `dist/index.html` (about 796 KB, all scripts, fonts,
+`npm run build` produces a single self-contained file, `dist/index.html` (about 1.1 MB, all scripts, fonts,
 styles and the built-in songs inlined). Double-click it to play from disk (`file://`), or put it on any static host (GitHub Pages,
 Netlify, a USB stick). Pushing to `main` deploys it to GitHub Pages (`.github/workflows/pages.yml`). Nothing runs server-side: songs are read in the browser.
 

@@ -1,7 +1,7 @@
 import type { StudioProject } from './model.ts';
 import type { StudioStems } from './stems.ts';
 
-export interface SavedProject { project: StudioProject; audio: Blob; stems?: StudioStems; updated: number }
+export interface SavedProject { project: StudioProject; audio: Blob; stems?: StudioStems; cover?: Blob; updated: number }
 const DB = 'reclone-chart-studio';
 
 // Unlike optional preference storage, saving a user's authored chart must report failures.
@@ -14,12 +14,12 @@ async function database(): Promise<IDBDatabase> {
   });
 }
 
-export async function saveProject(project: StudioProject, audio: Blob, stems?: StudioStems): Promise<void> {
+export async function saveProject(project: StudioProject, audio: Blob, stems?: StudioStems, cover?: Blob): Promise<void> {
   const db = await database();
   try {
     await new Promise<void>((resolve, reject) => {
       const tx = db.transaction('projects', 'readwrite');
-      tx.objectStore('projects').put({ project, audio, stems, updated: Date.now() } satisfies SavedProject);
+      tx.objectStore('projects').put({ project, audio, stems, cover, updated: Date.now() } satisfies SavedProject);
       tx.oncomplete = () => resolve();
       tx.onabort = tx.onerror = () => reject(tx.error ?? new Error('Saving was interrupted'));
     });
