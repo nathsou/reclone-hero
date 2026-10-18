@@ -109,10 +109,16 @@ export function validateProject(value: unknown, id: string): StudioProject {
   if (p.version !== 1 || typeof p.name !== 'string' || p.name.length > 200 || typeof p.artist !== 'string' || p.artist.length > 200 || !/^song\.(mp3|wav|ogg|opus|m4a)$/.test(p.audioName)) return fail();
   if (p.album !== undefined && (typeof p.album !== 'string' || p.album.length > 200)) return fail();
   if (p.lyrics !== undefined && (typeof p.lyrics !== 'string' || p.lyrics.length > MAX_LYRICS_LENGTH)) return fail();
+  if (p.focus !== undefined && !['balanced', 'melody', 'rhythm'].includes(p.focus)) return fail();
   const a = p.analysis;
   if (!a || !finite(a.duration, 0.5, 1200) || !finite(a.bpm, 30, 300) || !finite(a.beatOffset, 0, 4) || !finite(a.confidence, 0, 1)) return fail();
   if (!Array.isArray(a.waveform) || a.waveform.length > 120001 || !a.waveform.every((n) => finite(n, 0, 100))) return fail();
-  if (!Array.isArray(a.onsets) || a.onsets.length > 20000 || !a.onsets.every((o, i) => o && finite(o.time, 0, a.duration) && finite(o.strength, 0, 10) && finite(o.tone, 0, 20) && (!i || o.time > a.onsets[i - 1].time))) return fail();
+  if (a.version !== undefined && a.version !== 2) return fail();
+  if (a.tempoVariable !== undefined && typeof a.tempoVariable !== 'boolean') return fail();
+  if (!Array.isArray(a.onsets) || a.onsets.length > 20000 || !a.onsets.every((o, i) => o && finite(o.time, 0, a.duration) && finite(o.strength, 0, 10) && finite(o.tone, 0, 20)
+    && (o.pitch === undefined || finite(o.pitch, 24, 108)) && (o.clarity === undefined || finite(o.clarity, 0, 1))
+    && (o.salience === undefined || finite(o.salience, 0, 3)) && (o.band === undefined || (Number.isInteger(o.band) && finite(o.band, 0, 2)))
+    && (!i || o.time > a.onsets[i - 1].time))) return fail();
   if (!Array.isArray(p.timing) || !p.timing.length || p.timing.length > 512 || p.timing[0].time !== 0 || !p.timing.every((t, i) => t && finite(t.time, 0, a.duration) && finite(t.bpm, 30, 300) && (!i || t.time > p.timing[i - 1].time)) || !finite(p.beatOffset, 0, 4)) return fail();
   let nextId = 1;
   const ids = new Set<number>();
@@ -125,7 +131,7 @@ export function validateProject(value: unknown, id: string): StudioProject {
     }
     if (!locks.every((r) => r && finite(r.start, 0, a.duration) && finite(r.end, r.start, a.duration) && r.end > r.start)) return fail();
   }
-  return { version: 1, id, name: p.name, artist: p.artist, album: p.album, lyrics: p.lyrics, audioName: p.audioName,
-    analysis: { duration: a.duration, bpm: a.bpm, beatOffset: a.beatOffset, confidence: a.confidence, onsets: a.onsets, waveform: Float32Array.from(a.waveform) },
+  return { version: 1, id, name: p.name, artist: p.artist, album: p.album, lyrics: p.lyrics, focus: p.focus, audioName: p.audioName,
+    analysis: { ...(a.version === 2 ? { version: 2 as const, tempoVariable: a.tempoVariable } : {}), duration: a.duration, bpm: a.bpm, beatOffset: a.beatOffset, confidence: a.confidence, onsets: a.onsets, waveform: Float32Array.from(a.waveform) },
     timing: p.timing, beatOffset: p.beatOffset, notes: p.notes, locks: p.locks, nextId };
 }

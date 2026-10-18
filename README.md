@@ -38,6 +38,11 @@ Use **Song** to replace a cover, edit lyrics, import LRC/text files, or time ind
 playhead. Timed lyrics appear in Studio, bot previews and playtests. Artwork and lyrics survive saves
 and ZIPs; untimed lyrics are retained as text for later timing.
 
+Generation scores short passages locally and uses pitched attack estimates for fret choices. In
+**Passage**, choose **Melody + rhythm**, **Melody & riffs**, or **Rhythm accents**, then regenerate unlocked
+notes in the selected difficulty. [The seven-song quality investigation](docs/chart-generation-quality.md)
+shows before/after examples and the limits of full-mix charting.
+
 Listen with **Hear chart notes** or **Hear beat grid**, correct the BPM/first beat (or add tempo changes),
 and edit the five-lane timeline. Select and drag notes, add/delete gems, edit sustains and taps, snap to
 the grid or use free timing, copy/paste passages, and undo/redo. Lock passages to protect their notes

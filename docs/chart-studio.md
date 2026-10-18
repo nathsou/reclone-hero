@@ -126,15 +126,23 @@ reference stems, those metrics cannot prove guitar isolation. Leakage remains an
   original file for preview, gameplay and export.
 - A 1,024-sample Hann-windowed FFT at roughly 10 ms hops produces log spectral flux. Adaptive thresholds,
   energy gating and 65 ms peak suppression distinguish attacks from silence, decays and note releases.
+  Thresholds and attack strengths adapt to nearby audio, so a loud chorus cannot erase quiet passages.
   Gain normalization keeps quiet masters consistent. The envelope also supplies the editor waveform.
-- Autocorrelation estimates a global tempo, using a mild preference near 120 BPM to reduce half-time
-  choices; phase coherence refines the estimate and first beat. Confidence is a heuristic, not a
-  calibrated probability. Very short clips are explicitly low confidence. There is no automatic
-  variable-tempo tracking or downbeat/time-signature inference; these remain author corrections.
-- Rank attacks by strength and proximity to strong beats, then select nested difficulty timings.
+- Global tempo uses autocorrelation plus a full 60–200 BPM event-phase search, with fine refinement.
+  Strong differences across consecutive local windows flag possible tempo changes in Grid and reduce
+  grid confidence. Half/double-time and compound-meter ambiguity remains. Confidence is a heuristic.
+  Variable tempo maps, downbeats and time signatures remain author corrections; note times stay fixed.
+- Before/after 4,096-sample spectra estimate pitched attack salience and a MIDI-like pitch. Local
+  spectral whitening, harmonic support, spectral flatness and octave checks help reject broadband
+  changes and ringing previous notes. These are estimates of prominent pitched energy in a full mix.
+- Rank attacks within eight-beat passages by local strength, pitched salience and beat proximity, then
+  select nested difficulty timings. **Generation follows** in Passage offers Melody + rhythm, Melody &
+  riffs, and Rhythm accents. Changing the setting prepares the next regeneration; locked notes and
+  other difficulties are protected. Legacy projects can be reimported for the new analysis features.
   Minimum inter-attack gaps are 380/240/145/85 ms, with at most 3/4/6/9 attacks in any rolling second.
-  Easy uses three frets, Medium four, Hard/Expert five. Spectral colour changes guide small fret moves;
-  strong, sufficiently spaced Hard/Expert attacks can receive conservative two-fret accents.
+  Easy uses three frets, Medium four, Hard/Expert five. A fixed song-wide pitch-derived fret mapping
+  keeps repeated estimates consistent across timbre changes. Rhythmic accents use stable frequency-band
+  roles, and brief unpitched events can keep the preceding melodic position. Loudness never creates chords.
 - The generator deliberately does not claim pitch/instrument transcription. It does not guess sustain
   lengths from a full mix or automatically add drum/vocal parts or star-power phrases. Sustains/taps
   are authored in the editor. Generated sections are generic eight-bar passages for practice.
@@ -146,6 +154,9 @@ reference stems, those metrics cannot prove guitar isolation. Leakage remains an
 The analyzer runs in an inline worker with progress and cancellation. A time-sliced fallback handles
 blocked workers. The canvas only draws the visible passage; undo stores chart state, not decoded audio.
 No model training or model-hosting infrastructure is involved.
+
+The [seven-song quality investigation](chart-generation-quality.md) documents the updated generator,
+actual before/after passages, all-focus playability checks, musical fixtures and remaining limits.
 
 ## Verification (2026-10-17)
 

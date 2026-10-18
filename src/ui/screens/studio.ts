@@ -6,7 +6,7 @@ import { loadChart } from '../../chart/load.ts';
 import { makeSongEntry } from '../../library/song.ts';
 import { analyzeFile } from '../../studio/client.ts';
 import { chartText, createProject, normalizeNotes, regenerate, snapTime, StudioHistory, timingMap } from '../../studio/model.ts';
-import type { StudioNote, StudioProject } from '../../studio/model.ts';
+import type { GenerationFocus, StudioNote, StudioProject } from '../../studio/model.ts';
 import { exportProject, importProjectZip } from '../../studio/export.ts';
 import { deleteProject, listProjects, readProject, saveProject } from '../../studio/storage.ts';
 import { studioFolder } from '../../studio/source.ts';
@@ -320,6 +320,17 @@ export class StudioScreen implements Screen {
     this.tempoButton = this.button('', () => this.setPanel('timing')); this.tempoButton.classList.add('studio-tempo-button');
     this.followButton = this.button('Follow playhead', () => { this.follow = !this.follow; if (this.follow) this.seek(this.cursor); this.updateView(); });
     this.followButton.classList.add('studio-follow');
+    const focusHint = h('p', { class: 'hint' });
+    const describeFocus = () => {
+      const pitched = p.analysis.onsets.filter(o => (o.clarity ?? 0) >= 0.18 && (o.salience ?? 0) >= 0.25).length;
+      focusHint.textContent = p.analysis.version !== 2 ? 'Reimport the recording to enable the new melody and rhythm analysis.'
+        : p.focus === 'melody' && pitched < p.analysis.onsets.length * 0.2 ? 'Few pitched attacks are clear in this mix. Try rhythm accents for denser coverage. Regenerate below to apply.'
+        : 'Choose which part of the mix to follow, then regenerate below. Melody uses pitched attacks; rhythm uses low/mid/high accents.';
+    };
+    const focus = h('select', { 'aria-label': 'Generation focus', disabled: p.analysis.version !== 2, onchange: () => { this.edit(() => { p.focus = focus.value as GenerationFocus; }); describeFocus(); } },
+      h('option', { value: 'balanced' }, 'Melody + rhythm'), h('option', { value: 'melody' }, 'Melody & riffs'), h('option', { value: 'rhythm' }, 'Rhythm accents'));
+    focus.value = p.focus ?? 'balanced';
+    describeFocus();
     const passage = h('div', { class: 'studio-passage-controls' },
       h('p', { class: 'hint' }, 'Choose a passage to loop, protect, or regenerate.'),
       h('div', { class: 'studio-row' }, this.field('From (s)', rangeStart), this.field('To (s)', rangeEnd)),
@@ -332,6 +343,8 @@ export class StudioScreen implements Screen {
       h('div', { class: 'studio-row' }, this.button('Lock passage', () => this.edit(() => { p.locks[this.difficulty].push({ ...this.range }); })),
         this.button('Unlock passage', () => this.edit(() => { p.locks[this.difficulty] = p.locks[this.difficulty].filter((r) => r.end <= this.range.start || r.start >= this.range.end); }))),
       h('p', { class: 'hint' }, 'Locked notes stay intact when you regenerate.'), h('hr'),
+      this.field('Generation follows', focus),
+      focusHint,
       this.button('Regenerate passage', () => this.edit(() => regenerate(p, this.difficulty, this.range)), true),
       h('p', { class: 'hint' }, 'Replaces the unlocked notes in this difficulty only. You can undo this.'));
     this.panels.clear(); this.tabs.clear();
@@ -554,7 +567,8 @@ export class StudioScreen implements Screen {
         this.button('Half BPM', () => { if (p.timing[0].bpm >= 60) { this.edit(() => { p.timing[0].bpm /= 2; }); render(); } }),
         this.button('Double BPM', () => { if (p.timing[0].bpm <= 150) { this.edit(() => { p.timing[0].bpm *= 2; }); render(); } }),
         this.button('Beat at playhead', () => { this.edit(() => { p.beatOffset = this.cursor % (60 / p.timing[0].bpm); }); render(); }),
-        h('p', { class: 'hint' }, `Tempo estimate: ${p.analysis.bpm} BPM · ${p.analysis.confidence < 0.45 ? 'low' : p.analysis.confidence < 0.7 ? 'moderate' : 'high'} confidence. Correct the grid by ear; existing note times stay fixed.`));
+        h('p', { class: 'hint' }, p.analysis.tempoVariable ? `Different passages support different tempos. ${p.analysis.bpm} BPM is a global estimate; add tempo points where the pulse changes. Note times stay aligned with the recording.`
+          : `Tempo estimate: ${p.analysis.bpm} BPM · ${p.analysis.confidence < 0.45 ? 'low' : p.analysis.confidence < 0.7 ? 'moderate' : 'high'} confidence. Correct the grid by ear; existing note times stay fixed.`));
       for (const point of p.timing.slice(1)) {
         const value = this.number(`BPM at ${point.time.toFixed(2)} seconds`, point.bpm, 30, 300, 0.01, (v) => this.edit(() => { point.bpm = v; }));
         panel.append(h('div', { class: 'studio-row' }, this.field(`${point.time.toFixed(2)}s`, value), this.button('Remove tempo', () => { this.edit(() => { p.timing = p.timing.filter((t) => t !== point); }); render(); })));
