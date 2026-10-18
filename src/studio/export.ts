@@ -93,7 +93,7 @@ export function validateProject(value: unknown, id: string): StudioProject {
   if (!value || typeof value !== 'object') return fail();
   const p = value as StudioProject;
   const finite = (n: unknown, min: number, max: number): n is number => typeof n === 'number' && Number.isFinite(n) && n >= min && n <= max;
-  if (p.version !== 1 || typeof p.name !== 'string' || p.name.length > 200 || typeof p.artist !== 'string' || p.artist.length > 200 || !/^song\.(mp3|wav|ogg|opus)$/.test(p.audioName)) return fail();
+  if (p.version !== 1 || typeof p.name !== 'string' || p.name.length > 200 || typeof p.artist !== 'string' || p.artist.length > 200 || !/^song\.(mp3|wav|ogg|opus|m4a)$/.test(p.audioName)) return fail();
   const a = p.analysis;
   if (!a || !finite(a.duration, 0.5, 1200) || !finite(a.bpm, 30, 300) || !finite(a.beatOffset, 0, 4) || !finite(a.confidence, 0, 1)) return fail();
   if (!Array.isArray(a.waveform) || a.waveform.length > 120001 || !a.waveform.every((n) => finite(n, 0, 100))) return fail();

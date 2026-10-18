@@ -1,5 +1,7 @@
 // Real browser integration. Run Vite, then set MUSIC_DIR to a clone of https://github.com/librosa/data.
 // PLAYWRIGHT_MODULE=/path/to/playwright/index.mjs CHROME_PATH=/usr/bin/chromium MUSIC_DIR=/tmp/librosa-data/audio node tests/tools/studio-browser-audit.mjs
+// Set AUDIT_AUDIO to an alternate full recording (e.g. an AAC/ALAC .m4a conversion of Vibe Ace).
+// AUDIT_REJECTED_AUDIO optionally checks a codec unsupported by this browser without losing edits.
 import assert from 'node:assert/strict';
 import { mkdir } from 'node:fs/promises';
 const { chromium } = await import(process.env.PLAYWRIGHT_MODULE ?? 'playwright');
@@ -7,6 +9,7 @@ const browser = await chromium.launch({ executablePath: process.env.CHROME_PATH 
 const origin = process.env.AUDIT_URL ?? 'http://127.0.0.1:5230';
 const music = process.env.MUSIC_DIR;
 if (!music) throw new Error('Set MUSIC_DIR to the external librosa/data audio directory. No recordings are bundled with this test.');
+const recording = process.env.AUDIT_AUDIO ?? `${music}/Kevin_MacLeod_-_Vibe_Ace.ogg`;
 const out = process.env.AUDIT_OUTPUT ?? '/tmp/studio-audit';
 await mkdir(out, { recursive: true });
 const errors = [];
@@ -31,10 +34,22 @@ try {
   await page.getByRole('button', { name: 'Chart Studio', exact: true }).click();
   await page.getByLabel('Import song file').setInputFiles({ name: 'broken.mp3', mimeType: 'audio/mpeg', buffer: Buffer.from('not music') });
   await page.waitForFunction(() => document.querySelector('.studio-status').textContent.includes('could not be decoded'));
-  await page.getByLabel('Import song file').setInputFiles(`${music}/Kevin_MacLeod_-_Vibe_Ace.ogg`);
+  await page.getByLabel('Import song file').setInputFiles(recording);
   await page.getByRole('button', { name: 'Playtest', exact: true }).waitFor({ timeout: 60000 });
   const original = await page.evaluate(() => structuredClone(auditApp.current.project));
   assert.ok(original.analysis.onsets.length > 100);
+  if (/\.m4a$/i.test(recording)) {
+    assert.equal(original.audioName, 'song.m4a');
+    assert.ok((await page.getByLabel('Import song file').getAttribute('accept')).includes('.m4a'));
+    const rejected = [{ name: 'broken.m4a', mimeType: 'audio/mp4', buffer: Buffer.from('not music') }];
+    if (process.env.AUDIT_REJECTED_AUDIO) rejected.push(process.env.AUDIT_REJECTED_AUDIO);
+    for (const file of rejected) {
+      await page.getByLabel('Import song file').setInputFiles(file);
+      await page.waitForFunction(() => document.querySelector('.studio-status').textContent.includes('This M4A audio could not be decoded'));
+      assert.deepEqual(await page.evaluate(() => auditApp.current.project), original, 'undecodable M4A retains existing edits');
+      assert.ok((await page.locator('.studio-status').innerText()).includes('convert to MP3 or WAV'));
+    }
+  }
   assert.equal(await page.locator('.studio-screen').evaluate(el => el.scrollHeight > el.clientHeight), false, 'desktop editor fits the viewport');
   const inspector = await page.locator('.studio-sidebar').boundingBox();
   assert.ok(inspector.y + inspector.height <= 1000, 'inspector remains beside the timeline');
@@ -171,7 +186,7 @@ try {
   assert.equal(await page.evaluate(() => auditApp.current.project.id), retainedId);
   assert.equal(await page.locator('.studio-status').innerText(), 'Analysis cancelled.');
   assert.deepEqual(errors, []);
-  console.log('PASS: real OGG import, invalid input, difficulties, note/sustain/tap editing, undo/redo, locks, regeneration, tempo changes, audible preview, ZIP export, mobile layout, persisted reload, playtest and bot preview, unchanged scores, and library round trip');
+  console.log(`PASS: real ${recording} import, invalid input, difficulties, note/sustain/tap editing, undo/redo, locks, regeneration, tempo changes, audible preview, ZIP export, mobile layout, persisted reload, playtest and bot preview, unchanged scores, and library round trip`);
 
   // Worker/CSP fallback is a separate isolated browser context, with no saved projects.
   const fallback = await browser.newContext();

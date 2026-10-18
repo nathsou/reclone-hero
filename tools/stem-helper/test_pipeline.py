@@ -2,6 +2,7 @@
 import importlib.util
 from pathlib import Path
 import shutil
+import subprocess
 import tempfile
 import unittest
 from unittest.mock import patch
@@ -33,7 +34,8 @@ class PipelineTest(unittest.TestCase):
                 output[:, 4] = mix * 0.35
                 return output
 
-        for seconds, antiphase in [(0.6, False), (16.3, False), (1.2, True)]:
+        for seconds, antiphase, codec in [(0.6, False, None), (16.3, False, None), (1.2, True, None),
+                                           (1.2, False, 'aac'), (1.2, False, 'alac')]:
             with tempfile.TemporaryDirectory(prefix='chart-stems-dsp-') as name:
                 folder = Path(name)
                 time = np.arange(int(seconds * RATE)) / RATE
@@ -43,6 +45,15 @@ class PipelineTest(unittest.TestCase):
                 if antiphase:
                     mix[:, 1] = -mix[:, 0]
                 sf.write(folder / 'input', mix, RATE, format='WAV', subtype='FLOAT')
+                if codec:
+                    encoded = folder / 'encoded.m4a'
+                    subprocess.run(['ffmpeg', '-v', 'error', '-y', '-i', str(folder / 'input'), '-c:a', codec, str(encoded)], check=True)
+                    encoded.replace(folder / 'input')  # The upload has no extension; demuxing must inspect bytes.
+                    raw = subprocess.check_output(['ffmpeg', '-v', 'error', '-i', str(folder / 'input'),
+                                                   '-ac', '2', '-ar', str(RATE), '-f', 'f32le', 'pipe:1'])
+                    # AAC can pad the final frame and alter samples; compare against its decoded recording.
+                    mix = np.frombuffer(raw, dtype='<f4').reshape(-1, 2).copy()
+                    self.assertLess(abs(len(mix) / RATE - seconds), 0.05)
                 with patch('demucs.pretrained.get_model', return_value=BagOfModels([FixtureModel()])):
                     separate(folder)
                 guitar, rate = sf.read(folder / 'guitar.ogg', dtype='float32', always_2d=True)

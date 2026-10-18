@@ -92,7 +92,7 @@ export class StudioScreen implements Screen {
     this.restoreView = view;
     this.cancelButton.onclick = () => { this.controller?.abort(); this.controller = null; this.cancelButton.disabled = true; this.cancelButton.hidden = true; this.status.textContent = 'Analysis cancelled.'; };
     if (difficulty) this.difficulty = difficulty;
-    const file = h('input', { type: 'file', hidden: true, accept: '.mp3,.wav,.ogg,.opus', 'aria-label': 'Import song file', onchange: () => {
+    const file = h('input', { type: 'file', hidden: true, accept: '.mp3,.wav,.ogg,.opus,.m4a', 'aria-label': 'Import song file', onchange: () => {
       const chosen = file.files?.[0]; file.value = '';
       if (chosen) void this.run(() => this.importSong(chosen));
     } });
@@ -127,7 +127,7 @@ export class StudioScreen implements Screen {
       h('div', { class: 'studio-welcome-copy' }, h('span', { class: 'studio-eyebrow' }, 'FROM RECORDING TO HIGHWAY'),
         h('h2', null, 'Make it yours.'), h('p', null, 'Start with a song. Find its rhythm, shape the notes, and watch your chart come to life.'),
         h('div', { class: 'studio-dropzone' }, icon('download'), h('strong', null, 'Drop a song or Studio ZIP here'),
-          h('span', null, 'MP3, WAV, OGG, Opus · Up to 100 MB / 20 minutes'),
+          h('span', null, 'MP3, WAV, OGG, Opus, M4A · Up to 100 MB / 20 minutes'),
           this.button('Choose song file', importSong, true), this.button('Open Studio ZIP', importZip)),
         h('p', { class: 'hint' }, 'Already started? Open a saved chart from the Project menu.')),
       h('div', { class: 'studio-welcome-steps' },

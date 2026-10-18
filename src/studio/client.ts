@@ -6,12 +6,16 @@ export const MAX_AUDIO_BYTES = 100 * 1024 * 1024;
 
 /** Decode once at analysis sample rate, retaining the original file for playback and export. */
 export async function analyzeFile(file: File, signal: AbortSignal, progress: (p: number) => void): Promise<Analysis> {
-  if (!/\.(mp3|wav|ogg|opus)$/i.test(file.name)) throw new Error('Choose an MP3, WAV, OGG, or Opus song file.');
+  if (!/\.(mp3|wav|ogg|opus|m4a)$/i.test(file.name)) throw new Error('Choose an MP3, WAV, OGG, Opus, or M4A song file.');
   if (!file.size || file.size > MAX_AUDIO_BYTES) throw new Error('Choose an audio file between 1 byte and 100 MB.');
   const ctx = new OfflineAudioContext(1, 1, 22050);
   let buffer: AudioBuffer;
   try { buffer = await ctx.decodeAudioData(await file.arrayBuffer()); }
-  catch { throw new Error('This audio could not be decoded. Try an MP3, WAV, OGG, or Opus file supported by your browser.'); }
+  catch {
+    throw new Error(/\.m4a$/i.test(file.name)
+      ? 'This M4A audio could not be decoded. Codec support varies by browser; try an unprotected AAC recording or convert to MP3 or WAV.'
+      : 'This audio could not be decoded. Try an MP3, WAV, OGG, Opus, or M4A file supported by your browser.');
+  }
   signal.throwIfAborted();
   if (buffer.duration > 1200) throw new Error('Songs up to 20 minutes are supported.');
   // Pick the loudest channel. Summing anti-phase stereo can erase an otherwise valid song.

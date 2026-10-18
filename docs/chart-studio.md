@@ -6,7 +6,7 @@ device. The implementation adds no runtime dependencies and remains part of the 
 ## Authoring workflow
 
 1. Choose **Chart Studio** from the library toolbar. Drop a song or Studio ZIP into the workspace, or
-   use **Choose song file** / the **Project** menu. MP3, WAV, OGG, and Opus are supported (100 MB / 20
+   use **Choose song file** / the **Project** menu. MP3, WAV, OGG, Opus, and M4A are supported (100 MB / 20
    minutes maximum). **Cancel analysis** terminates the worker; an unsuccessful import leaves the previous
    project intact. The Project menu also holds saved projects, song metadata, manual save and deletion.
 2. Audition the draft with **Hear chart notes**, then use **Hear beat grid** to check the estimated tempo
@@ -43,6 +43,12 @@ Autosave uses a separate IndexedDB database, with serialized writes and visible 
 projects are not included in the existing settings/score backup. If storage is full/unavailable, export
 before leaving; Studio never silently reports a failed write as saved. Playtesting requires a saved
 project. Storage is scoped to the site/browser/device; clearing site data removes its local projects.
+
+M4A imports use the browser's native decoder. AAC is widely supported; Apple Lossless (ALAC) support
+depends on the browser and operating system. Protected recordings cannot be imported. If decoding
+fails, Studio offers conversion guidance and retains the previous project. Original M4A bytes are
+preserved in saves and ZIPs. Other chart players may require conversion to MP3/WAV/OGG; separated
+projects already include portable OGG guitar/backing tracks.
 
 ## Optional instrument audio
 
@@ -157,6 +163,16 @@ fallback. The production HTML served locally also imported recorded music transc
 Opus, and recovered from an injected storage quota failure without losing edits. This environment's
 browser policy blocks `file://` navigation, so direct-from-disk operation was not reverified here.
 
+M4A verification (2026-10-18) used an AAC conversion of **Vibe Ace** through the full browser audit,
+including edits, preview, ZIP restoration, browser persistence, playtest and bot preview. The production
+HTML audit also imports AAC M4A. Chromium 154.0.8037.57 in this environment rejects ALAC; the audit
+checks that ALAC and corrupt M4A inputs show conversion guidance without losing the current project.
+The helper's DSP test decodes both AAC and ALAC M4A bytes with the production FFmpeg allowlist and a
+deterministic model substitute, checking stereo alignment and reconstruction. A separate browser audit
+uses an AAC M4A excerpt of **Let's Go Fishin'** with deterministic helper tracks to verify unchanged
+upload bytes, audition, persistence/ZIPs, bot preview and original restoration. These codec/integration
+checks do not validate pretrained separation quality; the model-download limitation above still applies.
+
 ### Reproduce
 
 ```bash
@@ -173,6 +189,15 @@ PLAYWRIGHT_MODULE=/path/to/playwright/index.mjs CHROME_PATH=/path/to/chromium \
 # In another terminal: npm run preview -- --port 5231
 PLAYWRIGHT_MODULE=/path/to/playwright/index.mjs CHROME_PATH=/path/to/chromium \
   MUSIC_DIR=/tmp/studio-music-data/audio node tests/tools/studio-built-audit.mjs
+
+# Native M4A workflow (Vite running on the browser audit's default port 5230):
+ffmpeg -v error -y -i /tmp/studio-music-data/audio/Kevin_MacLeod_-_Vibe_Ace.ogg \
+  -vn -c:a aac -b:a 192k /tmp/vibe-aac.m4a
+PLAYWRIGHT_MODULE=/path/to/playwright/index.mjs CHROME_PATH=/path/to/chromium \
+  MUSIC_DIR=/tmp/studio-music-data/audio AUDIT_AUDIO=/tmp/vibe-aac.m4a \
+  node tests/tools/studio-browser-audit.mjs
+# Optional: set AUDIT_REJECTED_AUDIO to an ALAC M4A on a browser without ALAC support.
+# The stems audit accepts AUDIT_AUDIO too; supply a 16-second recording for its fixtures.
 ```
 
 FFmpeg and Playwright/Chromium are optional external audit tools; normal tests/builds need neither.

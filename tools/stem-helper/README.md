@@ -37,6 +37,10 @@ The service binds only to **127.0.0.1:8765**, checks Host and your exact Origin,
 
 Audio is uploaded from your browser to the local process, not to a cloud service. Temporary audio/output files are removed after download, cancellation, helper shutdown, or two minutes without browser polling. Abruptly killing the whole helper/computer can leave a `chart-stems-*` folder in your OS temporary directory; it can be deleted manually. The downloaded model remains cached. Closing the editor cancels its job. One job runs at a time. Recordings must be under 100 MB and between 0.5 seconds and 20 minutes.
 
+The helper accepts MP3, WAV, OGG/Opus, and M4A (AAC or ALAC) through FFmpeg. M4A must first import in
+Studio, where codec support depends on the browser. Protected audio is unsupported. Outputs remain
+aligned OGG guitar/backing tracks regardless of the recording's format.
+
 If connection fails, check the origin/port, pairing code, OS firewall, browser local-network permission, and whether another helper owns the port. Firefox or restrictive browser policies may reject HTTPS-to-loopback requests; run the app locally with the matching `--origin` when needed. No general browser security bypass is required. A model-download error leaves your original unchanged: check Internet access to the model host and retry. Inference errors appear in the Audio tab and helper terminal. Stop the helper with Ctrl-C when finished.
 
 Both outputs use the same sample clock, overlap-add at segment boundaries, and a single shared headroom gain. Backing is computed as the sample-aligned residual **before** encoding. Vorbis quality 7 keeps exports small and browser-compatible; lossy encoding means their sum is not mathematically identical to the source. No time stretching or chart offset is applied.

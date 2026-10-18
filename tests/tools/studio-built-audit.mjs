@@ -5,14 +5,15 @@ import {mkdtemp, rm} from 'node:fs/promises';
 const {chromium}=await import(process.env.PLAYWRIGHT_MODULE ?? 'playwright');
 if(!process.env.MUSIC_DIR) throw new Error('Set MUSIC_DIR to the external librosa/data audio directory.');
 const temp=await mkdtemp('/tmp/studio-formats-');
-for(const ext of ['mp3','wav','opus']) execFileSync('ffmpeg',['-v','error','-y','-i',`${process.env.MUSIC_DIR}/Kevin_MacLeod_-_Vibe_Ace.ogg`,'-t','12',`${temp}/song.${ext}`]);
+const formats=['mp3','wav','opus','m4a'];
+for(const ext of formats) execFileSync('ffmpeg',['-v','error','-y','-i',`${process.env.MUSIC_DIR}/Kevin_MacLeod_-_Vibe_Ace.ogg`,'-vn','-t','12',`${temp}/song.${ext}`]);
 const browser=await chromium.launch({executablePath:process.env.CHROME_PATH || undefined,headless:true,args:['--autoplay-policy=no-user-gesture-required']});
 try {
  const page=await browser.newPage();
  const openProject=async()=>{if(!await page.locator('.studio-project-menu').evaluate(el=>el.open))await page.locator('.studio-project-menu > summary').click();};const errors=[];page.on('pageerror',e=>errors.push(e.message));
  await page.goto(process.env.AUDIT_URL ?? 'http://127.0.0.1:5231');
  await page.getByRole('button',{name:'Chart Studio',exact:true}).click();
- for(const ext of ['mp3','wav','opus']){
+ for(const ext of formats){
   await page.getByLabel('Import song file').setInputFiles(`${temp}/song.${ext}`);
   await page.waitForFunction(()=>document.querySelector('.studio-status').textContent.startsWith('Found'));
   await openProject();await page.getByRole('button',{name:'Save',exact:true}).click();

@@ -27,7 +27,7 @@ def separate(folder, device='cpu'):
     torch.set_num_threads(min(4, os.cpu_count() or 1))
     report(folder, 'Decoding recording')
     decoded = folder / 'decoded.wav'
-    subprocess.run(['ffmpeg', '-nostdin', '-v', 'error', '-y', '-protocol_whitelist', 'file,pipe', '-format_whitelist', 'mp3,wav,ogg', '-i', str(folder / 'input'),
+    subprocess.run(['ffmpeg', '-nostdin', '-v', 'error', '-y', '-protocol_whitelist', 'file,pipe', '-format_whitelist', 'mp3,wav,ogg,mov', '-i', str(folder / 'input'),
                     '-t', str(MAX_SECONDS + 1), '-map', '0:a:0', '-vn', '-sn', '-dn', '-ac', '2', '-ar', str(RATE), '-c:a', 'pcm_f32le', str(decoded)],
                    check=True, timeout=180, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
     samples, rate = sf.read(decoded, dtype='float32', always_2d=True)

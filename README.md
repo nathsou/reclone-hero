@@ -25,7 +25,7 @@ Open the printed URL in a Chromium-based browser (Chrome, Edge, Arc, Brave).
 
 ### Chart Studio
 
-Open **Chart Studio** in the song-list toolbar and import an MP3, WAV, OGG, or Opus recording. It analyzes
+Open **Chart Studio** in the song-list toolbar and import an MP3, WAV, OGG, Opus, or M4A recording (codec support depends on your browser). It analyzes
 the music locally and drafts Easy, Medium, Hard, and Expert guitar charts. Chart generation needs no
 model download. Songs stay on your device. Files can be up to 100 MB and 20 minutes.
 

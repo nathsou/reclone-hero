@@ -1,5 +1,6 @@
 // Browser integration with deterministic audio fixtures (not a model-quality test).
 // Set STEM_HELPER_CODE to exercise a running real helper instead. Use AUDIT_URL as its allowed origin.
+// AUDIT_AUDIO can select another 16-second recording, such as an AAC/ALAC M4A.
 import assert from 'node:assert/strict';
 import {execFileSync} from 'node:child_process';
 import {mkdtemp,readFile,rm} from 'node:fs/promises';
@@ -10,6 +11,7 @@ const origin=process.env.AUDIT_URL ?? 'http://127.0.0.1:5230';
 execFileSync('ffmpeg',['-v','error','-y','-i',`${process.env.MUSIC_DIR}/Karissa_Hobbs_-_Lets_Go_Fishin.ogg`,'-ss','30','-t','16',`${temp}/song.ogg`]);
 for(const [name,volume] of [['guitar',0.35],['backing',0.65]]) execFileSync('ffmpeg',['-v','error','-y','-i',`${temp}/song.ogg`,'-af',`volume=${volume}`,'-c:a','libvorbis','-q:a','7',`${temp}/${name}.ogg`]);
 const guitar=await readFile(`${temp}/guitar.ogg`),backing=await readFile(`${temp}/backing.ogg`);
+const input=process.env.AUDIT_AUDIO ?? `${temp}/song.ogg`,original=await readFile(input);
 const real=!!process.env.STEM_HELPER_CODE;
 const browser=await chromium.launch({executablePath:process.env.CHROME_PATH || undefined,headless:true,args:['--autoplay-policy=no-user-gesture-required']});
 try {
@@ -24,14 +26,14 @@ try {
   const json=value=>route.fulfill({json:value});
   if(req.headers()['authorization']!=='Bearer fixture-code')return route.fulfill({status:401,json:{error:'Pairing code incorrect'}});
   if(path==='/health')return json({service:'reclone-stems',version:1,model:'htdemucs_6s'});
-  if(req.method()==='POST'){posts++;return json({id:'a'.repeat(32)})}
+  if(req.method()==='POST'){assert.deepEqual(req.postDataBuffer(),original,'helper receives unchanged recording bytes');posts++;return json({id:'a'.repeat(32)})}
   if(req.method()==='DELETE'){deletes++;return json({deleted:true})}
   if(path.endsWith('.ogg'))return route.fulfill({contentType:'audio/ogg',body:path.endsWith('guitar.ogg')?guitar:backing});
   return json({state:mode,phase:mode==='error'?'Separation failed: fixture error':'Separating guitar',progress:0.5,model:'htdemucs_6s',duration:16,gain:1});
  });
  await page.goto(origin+'/__stems-audit');
  await page.getByRole('button',{name:'Chart Studio',exact:true}).click();
- await page.getByLabel('Import song file').setInputFiles(`${temp}/song.ogg`);
+ await page.getByLabel('Import song file').setInputFiles(input);
  await page.getByRole('button',{name:'Playtest',exact:true}).waitFor({timeout:60000});
  const notes=await page.evaluate(()=>structuredClone(auditApp.current.project.notes));
  await page.getByRole('tab',{name:'Audio',exact:true}).click();
