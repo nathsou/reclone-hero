@@ -29,11 +29,16 @@ Open **Chart Studio** in the song-list toolbar and import an MP3, WAV, OGG, or O
 the music locally and drafts Easy, Medium, Hard, and Expert guitar charts. Nothing is uploaded, and no
 model download is needed. Files can be up to 100 MB and 20 minutes.
 
+The editor keeps the timeline and transport in view, with **Notes**, **Grid**, and **Passage** inspector
+tabs alongside it. Use **Project** for imports, saved projects, song details and manual saves. Drag and
+drop songs or Studio ZIPs to open them; pan and zoom the timeline without changing note timing.
+
 Listen with **Hear chart notes** or **Hear beat grid**, correct the BPM/first beat (or add tempo changes),
 and edit the five-lane timeline. Select and drag notes, add/delete gems, edit sustains and taps, snap to
 the grid or use free timing, copy/paste passages, and undo/redo. Lock passages to protect their notes
-when regenerating part of a difficulty. **Playtest** launches the real highway and returns to the editor
-from the pause menu or at the end, without recording a score.
+when regenerating part of a difficulty. **Playtest** launches the real highway; **Watch bot** previews the
+selected difficulty with the bot playing. Both return to the editor from the pause menu or at the end,
+without recording a score.
 
 Projects autosave in this browser and appear alongside your other songs; **Edit chart** reopens them.
 **Export song ZIP** includes the original audio, `notes.chart`, `song.ini`, and a `studio.json` project.

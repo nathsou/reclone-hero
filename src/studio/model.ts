@@ -176,6 +176,8 @@ export function songIni(p: StudioProject): string {
 export class StudioHistory {
   private past: string[] = [];
   private future: string[] = [];
+  get canUndo(): boolean { return this.past.length > 0; }
+  get canRedo(): boolean { return this.future.length > 0; }
   private snapshot(p: StudioProject): string { return JSON.stringify({ notes: p.notes, locks: p.locks, timing: p.timing, beatOffset: p.beatOffset, nextId: p.nextId }); }
   capture(p: StudioProject): void { this.past.push(this.snapshot(p)); if (this.past.length > 80) this.past.shift(); this.future = []; }
   undo(p: StudioProject): boolean { const s = this.past.pop(); if (!s) return false; this.future.push(this.snapshot(p)); Object.assign(p, JSON.parse(s)); return true; }
