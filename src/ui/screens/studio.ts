@@ -572,7 +572,7 @@ export class StudioScreen implements Screen {
     await this.save(); await this.app.library.index();
     if (this.destroyed) return;
     const song = makeSongEntry(studioFolder(p, this.stems))!;
-    const chart = loadChart('notes.chart', new TextEncoder().encode(chartText(p)), song.chartOptions);
+    const chart = loadChart('notes.chart', new TextEncoder().encode(chartText(p, this.stems ? 'song.ogg' : p.audioName)), song.chartOptions);
     const { GameScreen } = await import('./gamescreen.ts');
     const diff = this.difficulty;
     const app = this.app, id = p.id;

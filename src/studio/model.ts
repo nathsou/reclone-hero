@@ -138,10 +138,10 @@ export function regenerate(p: StudioProject, diff: Difficulty, range: LockedRang
   ))], p.analysis.duration);
 }
 
-export function chartText(p: StudioProject): string {
+export function chartText(p: StudioProject, audioName = p.audioName): string {
   const { map, tempos } = timingMap(p);
   const clean = (s: string) => s.replace(/[\r\n"{}\[\]]/g, ' ').trim();
-  const lines = ['[Song]', '{', `  Name = "${clean(p.name)}"`, `  Artist = "${clean(p.artist)}"`, '  Charter = "Chart Studio"', '  Resolution = 480', '  Offset = 0', `  MusicStream = "${p.audioName}"`, '}', '[SyncTrack]', '{', '  0 = TS 4'];
+  const lines = ['[Song]', '{', `  Name = "${clean(p.name)}"`, `  Artist = "${clean(p.artist)}"`, '  Charter = "Chart Studio"', '  Resolution = 480', '  Offset = 0', `  MusicStream = "${audioName}"`, '}', '[SyncTrack]', '{', '  0 = TS 4'];
   for (const t of tempos) lines.push(`  ${t.tick} = B ${Math.round(60e9 / t.usPerQuarter)}`);
   lines.push('}', '[Events]', '{');
   const end = map.timeToTick(p.analysis.duration);

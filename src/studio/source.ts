@@ -23,7 +23,7 @@ export class StudioSource implements LibrarySource {
   async readFile(path: string): Promise<Uint8Array> {
     const { project, audio, stems } = await readProject(StudioSource.id(path));
     const file = path.split('/').pop();
-    if (file === 'notes.chart') return new TextEncoder().encode(chartText(project));
+    if (file === 'notes.chart') return new TextEncoder().encode(chartText(project, stems ? 'song.ogg' : project.audioName));
     if (file === 'song.ini') return new TextEncoder().encode(songIni(project));
     if (stems && file === 'guitar.ogg') return new Uint8Array(await stems.guitar.arrayBuffer());
     if (stems && file === 'song.ogg') return new Uint8Array(await stems.backing.arrayBuffer());

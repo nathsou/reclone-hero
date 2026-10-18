@@ -44,7 +44,7 @@ export function zipFiles(files: { name: string; bytes: Uint8Array }[]): Uint8Arr
 export async function exportProject(p: StudioProject, audio: Blob, stems?: StudioStems): Promise<Blob> {
   const enc = new TextEncoder(), folder = p.name.replace(/[^\p{L}\p{N} _-]/gu, '').trim().slice(0, 80) || 'Studio song';
   const files = [
-    { name: `${folder}/notes.chart`, bytes: enc.encode(chartText(p)) },
+    { name: `${folder}/notes.chart`, bytes: enc.encode(chartText(p, stems ? 'song.ogg' : p.audioName)) },
     { name: `${folder}/song.ini`, bytes: enc.encode(songIni(p)) },
     { name: `${folder}/studio.json`, bytes: enc.encode(JSON.stringify({ ...p, analysis: { ...p.analysis, waveform: Array.from(p.analysis.waveform) }, separatedAudio: stems ? { model: stems.model, gain: stems.gain } : undefined })) },
     { name: `${folder}/${stems ? p.audioName.replace('song.', 'original.') : p.audioName}`, bytes: new Uint8Array(await audio.arrayBuffer()) },

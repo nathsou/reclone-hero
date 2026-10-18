@@ -156,7 +156,7 @@ test('portable project ZIP restores notes, tempo changes, locks, analysis and au
 
 test('separated ZIP preserves original, routes only guitar/backing, and restores both estimates', async () => {
   const { studioFolder } = await import('../src/studio/source.ts');
-  const p = createProject('fixture', 'song.ogg', fixture());
+  const p = createProject('fixture', 'song.wav', fixture());
   const audio = new Blob(['original recording']);
   const stems = { guitar: new Blob(['guitar estimate']), backing: new Blob(['backing residual']), model: 'htdemucs_6s' as const, gain: 0.93 };
   const folder = studioFolder(p, stems), entry = makeSongEntry(folder)!;
@@ -164,13 +164,15 @@ test('separated ZIP preserves original, routes only guitar/backing, and restores
   assert.ok(entry.stems.guitar);
   assert.equal(Object.keys(entry.stems).length, 2, 'no original mix to double the volume');
   const blob = await exportProject(p, audio, stems), restored = await importProjectZip(blob, 'new-project');
+  assert.ok((await blob.text()).includes('MusicStream = \"song.ogg\"'), 'portable chart points to backing, even when original format is WAV');
+  assert.equal(restored.project.audioName, 'song.wav', 'metadata retains the original format');
   assert.equal(await restored.audio.text(), await audio.text());
   assert.equal(await restored.stems?.guitar.text(), 'guitar estimate');
   assert.equal(await restored.stems?.backing.text(), 'backing residual');
   assert.equal(restored.stems?.gain, 0.93);
   assert.deepEqual(restored.project.notes, p.notes);
   assert.equal(restored.project.id, 'new-project');
-  assert.deepEqual(studioFolder(restored.project).files, ['notes.chart', 'song.ini', 'song.ogg'], 'restoring original mix uses only original');
+  assert.deepEqual(studioFolder(restored.project).files, ['notes.chart', 'song.ini', 'song.wav'], 'restoring original mix uses only original');
 });
 
 test('separated ZIP rejects missing outputs and invalid gain instead of silently playing the original twice', async () => {
