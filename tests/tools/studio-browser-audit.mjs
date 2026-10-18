@@ -100,6 +100,19 @@ try {
   await page.getByText('Return to Chart Studio', { exact: true }).click();
   await page.getByLabel('Song title').waitFor();
   assert.deepEqual(await page.evaluate(() => auditApp.current.project.notes), snapshot.notes);
+  const scoringBeforeBot = await page.evaluate(() => ['chsq.plays', 'chsq.history', 'chsq.scores'].map(key => localStorage.getItem(key)));
+  await page.getByLabel('Chart difficulty').selectOption('hard');
+  await page.getByRole('button', { name: 'Watch bot', exact: true }).click();
+  await page.waitForFunction(() => globalThis.__game?.setup.bot && document.querySelector('.loading')?.classList.contains('gone'), { timeout: 60000 });
+  assert.equal(await page.evaluate(() => __game.setup.track.difficulty), 'hard');
+  await page.waitForFunction(() => __game.engine.hits >= 3);
+  assert.equal(await page.evaluate(() => __game.engine.misses), 0, 'bot hits notes without player input');
+  await page.keyboard.press('Escape');
+  await page.getByText('Return to Chart Studio', { exact: true }).click();
+  await page.getByLabel('Song title').waitFor();
+  assert.equal(await page.getByLabel('Chart difficulty').inputValue(), 'hard');
+  assert.deepEqual(await page.evaluate(() => auditApp.current.project.notes), snapshot.notes);
+  assert.deepEqual(await page.evaluate(() => ['chsq.plays', 'chsq.history', 'chsq.scores'].map(key => localStorage.getItem(key))), scoringBeforeBot);
   await page.getByRole('button', { name: '← Library', exact: true }).click();
   await page.locator('.search').fill('Studio audit song');
   await page.getByRole('button', { name: 'Edit chart', exact: true }).click();
@@ -118,7 +131,7 @@ try {
   assert.equal(await page.evaluate(() => auditApp.current.project.id), retainedId);
   assert.equal(await page.locator('.studio-status').innerText(), 'Analysis cancelled.');
   assert.deepEqual(errors, []);
-  console.log('PASS: real OGG import, invalid input, difficulties, note/sustain/tap editing, undo/redo, locks, regeneration, tempo changes, audible preview, ZIP export, mobile layout, persisted reload, gameplay and library round trip');
+  console.log('PASS: real OGG import, invalid input, difficulties, note/sustain/tap editing, undo/redo, locks, regeneration, tempo changes, audible preview, ZIP export, mobile layout, persisted reload, playtest and bot preview, unchanged scores, and library round trip');
 
   // Worker/CSP fallback is a separate isolated browser context, with no saved projects.
   const fallback = await browser.newContext();
@@ -128,6 +141,14 @@ try {
   await fp.getByLabel('Import song file').setInputFiles(`${music}/sorohanro_-_solo-trumpet-06.ogg`);
   await fp.getByRole('button', { name: 'Playtest', exact: true }).waitFor({ timeout: 60000 });
   assert.ok((await fp.locator('.studio-status').innerText()).includes('Found'));
+  await fp.getByRole('button', { name: 'Watch bot', exact: true }).click();
+  await fp.waitForFunction(() => globalThis.__game?.setup.bot && document.querySelector('.loading')?.classList.contains('gone'), { timeout: 60000 });
+  await fp.evaluate(() => { globalThis.auditBotGame = __game; });
+  await fp.getByLabel('Song title').waitFor({ timeout: 30000 });
+  assert.equal(await fp.evaluate(() => auditBotGame.engine.hits), await fp.evaluate(() => auditBotGame.setup.track.notes.length));
+  assert.equal(await fp.evaluate(() => auditBotGame.engine.misses), 0);
+  assert.equal(await fp.locator('.results-screen').count(), 0, 'completed bot preview returns directly to the editor');
+  assert.equal(await fp.evaluate(() => localStorage.getItem('chsq.history')), null);
   assert.deepEqual(errors, []);
-  console.log('PASS: analysis fallback when Web Workers are blocked');
+  console.log('PASS: analysis fallback when Web Workers are blocked, bot completion returns to editor without recording a score');
 } finally { await browser.close(); }

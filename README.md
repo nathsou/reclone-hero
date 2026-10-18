@@ -32,8 +32,9 @@ model download is needed. Files can be up to 100 MB and 20 minutes.
 Listen with **Hear chart notes** or **Hear beat grid**, correct the BPM/first beat (or add tempo changes),
 and edit the five-lane timeline. Select and drag notes, add/delete gems, edit sustains and taps, snap to
 the grid or use free timing, copy/paste passages, and undo/redo. Lock passages to protect their notes
-when regenerating part of a difficulty. **Playtest** launches the real highway and returns to the editor
-from the pause menu or at the end, without recording a score.
+when regenerating part of a difficulty. **Playtest** launches the real highway; **Watch bot** previews the
+selected difficulty with the bot playing. Both return to the editor from the pause menu or at the end,
+without recording a score.
 
 Projects autosave in this browser and appear alongside your other songs; **Edit chart** reopens them.
 **Export song ZIP** includes the original audio, `notes.chart`, `song.ini`, and a `studio.json` project.

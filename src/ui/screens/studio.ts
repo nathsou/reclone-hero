@@ -200,7 +200,8 @@ export class StudioScreen implements Screen {
     const rangeEnd = this.number('Passage end (seconds)', this.range.end, 0.01, p.analysis.duration, 0.01, (v) => { this.range.end = Math.max(v, this.range.start + 0.01); });
     this.content.replaceChildren(
       h('div', { class: 'studio-row studio-metadata' }, this.field('Title', name), this.field('Artist', artist),
-        this.button('Save', () => this.save()), this.button('Export song ZIP', () => this.download()), this.button('Playtest', () => this.playtest(), true)),
+        this.button('Save', () => this.save()), this.button('Export song ZIP', () => this.download()),
+        this.button('Watch bot', () => this.playtest(true)), this.button('Playtest', () => this.playtest(), true)),
       h('div', { class: 'studio-row' }, this.field('Difficulty', diff), this.field('Tool', tool), this.field('Snap', snap),
         this.button('Undo', () => this.undo()), this.button('Redo', () => this.redo()),
         this.button('Zoom in', () => { this.span = Math.max(2, this.span / 1.5); this.timeline?.draw(); }), this.button('Zoom out', () => { this.span = Math.min(120, this.span * 1.5); this.timeline?.draw(); })),
@@ -326,16 +327,16 @@ export class StudioScreen implements Screen {
     a.click(); setTimeout(() => URL.revokeObjectURL(url), 30000);
     this.status.textContent = 'Exported song ZIP. Extract it into your charts folder to play in Clone Hero or reclone hero.';
   }
-  private async playtest(): Promise<void> {
+  private async playtest(bot = false): Promise<void> {
     const p = this.project; if (!p) return;
-    if (!p.notes[this.difficulty].length) throw new Error('Add some notes before playtesting this difficulty.');
+    if (!p.notes[this.difficulty].length) throw new Error('Add some notes before previewing this difficulty.');
     await this.save(); await this.app.library.index();
     if (this.destroyed) return;
     const song = makeSongEntry(studioFolder(p))!;
     const chart = loadChart('notes.chart', new TextEncoder().encode(chartText(p)), song.chartOptions);
     const { GameScreen } = await import('./gamescreen.ts');
     const diff = this.difficulty;
-    this.app.show(new GameScreen(this.app, { song, chart, instrument: 'guitar', difficulty: diff, bot: false,
+    this.app.show(new GameScreen(this.app, { song, chart, instrument: 'guitar', difficulty: diff, bot,
       studioReturn: () => this.app.show(new StudioScreen(this.app, p.id, diff)) }));
   }
   private async removeProject(): Promise<void> {

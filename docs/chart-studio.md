@@ -18,9 +18,10 @@ device. The implementation adds no runtime dependencies and remains part of the 
 4. Set a passage to loop it, select its notes, or regenerate it. Locks protect notes from regeneration
    in that difficulty, including sustains extending beyond the protected boundary. Manual edits remain
    allowed inside a lock. Other difficulties are independent. Undo/redo covers notes, locks and timing.
-5. **Playtest** uses the existing guitar engine and original recording. Pause → **Return to Chart Studio**
-   or finishing the song returns to the saved editor; playtests do not enter score history. The library
-   also offers **Edit chart** on saved studio songs.
+5. **Playtest** uses the existing guitar engine and original recording. **Watch bot** previews the
+   selected difficulty with automatic note playing. Pause → **Return to Chart Studio** or finishing
+   either preview returns to the saved editor; neither enters score history. The library also offers
+   **Edit chart** on saved studio songs.
 6. **Export song ZIP** is both a playable song folder and a portable project. It contains `notes.chart`,
    `song.ini`, the unchanged recording, and `studio.json`. Extract it for Clone Hero/reclone hero, or
    choose **Open Studio ZIP** to restore a new editable copy with analysis, all difficulties and locks.
