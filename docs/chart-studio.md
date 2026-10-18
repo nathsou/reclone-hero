@@ -21,13 +21,14 @@ device. The implementation adds no runtime dependencies and remains part of the 
 4. In **Passage**, set a range to loop, select its notes, or regenerate it. Locks protect notes from regeneration
    in that difficulty, including sustains extending beyond the protected boundary. Manual edits remain
    allowed inside a lock. Other difficulties are independent. Undo/redo covers notes, locks and timing.
-5. **Playtest** uses the existing guitar engine and original recording. **Watch bot** previews the
+5. **Playtest** uses the existing guitar engine and the original recording or saved separated tracks. **Watch bot** previews the
    selected difficulty with automatic note playing. Pause → **Return to Chart Studio** or finishing
    either preview returns to the same editing position, zoom, inspector tab, selection and undo history;
    neither enters score history. The library also offers
    **Edit chart** on saved studio songs.
 6. **Export song ZIP** is both a playable song folder and a portable project. It contains `notes.chart`,
-   `song.ini`, the unchanged recording, and `studio.json`. Extract it for Clone Hero/reclone hero, or
+   `song.ini`, the unchanged recording, and `studio.json`. If separated, it also includes guitar and
+   backing tracks; the original is named `original.*` to avoid playing the mix twice. Extract it for Clone Hero/reclone hero, or
    choose **Open Studio ZIP** to restore a new editable copy with analysis, all difficulties and locks.
    ZIP imports currently accept unchanged, uncompressed Studio exports, not arbitrary chart archives.
 
@@ -42,6 +43,50 @@ Autosave uses a separate IndexedDB database, with serialized writes and visible 
 projects are not included in the existing settings/score backup. If storage is full/unavailable, export
 before leaving; Studio never silently reports a failed write as saved. Playtesting requires a saved
 project. Storage is scoped to the site/browser/device; clearing site data removes its local projects.
+
+## Optional instrument audio
+
+The **Audio** inspector can connect to an [optional local helper](../tools/stem-helper/README.md), using
+a pairing code and exact page origin. Demucs `htdemucs_6s` estimates guitar; the helper computes backing
+as the original minus that estimate, applies one shared headroom gain, and encodes aligned Vorbis tracks.
+The audio/model inference stays on the user's computer. Python/ffmpeg and a first-use model download
+are optional; normal chart generation stays entirely in the browser.
+
+Progress and cancellation live in the Audio inspector. **Audition tracks** changes the studio preview
+between original, guitar, and backing without changing the timeline or notes. Separate audio is stored
+outside chart undo history, survives ordinary edits/autosaves and bot/playtest returns, and travels in
+Studio ZIPs. **Use original mix** removes the estimates. A failed/cancelled job retains existing audio.
+The original recording remains available for export and analysis. The virtual song source exposes only
+`guitar.ogg` and backing `song.ogg` after separation, so the existing audio engine mutes the player part
+on misses and library warnings reflect the presence of a guitar stem.
+
+Validation for this addition: TypeScript tests cover separated ZIP round trips and incomplete metadata;
+Python tests cover Host/Origin/token checks, upload limits, single-job ownership, worker cancellation,
+output retrieval and cleanup. A live browser-to-helper audit also checks CORS, pairing, real ffmpeg
+decode rejection and retry/cleanup without requiring weights. With helper dependencies installed, a deterministic model substitute
+exercises the actual Torch overlap-add/residual path, stereo sample alignment, shared headroom and
+ffmpeg/Vorbis reconstruction for short and multi-segment recordings. The browser audit imports an
+excerpt of **Let's Go Fishin'**, uses deterministic helper audio fixtures, and checks audition, storage,
+ZIPs, player-only muting, bot preview, cancellation/error retention, original restore, and phone layouts.
+
+**Validation limitation:** the development workspace blocks `dl.fbaipublicfiles.com`, the official model
+host (HTTP 403). Pretrained guitar separation and its isolation quality on recorded music have **not**
+been verified here. The deterministic tests establish the integration and audio mechanics, not model
+quality. To perform that remaining check on a machine with model access:
+
+```sh
+# Activate the helper venv first; MUSIC_DIR points at the external dataset credited below.
+python tests/tools/stem-music-audit.py --music-dir /tmp/studio-music-data/audio
+# Inspect the generated report and listen to guitar/backing outputs in /tmp/stem-music-audit.
+# Start the helper with --origin http://127.0.0.1:5230, then use its pairing code:
+PLAYWRIGHT_MODULE=/path/to/playwright/index.mjs CHROME_PATH=/path/to/chromium \
+  MUSIC_DIR=/tmp/studio-music-data/audio STEM_HELPER_CODE='<pairing code>' \
+  node tests/tools/studio-stems-audit.mjs
+```
+
+The model audit uses acoustic guitar/vocals, a jazz ensemble, and a trumpet-only control. It verifies
+sample counts, finite audio and reconstruction SNR, and saves outputs for listening. Without isolated
+reference stems, those metrics cannot prove guitar isolation. Leakage remains an expected model limit.
 
 ## Audio and chart generation
 

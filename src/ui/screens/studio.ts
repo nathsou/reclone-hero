@@ -12,6 +12,8 @@ import { deleteProject, listProjects, readProject, saveProject } from '../../stu
 import { studioFolder } from '../../studio/source.ts';
 import { StudioTimeline } from '../../studio/timeline.ts';
 import type { TimelineState } from '../../studio/timeline.ts';
+import { separateAudio } from '../../studio/stems.ts';
+import type { StudioStems } from '../../studio/stems.ts';
 import { StudioClicks } from '../../studio/clicks.ts';
 import { icon } from '../icons.ts';
 import type { IconName } from '../icons.ts';
@@ -19,7 +21,7 @@ import { formatTime } from '../../util/text.ts';
 
 const LABEL: Record<Difficulty, string> = { easy: 'Easy', medium: 'Medium', hard: 'Hard', expert: 'Expert' };
 const LANES = ['Green', 'Red', 'Yellow', 'Blue', 'Orange'];
-type InspectorPanel = 'notes' | 'timing' | 'passage';
+type InspectorPanel = 'notes' | 'timing' | 'passage' | 'audio';
 type StudioView = Pick<TimelineState, 'cursor' | 'start' | 'span' | 'snap' | 'tool'> & {
   selected: number[]; panel: InspectorPanel; history: StudioHistory;
   range: { start: number; end: number }; looping: boolean; follow: boolean;
@@ -30,6 +32,12 @@ export class StudioScreen implements Screen {
   private app: App;
   private project: StudioProject | null = null;
   private audioFile: Blob | null = null;
+  private stems?: StudioStems;
+  private separation: AbortController | null = null;
+  private stemPanel = h('div', { class: 'studio-stem-panel' });
+  private stemStatus = h('p', { class: 'hint', role: 'status', 'aria-live': 'polite' });
+  private pairingCode = '';
+  private listenMode: 'original' | 'guitar' | 'backing' = 'original';
   private audio = h('audio', { hidden: true, preload: 'metadata', 'aria-label': 'Song preview' });
   private audioUrl = '';
   private history = new StudioHistory();
@@ -160,7 +168,7 @@ export class StudioScreen implements Screen {
     this.controller?.abort(); this.controller = null; this.cancelButton.hidden = true;
     const imported = await importProjectZip(file, crypto.randomUUID());
     if (this.destroyed || revision !== this.loadRevision) return;
-    this.install(imported.project, imported.audio); this.changed();
+    this.install(imported.project, imported.audio, imported.stems); this.changed();
     this.status.textContent = 'Project restored, including all edits and locked passages.';
   }
   private setSaveStatus(text: string): void {
@@ -188,6 +196,7 @@ export class StudioScreen implements Screen {
     const controller = this.controller = new AbortController();
     this.cancelButton.disabled = false; this.cancelButton.hidden = false;
     this.audio.pause();
+    this.separation?.abort(); this.separation = null;
     this.status.textContent = 'Decoding audio…';
     let analysis;
     try { analysis = await analyzeFile(file, controller.signal, (p) => { if (!this.destroyed && this.controller === controller) this.status.textContent = `Analyzing music… ${Math.round(p * 100)}%`; }); }
@@ -205,10 +214,11 @@ export class StudioScreen implements Screen {
     this.controller?.abort(); this.controller = null; this.cancelButton.disabled = true; this.cancelButton.hidden = true;
     const saved = await readProject(id);
     if (this.destroyed || revision !== this.loadRevision) return;
-    this.install(saved.project, saved.audio);
+    this.install(saved.project, saved.audio, saved.stems);
     this.setSaveStatus('Saved in this browser'); this.status.textContent = '';
   }
-  private install(project: StudioProject, audio: Blob): void {
+  private install(project: StudioProject, audio: Blob, stems?: StudioStems): void {
+    this.separation?.abort(); this.separation = null; this.stems = stems; this.listenMode = 'original'; this.stemStatus.textContent = '';
     clearTimeout(this.saveTimer);
     this.audio.pause();
     if (this.audioUrl) URL.revokeObjectURL(this.audioUrl);
@@ -231,9 +241,9 @@ export class StudioScreen implements Screen {
   private async save(): Promise<void> {
     if (!this.project || !this.audioFile) return;
     clearTimeout(this.saveTimer);
-    const project = structuredClone(this.project), audio = this.audioFile, revision = this.revision;
+    const project = structuredClone(this.project), audio = this.audioFile, stems = this.stems, revision = this.revision;
     this.setSaveStatus('Saving…');
-    const write = this.writes.catch(() => {}).then(() => saveProject(project, audio)); this.writes = write;
+    const write = this.writes.catch(() => {}).then(() => saveProject(project, audio, stems)); this.writes = write;
     try {
       await write;
       if (this.project?.id === project.id && this.revision === revision) { this.dirty = false; this.setSaveStatus('Saved in this browser'); }
@@ -302,11 +312,11 @@ export class StudioScreen implements Screen {
       h('p', { class: 'hint' }, 'Replaces the unlocked notes in this difficulty only. You can undo this.'));
     this.panels.clear(); this.tabs.clear();
     const tablist = h('div', { class: 'studio-inspector-tabs', role: 'tablist', 'aria-label': 'Inspector' });
-    for (const [id, label, body] of [['notes', 'Notes', this.inspector], ['timing', 'Grid', this.timingControls()], ['passage', 'Passage', passage]] as const) {
+    for (const [id, label, body] of [['notes', 'Notes', this.inspector], ['timing', 'Grid', this.timingControls()], ['passage', 'Passage', passage], ['audio', 'Audio', this.audioControls()]] as const) {
       const tab = h('button', { role: 'tab', id: `studio-tab-${id}`, 'aria-controls': `studio-panel-${id}`, onclick: () => this.setPanel(id) }, label);
       tab.onkeydown = (e) => {
-        const ids: InspectorPanel[] = ['notes', 'timing', 'passage'];
-        const next = e.key === 'Home' ? 0 : e.key === 'End' ? 2 : e.key === 'ArrowRight' ? (ids.indexOf(id) + 1) % 3 : e.key === 'ArrowLeft' ? (ids.indexOf(id) + 2) % 3 : -1;
+        const ids: InspectorPanel[] = ['notes', 'timing', 'passage', 'audio'];
+        const next = e.key === 'Home' ? 0 : e.key === 'End' ? 3 : e.key === 'ArrowRight' ? (ids.indexOf(id) + 1) % 4 : e.key === 'ArrowLeft' ? (ids.indexOf(id) + 3) % 4 : -1;
         if (next >= 0) { e.preventDefault(); this.setPanel(ids[next]); this.tabs.get(ids[next])?.focus(); }
       };
       const panel = h('section', { class: 'studio-inspector-panel', id: `studio-panel-${id}`, role: 'tabpanel', 'aria-labelledby': tab.id, tabindex: 0 }, body);
@@ -339,6 +349,62 @@ export class StudioScreen implements Screen {
       pan: (delta) => this.panView(delta), zoom: (factor) => this.zoomView(factor),
     });
     this.updateEditor(); this.syncTransport(); this.updateView();
+  }
+
+  private audioControls(): HTMLElement {
+    const setup = h('details', { class: 'studio-helper-setup', open: this.stemPanel.querySelector<HTMLDetailsElement>('details')?.open ?? false }, h('summary', null, 'Set up the local helper'),
+      h('p', { class: 'hint' }, 'Install Python 3.10–3.12 and ffmpeg, then follow the setup guide. Start the helper for this page:'),
+      h('code', null, `python tools/stem-helper/server.py --origin '${location.origin}'`),
+      h('a', { href: 'https://github.com/nathsou/reclone-hero/blob/main/tools/stem-helper/README.md', target: '_blank', rel: 'noopener noreferrer' }, 'Installation guide ↗'),
+      h('p', { class: 'hint' }, 'The first run downloads an ~80 MB model. CPU separation can take several minutes; a supported GPU is faster.'));
+    const pairing = h('input', { type: 'password', autocomplete: 'off', value: this.pairingCode, placeholder: 'Code from helper terminal', 'aria-label': 'Helper pairing code', oninput: () => { this.pairingCode = pairing.value.trim(); start.disabled = !this.pairingCode || !!this.separation; } });
+    const start = this.button(this.stems ? 'Separate guitar again' : 'Separate guitar', () => this.extractStems(), true);
+    start.disabled = !this.pairingCode || !!this.separation;
+    const cancel = this.button('Cancel separation', () => { this.separation?.abort(); }); cancel.hidden = !this.separation;
+    const remove = this.button('Use original mix', () => {
+      this.stems = undefined; this.listenMode = 'original'; this.changeAudioPreview(); this.changed(); this.audioControls();
+      this.stemStatus.textContent = 'Separate audio removed. The original recording is restored for gameplay.';
+    }); remove.hidden = !this.stems; remove.disabled = !!this.separation;
+    const audition = h('select', { 'aria-label': 'Preview audio', onchange: () => {
+      this.listenMode = audition.value as typeof this.listenMode; this.changeAudioPreview();
+    } }, h('option', { value: 'original' }, 'Original recording'), h('option', { value: 'guitar' }, 'Guitar only'), h('option', { value: 'backing' }, 'Backing only'));
+    audition.value = this.listenMode; audition.disabled = !this.stems;
+    this.stemPanel.replaceChildren(h('h3', null, 'Instrument audio'),
+      h('p', { class: 'hint' }, this.stems ? 'Separate guitar is ready. Misses mute the guitar while the backing keeps playing.' : 'Give misses a separate guitar part to mute, keeping the rest of the band playing.'),
+      h('p', { class: 'hint' }, 'Optional · AI separation runs on your computer. Songs are sent only to the helper at 127.0.0.1.'), setup,
+      this.field('Pairing code', pairing), h('div', { class: 'studio-row' }, start, cancel), this.stemStatus,
+      this.field('Audition tracks', audition), h('p', { class: 'hint' }, 'Use the transport to listen. Separation is an estimate: other instruments may bleed through. Your notes and original recording stay intact.'), remove);
+    return this.stemPanel;
+  }
+  private changeAudioPreview(): void {
+    const blob = this.listenMode === 'original' ? this.audioFile : this.stems?.[this.listenMode];
+    if (!blob) return;
+    const playing = !this.audio.paused, cursor = this.cursor;
+    this.audio.pause(); if (this.audioUrl) URL.revokeObjectURL(this.audioUrl);
+    this.audioUrl = URL.createObjectURL(blob); this.audio.src = this.audioUrl;
+    this.audio.onloadedmetadata = () => {
+      this.audio.currentTime = Math.min(cursor, this.audio.duration); this.syncTransport();
+      if (playing) void this.run(() => this.audio.play());
+    };
+  }
+  private async extractStems(): Promise<void> {
+    const project = this.project, audio = this.audioFile;
+    if (!project || !audio || !this.pairingCode || this.separation) return;
+    const controller = this.separation = new AbortController();
+    const started = performance.now(); this.audioControls();
+    try {
+      const stems = await separateAudio(audio, this.pairingCode, project.analysis.duration, controller.signal, (phase, fraction) => {
+        if (this.destroyed || this.separation !== controller) return;
+        this.stemStatus.textContent = `${phase}${phase === 'Separating guitar' ? ` · ${Math.round(fraction * 100)}%` : ''} · ${Math.round((performance.now() - started) / 1000)}s`;
+      });
+      if (this.destroyed || this.project !== project || this.separation !== controller) return;
+      this.stems = stems; if (this.listenMode !== 'original') this.changeAudioPreview(); this.changed();
+      this.stemStatus.textContent = 'Guitar and backing ready. Audition the result, then watch the bot or playtest.';
+    } catch (error) {
+      if (!this.destroyed && this.separation === controller) this.stemStatus.textContent = controller.signal.aborted ? 'Separation cancelled. Your audio is unchanged.' : error instanceof Error ? error.message : String(error);
+    } finally {
+      if (this.separation === controller) { this.separation = null; if (!this.destroyed) this.audioControls(); }
+    }
   }
 
   private field(label: string, input: HTMLElement): HTMLElement { return h('label', { class: 'studio-field' }, h('span', null, label), input); }
@@ -495,7 +561,7 @@ export class StudioScreen implements Screen {
   private animate(): void { cancelAnimationFrame(this.raf); const frame = () => { if (this.destroyed || this.audio.paused) return; this.updatePlayback(); this.raf = requestAnimationFrame(frame); }; frame(); }
   private async download(): Promise<void> {
     if (!this.project || !this.audioFile) return;
-    const blob = await exportProject(this.project, this.audioFile), url = URL.createObjectURL(blob);
+    const blob = await exportProject(this.project, this.audioFile, this.stems), url = URL.createObjectURL(blob);
     const a = h('a', { href: url, download: `${this.project.name.replace(/[^\p{L}\p{N} _-]/gu, '').trim() || 'Studio song'}.zip` });
     a.click(); setTimeout(() => URL.revokeObjectURL(url), 30000);
     this.status.textContent = 'Exported song ZIP. Extract it into your charts folder to play in Clone Hero or reclone hero.';
@@ -505,8 +571,8 @@ export class StudioScreen implements Screen {
     if (!p.notes[this.difficulty].length) throw new Error('Add some notes before previewing this difficulty.');
     await this.save(); await this.app.library.index();
     if (this.destroyed) return;
-    const song = makeSongEntry(studioFolder(p))!;
-    const chart = loadChart('notes.chart', new TextEncoder().encode(chartText(p)), song.chartOptions);
+    const song = makeSongEntry(studioFolder(p, this.stems))!;
+    const chart = loadChart('notes.chart', new TextEncoder().encode(chartText(p, this.stems ? 'song.ogg' : p.audioName)), song.chartOptions);
     const { GameScreen } = await import('./gamescreen.ts');
     const diff = this.difficulty;
     const app = this.app, id = p.id;
@@ -555,7 +621,7 @@ export class StudioScreen implements Screen {
     return false;
   }
   destroy(): void {
-    this.destroyed = true; this.controller?.abort(); clearTimeout(this.saveTimer); cancelAnimationFrame(this.raf);
+    this.destroyed = true; this.controller?.abort(); this.separation?.abort(); clearTimeout(this.saveTimer); cancelAnimationFrame(this.raf);
     this.timeline?.destroy(); this.audio.pause(); this.audio.removeAttribute('src'); this.audio.load();
     this.clicks.reset();
     if (this.audioUrl) URL.revokeObjectURL(this.audioUrl);

@@ -1,5 +1,6 @@
 import { chartText, songIni } from './model.ts';
 import type { StudioProject } from './model.ts';
+import type { StudioStems } from './stems.ts';
 import { DIFFICULTIES } from '../chart/types.ts';
 
 const CRC = Uint32Array.from({ length: 256 }, (_, byte) => {
@@ -40,20 +41,23 @@ export function zipFiles(files: { name: string; bytes: Uint8Array }[]): Uint8Arr
   return out;
 }
 
-export async function exportProject(p: StudioProject, audio: Blob): Promise<Blob> {
+export async function exportProject(p: StudioProject, audio: Blob, stems?: StudioStems): Promise<Blob> {
   const enc = new TextEncoder(), folder = p.name.replace(/[^\p{L}\p{N} _-]/gu, '').trim().slice(0, 80) || 'Studio song';
   const files = [
-    { name: `${folder}/notes.chart`, bytes: enc.encode(chartText(p)) },
+    { name: `${folder}/notes.chart`, bytes: enc.encode(chartText(p, stems ? 'song.ogg' : p.audioName)) },
     { name: `${folder}/song.ini`, bytes: enc.encode(songIni(p)) },
-    { name: `${folder}/studio.json`, bytes: enc.encode(JSON.stringify({ ...p, analysis: { ...p.analysis, waveform: Array.from(p.analysis.waveform) } })) },
-    { name: `${folder}/${p.audioName}`, bytes: new Uint8Array(await audio.arrayBuffer()) },
+    { name: `${folder}/studio.json`, bytes: enc.encode(JSON.stringify({ ...p, analysis: { ...p.analysis, waveform: Array.from(p.analysis.waveform) }, separatedAudio: stems ? { model: stems.model, gain: stems.gain } : undefined })) },
+    { name: `${folder}/${stems ? p.audioName.replace('song.', 'original.') : p.audioName}`, bytes: new Uint8Array(await audio.arrayBuffer()) },
   ];
+  if (stems) files.push(
+    { name: `${folder}/guitar.ogg`, bytes: new Uint8Array(await stems.guitar.arrayBuffer()) },
+    { name: `${folder}/song.ogg`, bytes: new Uint8Array(await stems.backing.arrayBuffer()) });
   return new Blob([zipFiles(files)], { type: 'application/zip' });
 }
 
 /** Read the stored ZIPs produced above. No extraction to disk, path traversal, or decompression. */
-export async function importProjectZip(file: Blob, id: string): Promise<{ project: StudioProject; audio: Blob }> {
-  if (file.size > 120 * 1024 * 1024) throw new Error('Studio ZIP files must be smaller than 120 MB.');
+export async function importProjectZip(file: Blob, id: string): Promise<{ project: StudioProject; audio: Blob; stems?: StudioStems }> {
+  if (file.size > 320 * 1024 * 1024) throw new Error('Studio ZIP files must be smaller than 320 MB.');
   const data = new Uint8Array(await file.arrayBuffer()), view = new DataView(data.buffer), decoder = new TextDecoder();
   const entries = new Map<string, Uint8Array>();
   let pos = 0;
@@ -69,10 +73,18 @@ export async function importProjectZip(file: Blob, id: string): Promise<{ projec
   }
   const metadata = [...entries].find(([name]) => name.endsWith('/studio.json'));
   if (!metadata || metadata[1].length > 20 * 1024 * 1024) throw new Error('This ZIP does not contain a Chart Studio project.');
-  const p = validateProject(JSON.parse(decoder.decode(metadata[1])), id);
-  const prefix = metadata[0].slice(0, -'studio.json'.length), audio = entries.get(prefix + p.audioName);
+  const value = JSON.parse(decoder.decode(metadata[1]));
+  const p = validateProject(value, id), separated = value.separatedAudio;
+  const prefix = metadata[0].slice(0, -'studio.json'.length);
+  const audio = entries.get(prefix + (separated ? p.audioName.replace('song.', 'original.') : p.audioName));
   if (!audio?.length || audio.length > 100 * 1024 * 1024) throw new Error('The ZIP is missing its song audio.');
-  return { project: p, audio: new Blob([audio.slice()]) };
+  let stems: StudioStems | undefined;
+  if (separated !== undefined) {
+    const guitar = entries.get(prefix + 'guitar.ogg'), backing = entries.get(prefix + 'song.ogg');
+    if (!separated || separated.model !== 'htdemucs_6s' || !Number.isFinite(separated.gain) || separated.gain <= 0 || separated.gain > 1 || !guitar?.length || !backing?.length || Math.max(guitar.length, backing.length) > 100 * 1024 * 1024) throw new Error('The ZIP has incomplete or invalid separated audio.');
+    stems = { guitar: new Blob([guitar.slice()], { type: 'audio/ogg' }), backing: new Blob([backing.slice()], { type: 'audio/ogg' }), model: separated.model, gain: separated.gain };
+  }
+  return { project: p, audio: new Blob([audio.slice()]), stems };
 }
 
 /** Validate portable, untrusted project metadata before it can reach canvas, audio, or storage. */

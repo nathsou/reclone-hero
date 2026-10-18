@@ -3,3 +3,7 @@ dist
 .DS_Store
 # machine-specific preview config
 .claude/
+
+# Optional Python stem helper
+.venv-stems/
+__pycache__/

@@ -1,0 +1,6 @@
+# Python 3.10–3.12. Install torch/torchaudio CPU wheels first on Linux (see README).
+torch==2.6.0
+torchaudio==2.6.0
+demucs==4.0.1
+numpy==1.26.4
+soundfile==0.14.0
