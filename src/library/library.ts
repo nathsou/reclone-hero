@@ -1,5 +1,6 @@
 import { settings } from '../settings.ts';
 import { BuiltinSource } from '../starter/source.ts';
+import { StudioSource } from '../studio/source.ts';
 import { idbGet, idbSet } from '../util/idb.ts';
 import { isHidden } from './hidden.ts';
 import { makeSongEntry } from './song.ts';
@@ -20,6 +21,7 @@ export class Library {
   source: LibrarySource | null = null;
   /** songs that ship with the game, listed alongside the player's own */
   readonly builtin = new BuiltinSource();
+  readonly studio = new StudioSource();
   songs: SongEntry[] = [];
   /** Invalidates parsed charts when the source or its scan changes. */
   revision = 0;
@@ -101,7 +103,7 @@ export class Library {
   /** Rebuild the song list, e.g. after the built-in songs are shown or hidden. */
   async index(): Promise<void> {
     this.revision++;
-    const folders = settings.builtinSongs ? [...this.folders, ...(await this.builtin.scan())] : this.folders;
+    const folders = [...this.folders, ...(await this.studio.scan()), ...(settings.builtinSongs ? await this.builtin.scan() : [])];
     const songs: SongEntry[] = [];
     let hidden = 0;
     for (const f of folders) {
@@ -117,6 +119,7 @@ export class Library {
 
   /** Whether a song's folder can be deleted from here (not the built-in songs, nor a folder picked as files). */
   canDelete(song: SongEntry): boolean {
+    if (StudioSource.isStudio(song.path)) return true;
     return !BuiltinSource.isBuiltin(song.path) && !!this.source?.deleteFolder && song.path !== '';
   }
 
@@ -125,6 +128,11 @@ export class Library {
    * folder that holds other songs too.
    */
   async deleteSong(song: SongEntry): Promise<void> {
+    if (StudioSource.isStudio(song.path)) {
+      await this.studio.deleteFolder(song.path);
+      await this.index();
+      return;
+    }
     const source = this.source;
     if (!this.canDelete(song) || !source?.deleteFolder) throw new Error('This song cannot be deleted from here.');
     const inside = this.folders.filter((f) => f.path.startsWith(`${song.path}/`)).length;
@@ -136,6 +144,7 @@ export class Library {
   }
 
   private sourceFor(song: SongEntry): LibrarySource {
+    if (StudioSource.isStudio(song.path)) return this.studio;
     if (BuiltinSource.isBuiltin(song.path)) return this.builtin;
     if (!this.source) throw new Error('No charts folder is open');
     return this.source;

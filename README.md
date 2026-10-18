@@ -23,6 +23,28 @@ Open the printed URL in a Chromium-based browser (Chrome, Edge, Arc, Brave).
 - **Dev shortcut:** the dev server also serves a folder directly (default `/Volumes/S/charts`, override with
   `CHARTS_DIR=/path/to/songs npm run dev`), so the song list appears without a picker.
 
+### Chart Studio
+
+Open **Chart Studio** in the song-list toolbar and import an MP3, WAV, OGG, or Opus recording. It analyzes
+the music locally and drafts Easy, Medium, Hard, and Expert guitar charts. Nothing is uploaded, and no
+model download is needed. Files can be up to 100 MB and 20 minutes.
+
+Listen with **Hear chart notes** or **Hear beat grid**, correct the BPM/first beat (or add tempo changes),
+and edit the five-lane timeline. Select and drag notes, add/delete gems, edit sustains and taps, snap to
+the grid or use free timing, copy/paste passages, and undo/redo. Lock passages to protect their notes
+when regenerating part of a difficulty. **Playtest** launches the real highway and returns to the editor
+from the pause menu or at the end, without recording a score.
+
+Projects autosave in this browser and appear alongside your other songs; **Edit chart** reopens them.
+**Export song ZIP** includes the original audio, `notes.chart`, `song.ini`, and a `studio.json` project.
+Extract it into your charts folder to play, or use **Open Studio ZIP** to restore an editable copy on
+another device. Studio projects are separate from the settings/score backup, so export them to keep a
+portable copy.
+
+Automatic charts are drafts: full mixes do not reveal exact guitar pitches, and tempo estimates can be
+wrong, especially for short clips, swing, and changing tempos. Detected note times remain tied to the
+recording when you correct the grid. See [the studio guide and recorded-music validation](docs/chart-studio.md).
+
 ### Without any server
 
 `npm run build` produces a single self-contained file, `dist/index.html` (about 796 KB, all scripts, fonts,
